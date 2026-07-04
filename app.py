@@ -37,15 +37,19 @@ with st.sidebar:
 
 
 def render_home() -> None:
-    render_page_header(
-        APP_NAME,
-        "Base visual y estructural del futuro sistema empresarial de CopyMary.",
-    )
+    with st.container(border=True):
+        render_page_header(
+            APP_NAME,
+            "Base visual y estructural del futuro sistema empresarial de CopyMary.",
+        )
+        st.caption("Etapa actual: interfaz descriptiva y validación de la estructura inicial.")
+
     st.warning(
         "Sistema en construcción. Esta versión presenta únicamente navegación y contenido descriptivo; "
         "no guarda información ni ejecuta procesos empresariales."
     )
 
+    st.subheader("Resumen del proyecto")
     metric_columns = st.columns(4)
     metrics = (
         ("Estado del proyecto", PROJECT_STATUS),
@@ -56,6 +60,7 @@ def render_home() -> None:
     for column, (label, value) in zip(metric_columns, metrics, strict=True):
         column.metric(label, value)
 
+    st.divider()
     st.subheader("Módulos actualmente disponibles")
     module_columns = st.columns(2)
     for index, (module_name, module_info) in enumerate(MODULES.items()):
@@ -66,6 +71,7 @@ def render_home() -> None:
                 "INTERFAZ DESCRIPTIVA",
             )
 
+    st.divider()
     left_column, right_column = st.columns(2)
     with left_column:
         st.subheader("Actividad reciente")
