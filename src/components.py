@@ -22,6 +22,15 @@ def apply_base_styles() -> None:
                 border-radius: 12px;
                 padding: 1rem;
             }}
+            [data-testid="stMetricValue"] {{
+                font-size: clamp(1.45rem, 2vw, 2.2rem);
+            }}
+            [data-testid="stMetricValue"] > div {{
+                white-space: normal;
+                overflow: visible;
+                text-overflow: clip;
+                line-height: 1.15;
+            }}
             .cm-card {{
                 background: {COLORS['surface']};
                 border: 1px solid {COLORS['border']};
