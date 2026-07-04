@@ -30,10 +30,22 @@ NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 
 with st.sidebar:
     st.title(APP_NAME)
-    st.caption(f"Versión {APP_VERSION}")
-    selected_page = st.radio("Navegación", NAVIGATION_OPTIONS)
+    st.caption("Panel empresarial en construcción")
     st.divider()
-    st.info("Interfaz inicial. Sin operaciones empresariales ni almacenamiento de datos.")
+
+    st.subheader("Navegación")
+    selected_page = st.radio(
+        "Secciones disponibles",
+        NAVIGATION_OPTIONS,
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+    st.caption(f"Versión {APP_VERSION}")
+    st.caption(f"Estado: {PROJECT_STATUS}")
+    st.info(
+        "Esta etapa es únicamente descriptiva. No existen operaciones reales, autenticación ni almacenamiento de datos."
+    )
 
 
 def render_home() -> None:
