@@ -9,6 +9,7 @@ from src.costing import render_costing
 from src.general_settings import render_general_settings
 from src.inventory import render_inventory
 from src.modules import MODULES
+from src.price_export import render_price_export
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -23,10 +24,13 @@ FUNCTIONAL_MODULES = {
     "Activos": render_assets,
     "Inventario": render_inventory,
     "Costeo": render_costing,
+    "Exportar precios": render_price_export,
 }
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
+if "Exportar precios" not in NAVIGATION_OPTIONS:
+    NAVIGATION_OPTIONS.append("Exportar precios")
 
 with st.sidebar:
     st.title(APP_NAME)
@@ -54,12 +58,13 @@ def render_home() -> None:
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
     st.subheader("Flujo funcional actual")
-    flow_columns = st.columns(4)
+    flow_columns = st.columns(5)
     flow = (
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
         ("Costeo", "Combina los datos y calcula precios orientativos."),
+        ("Exportar precios", "Descarga en CSV la lista guardada durante la sesión."),
     )
     for column, (title, description) in zip(flow_columns, flow, strict=True):
         with column:
