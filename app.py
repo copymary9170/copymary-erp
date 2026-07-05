@@ -9,6 +9,7 @@ from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
 from src.general_settings import render_general_settings
 from src.inventory import render_inventory
+from src.inventory_movements import render_inventory_movements
 from src.modules import MODULES
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
@@ -27,6 +28,7 @@ FUNCTIONAL_MODULES = {
     "Activos": render_assets,
     "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
+    "Movimientos de inventario": render_inventory_movements,
     "Costeo": render_costing,
     "Ajustar precios": render_price_rounding,
     "Exportar precios": render_price_export,
@@ -36,6 +38,7 @@ NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
 for extra_page in (
+    "Movimientos de inventario",
     "Respaldar activos",
     "Ajustar precios",
     "Exportar precios",
@@ -76,6 +79,7 @@ def render_home() -> None:
         ("Activos", "Aporta la depreciación por unidad del equipo."),
         ("Respaldar activos", "Guarda y recupera equipos mediante CSV."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
+        ("Movimientos de inventario", "Registra entradas y salidas con trazabilidad."),
         ("Costeo", "Combina los datos y calcula precios orientativos."),
         ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
         ("Exportar precios", "Descarga o recupera la lista de precios en CSV."),
