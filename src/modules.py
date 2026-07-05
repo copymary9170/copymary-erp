@@ -62,7 +62,7 @@ MODULES: dict[str, ModuleInfo] = {
     },
     "Configuración General": {
         "description": "Centralizará los parámetros comunes utilizados por los demás módulos del ERP.",
-        "status": "Blueprint inicial creado. Desarrollo funcional pendiente.",
+        "status": "Primera función temporal disponible durante la sesión.",
         "objective": "Evitar configuraciones dispersas y mantener criterios uniformes en todo el sistema.",
         "planned_functions": [
             "Datos generales de la empresa",
@@ -71,5 +71,17 @@ MODULES: dict[str, ModuleInfo] = {
             "Configuración regional y formatos",
         ],
         "dependencies": ["Gobierno Empresarial", "Auditoría y Trazabilidad"],
+    },
+    "Activos": {
+        "description": "Registra temporalmente equipos productivos y calcula su depreciación por unidad.",
+        "status": "Primera función temporal disponible durante la sesión.",
+        "objective": "Controlar la inversión en equipos y reservar fondos para su reemplazo futuro.",
+        "planned_functions": [
+            "Registro de máquinas y equipos",
+            "Depreciación por unidad producida",
+            "Seguimiento de uso estimado",
+            "Reserva para reposición de activos",
+        ],
+        "dependencies": ["Configuración General", "Costeo", "Producción"],
     },
 }
