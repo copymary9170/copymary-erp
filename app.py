@@ -14,6 +14,7 @@ from src.components import apply_base_styles, render_info_card, render_page_head
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.control_center import render_control_center
 from src.costing import render_costing
+from src.expenses_budget import render_expenses_budget
 from src.financial import render_financial_dashboard
 from src.general_settings import render_general_settings
 from src.inventory import render_inventory
@@ -45,6 +46,7 @@ FUNCTIONAL_MODULES = {
     "Cotizaciones": render_quotes,
     "Comprobantes": render_receipts,
     "Caja": render_cash,
+    "Gastos y presupuesto": render_expenses_budget,
     "Reportes comerciales": render_commercial_reports,
     "Proveedores": render_suppliers,
     "Compras": render_purchases,
@@ -85,14 +87,13 @@ NAVIGATION_GROUPS = {
     ),
     "Administración": (
         "Caja",
+        "Gastos y presupuesto",
         "Activos",
         "Respaldar activos",
         "Configuración General",
         "Respaldo general",
     ),
-    "Planificación futura": tuple(
-        name for name in MODULES if name not in FUNCTIONAL_MODULES
-    ),
+    "Planificación futura": tuple(name for name in MODULES if name not in FUNCTIONAL_MODULES),
 }
 
 with st.sidebar:
@@ -100,16 +101,8 @@ with st.sidebar:
     st.caption("Panel empresarial")
     st.divider()
     selected_area = st.selectbox("Área", tuple(NAVIGATION_GROUPS.keys()))
-    selected_page = st.radio(
-        "Sección",
-        NAVIGATION_GROUPS[selected_area],
-        label_visibility="visible",
-    )
+    selected_page = st.radio("Sección", NAVIGATION_GROUPS[selected_area], label_visibility="visible")
     st.divider()
-    if st.button("Ir al Centro de control", use_container_width=True):
-        st.session_state["preferred_area"] = "Inicio"
-        st.session_state["preferred_page"] = "Centro de control"
-        st.rerun()
     st.caption(f"Versión {APP_VERSION}")
     st.caption(f"Estado: {PROJECT_STATUS}")
     st.info("Los datos actuales permanecen solo durante la sesión. Usa Respaldo general antes de cerrar.")
@@ -124,7 +117,6 @@ def render_home() -> None:
         st.caption("Selecciona un área en el menú lateral para comenzar.")
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
-
     st.subheader("Áreas principales")
     columns = st.columns(3)
     cards = (
@@ -132,7 +124,7 @@ def render_home() -> None:
         ("Ventas y clientes", "Gestiona cotizaciones, pedidos, cobranza y entregas."),
         ("Compras y proveedores", "Controla abastecimiento, pagos y vencimientos."),
         ("Productos e inventario", "Administra recetas, costos, existencias y producción."),
-        ("Administración", "Organiza caja, activos, configuración y respaldos."),
+        ("Administración", "Organiza caja, gastos, presupuesto, activos y respaldos."),
         ("Panel financiero", "Analiza ingresos, egresos, utilidad y cierres."),
     )
     for index, (title, description) in enumerate(cards):
@@ -145,11 +137,9 @@ def render_descriptive_module(module_name: str) -> None:
     if module_info is None:
         st.error("La sección solicitada no está disponible.")
         return
-
     with st.container(border=True):
         render_page_header(module_name, module_info["description"])
         st.caption("Este módulo permanece en etapa de Blueprint.")
-
     st.warning("Esta pantalla todavía no ejecuta operaciones ni guarda datos.")
     render_info_card("Estado", module_info["status"], "SITUACIÓN ACTUAL")
     render_info_card("Objetivo", module_info["objective"], "PROPÓSITO")
