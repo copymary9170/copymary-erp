@@ -19,6 +19,8 @@ SESSION_KEYS = (
     "cash_movements",
     "suppliers_registry",
     "purchases_registry",
+    "products_registry",
+    "production_log",
     "assets_registry",
     "inventory_registry",
     "inventory_movements",
@@ -32,6 +34,8 @@ SECTION_LABELS = {
     "cash_movements": "Caja",
     "suppliers_registry": "Proveedores",
     "purchases_registry": "Compras",
+    "products_registry": "Catálogo",
+    "production_log": "Producción",
     "assets_registry": "Activos",
     "inventory_registry": "Inventario",
     "inventory_movements": "Movimientos de inventario",
@@ -161,6 +165,15 @@ def _section_count(restored_data: dict, section: str) -> str:
     return str(len(restored_data[section]))
 
 
+def _render_section_metrics(values: dict[str, str]) -> None:
+    sections = list(values.items())
+    for start in range(0, len(sections), 4):
+        chunk = sections[start : start + 4]
+        columns = st.columns(len(chunk))
+        for column, (label, value) in zip(columns, chunk, strict=True):
+            column.metric(label, value)
+
+
 def render_session_backup() -> None:
     """Renderiza el respaldo y restauración selectiva de la sesión."""
     with st.container(border=True):
@@ -169,23 +182,21 @@ def render_session_backup() -> None:
             "Guarda o recupera en un solo archivo la información temporal principal del ERP.",
         )
         st.caption(
-            "Incluye configuración, clientes, cotizaciones, ventas, caja, proveedores, compras, activos, inventario, movimientos y precios."
+            "Incluye configuración, clientes, ventas, caja, proveedores, compras, catálogo, producción, activos e inventario."
         )
 
     st.warning(
         "Este respaldo es manual y provisional. Descárgalo antes de cerrar la sesión para evitar perder datos."
     )
 
-    metric_rows = [st.columns(4), st.columns(4), st.columns(3)]
-    for index, section in enumerate(SESSION_KEYS):
-        row = 0 if index < 4 else 1 if index < 8 else 2
-        column = index if row == 0 else index - 4 if row == 1 else index - 8
-        value = (
-            "Sí" if st.session_state.get(section) is not None else "No"
-            if section == "general_settings"
-            else str(len(st.session_state.get(section, [])))
-        )
-        metric_rows[row][column].metric(SECTION_LABELS[section], value)
+    current_values: dict[str, str] = {}
+    for section in SESSION_KEYS:
+        if section == "general_settings":
+            value = "Sí" if st.session_state.get(section) is not None else "No"
+        else:
+            value = str(len(st.session_state.get(section, [])))
+        current_values[SECTION_LABELS[section]] = value
+    _render_section_metrics(current_values)
 
     st.download_button(
         "Descargar respaldo general",
@@ -213,14 +224,11 @@ def render_session_backup() -> None:
             st.success("El archivo es válido. Revisa el contenido antes de restaurar.")
             st.caption(f"Fecha del respaldo en UTC: {restored_data['created_at_utc']}")
 
-            preview_rows = [st.columns(4), st.columns(4), st.columns(3)]
-            for index, section in enumerate(SESSION_KEYS):
-                row = 0 if index < 4 else 1 if index < 8 else 2
-                column = index if row == 0 else index - 4 if row == 1 else index - 8
-                preview_rows[row][column].metric(
-                    SECTION_LABELS[section],
-                    _section_count(restored_data, section),
-                )
+            preview_values = {
+                SECTION_LABELS[section]: _section_count(restored_data, section)
+                for section in SESSION_KEYS
+            }
+            _render_section_metrics(preview_values)
 
             selected_sections = st.multiselect(
                 "Secciones que deseas restaurar",
@@ -253,9 +261,6 @@ def render_session_backup() -> None:
 
     render_info_card(
         "Restauración selectiva",
-        (
-            "Puedes recuperar por separado Configuración, Clientes, Cotizaciones, Ventas, Caja, Proveedores, "
-            "Compras, Activos, Inventario, Movimientos o Lista de precios."
-        ),
+        "Puedes recuperar por separado cualquiera de las secciones principales del ERP.",
         "CONTROL DE RESTAURACIÓN",
     )
