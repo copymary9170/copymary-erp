@@ -1,15 +1,23 @@
-"""Recepción de compras con movimientos de inventario trazables."""
+"""Recepción y reversión de compras con inventario trazable."""
 
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import streamlit as st
 
-from src import purchasing
+from src import adjustments, purchasing
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _movements() -> list[dict]:
+    return [
+        dict(item)
+        for item in st.session_state.get("inventory_movements", [])
+        if isinstance(item, dict)
+    ]
 
 
 def _apply_purchase_with_movement(purchase: dict, inventory: list[dict]) -> list[dict]:
@@ -17,11 +25,7 @@ def _apply_purchase_with_movement(purchase: dict, inventory: list[dict]) -> list
     item_id = str(purchase.get("inventory_item_id", ""))
     quantity = float(purchase.get("quantity", 0.0))
     total_cost = float(purchase.get("total", 0.0))
-    movements = [
-        dict(item)
-        for item in st.session_state.get("inventory_movements", [])
-        if isinstance(item, dict)
-    ]
+    movements = _movements()
 
     if any(
         item.get("movement_type") == "Entrada"
@@ -86,7 +90,78 @@ def _apply_purchase_with_movement(purchase: dict, inventory: list[dict]) -> list
     return updated_inventory
 
 
+def _reverse_purchase_with_movement(
+    purchase: dict,
+    inventory: list[dict],
+) -> tuple[list[dict], bool]:
+    purchase_id = str(purchase.get("purchase_id", ""))
+    item_id = str(purchase.get("inventory_item_id", ""))
+    quantity = float(purchase.get("quantity", 0.0))
+    total = float(purchase.get("total", 0.0))
+    movements = _movements()
+
+    if any(
+        item.get("movement_type") == "Salida"
+        and str(item.get("reference", "")) == f"REV-{purchase_id}"
+        for item in movements
+    ):
+        return inventory, True
+
+    updated_inventory: list[dict] = []
+    reversed_ok = False
+    item_name = str(purchase.get("material_name", "Material comprado"))
+    unit_name = str(purchase.get("unit_name", "unidad"))
+    previous_quantity = 0.0
+    resulting_quantity = 0.0
+
+    for item in inventory:
+        current = dict(item)
+        if item_id and str(item.get("item_id", "")) == item_id:
+            previous_quantity = float(item.get("available_quantity", 0.0))
+            if previous_quantity < quantity:
+                return inventory, False
+            resulting_quantity = previous_quantity - quantity
+            current["available_quantity"] = resulting_quantity
+            current["purchased_quantity"] = max(
+                float(item.get("purchased_quantity", 0.0)) - quantity,
+                0.0,
+            )
+            current["purchase_cost"] = max(
+                float(item.get("purchase_cost", 0.0)) - total,
+                0.0,
+            )
+            item_name = str(item.get("name", item_name))
+            unit_name = str(item.get("unit_name", unit_name))
+            reversed_ok = True
+        updated_inventory.append(current)
+
+    if reversed_ok:
+        movements.append(
+            {
+                "movement_id": uuid4().hex[:10],
+                "created_at_utc": _now(),
+                "item_id": item_id,
+                "item_name": item_name,
+                "movement_type": "Salida",
+                "quantity": quantity,
+                "unit_name": unit_name,
+                "reason": f"Reverso de recepción de compra {purchase_id}",
+                "reference": f"REV-{purchase_id}",
+                "previous_quantity": previous_quantity,
+                "resulting_quantity": resulting_quantity,
+            }
+        )
+        st.session_state["inventory_movements"] = movements
+
+    return updated_inventory, reversed_ok
+
+
+def activate_purchase_trace() -> None:
+    purchasing._apply_purchase_to_inventory = _apply_purchase_with_movement
+    adjustments._reverse_inventory = _reverse_purchase_with_movement
+
+
 def render_purchases_with_trace() -> None:
     """Ejecuta Compras usando recepción trazable de inventario."""
-    purchasing._apply_purchase_to_inventory = _apply_purchase_with_movement
+    activate_purchase_trace()
     purchasing.render_purchases()
