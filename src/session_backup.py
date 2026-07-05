@@ -17,6 +17,12 @@ SESSION_KEYS = (
     "inventory_registry",
     "saved_prices",
 )
+SECTION_LABELS = {
+    "general_settings": "Configuración General",
+    "assets_registry": "Activos",
+    "inventory_registry": "Inventario",
+    "saved_prices": "Lista de precios",
+}
 
 
 def _serialize_value(value):
@@ -25,10 +31,7 @@ def _serialize_value(value):
     if is_dataclass(value):
         return asdict(value)
     if isinstance(value, list):
-        serialized = []
-        for item in value:
-            serialized.append(asdict(item) if is_dataclass(item) else item)
-        return serialized
+        return [asdict(item) if is_dataclass(item) else item for item in value]
     return value
 
 
@@ -108,6 +111,7 @@ def _parse_backup(file_bytes: bytes) -> dict:
         raise ValueError("El respaldo no contiene una sección de datos válida.")
 
     return {
+        "created_at_utc": str(payload.get("created_at_utc", "No disponible")),
         "general_settings": _validate_general_settings(data.get("general_settings")),
         "assets_registry": _validate_list("assets_registry", data.get("assets_registry")),
         "inventory_registry": _validate_list("inventory_registry", data.get("inventory_registry")),
@@ -115,16 +119,20 @@ def _parse_backup(file_bytes: bytes) -> dict:
     }
 
 
-def _restore_backup(restored_data: dict) -> None:
-    settings = restored_data["general_settings"]
-    if settings is None:
-        st.session_state.pop("general_settings", None)
-    else:
-        st.session_state.general_settings = settings
+def _restore_selected_sections(restored_data: dict, selected_sections: list[str]) -> None:
+    if "general_settings" in selected_sections:
+        settings = restored_data["general_settings"]
+        if settings is None:
+            st.session_state.pop("general_settings", None)
+        else:
+            st.session_state.general_settings = settings
 
-    st.session_state.assets_registry = restored_data["assets_registry"]
-    st.session_state.inventory_registry = restored_data["inventory_registry"]
-    st.session_state.saved_prices = restored_data["saved_prices"]
+    if "assets_registry" in selected_sections:
+        st.session_state.assets_registry = restored_data["assets_registry"]
+    if "inventory_registry" in selected_sections:
+        st.session_state.inventory_registry = restored_data["inventory_registry"]
+    if "saved_prices" in selected_sections:
+        st.session_state.saved_prices = restored_data["saved_prices"]
 
     for transient_key in (
         "connected_costing_result",
@@ -135,8 +143,14 @@ def _restore_backup(restored_data: dict) -> None:
         st.session_state.pop(transient_key, None)
 
 
+def _section_count(restored_data: dict, section: str) -> str:
+    if section == "general_settings":
+        return "Disponible" if restored_data[section] is not None else "Vacía"
+    return str(len(restored_data[section]))
+
+
 def render_session_backup() -> None:
-    """Renderiza el respaldo y restauración general de la sesión."""
+    """Renderiza el respaldo y restauración selectiva de la sesión."""
     with st.container(border=True):
         render_page_header(
             "Respaldo general",
@@ -153,18 +167,9 @@ def render_session_backup() -> None:
         "Configuración",
         "Sí" if st.session_state.get("general_settings") is not None else "No",
     )
-    summary_columns[1].metric(
-        "Activos",
-        str(len(st.session_state.get("assets_registry", []))),
-    )
-    summary_columns[2].metric(
-        "Materiales",
-        str(len(st.session_state.get("inventory_registry", []))),
-    )
-    summary_columns[3].metric(
-        "Precios",
-        str(len(st.session_state.get("saved_prices", []))),
-    )
+    summary_columns[1].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
+    summary_columns[2].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
+    summary_columns[3].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
 
     st.download_button(
         "Descargar respaldo general",
@@ -182,30 +187,55 @@ def render_session_backup() -> None:
         type=("json",),
         accept_multiple_files=False,
     )
-    confirmation = st.checkbox(
-        "Entiendo que la restauración reemplazará la configuración, los activos, el inventario y los precios actuales."
-    )
 
-    if st.button(
-        "Restaurar respaldo general",
-        type="primary",
-        use_container_width=True,
-        disabled=uploaded_file is None or not confirmation,
-    ):
+    restored_data = None
+    if uploaded_file is not None:
         try:
             restored_data = _parse_backup(uploaded_file.getvalue())
         except (TypeError, ValueError) as exc:
             st.error(str(exc))
         else:
-            _restore_backup(restored_data)
-            st.success("El respaldo general fue restaurado correctamente.")
-            st.rerun()
+            st.success("El archivo es válido. Revisa el contenido antes de restaurar.")
+            st.caption(f"Fecha del respaldo en UTC: {restored_data['created_at_utc']}")
+
+            preview_columns = st.columns(4)
+            for column, section in zip(preview_columns, SESSION_KEYS, strict=True):
+                column.metric(SECTION_LABELS[section], _section_count(restored_data, section))
+
+            selected_sections = st.multiselect(
+                "Secciones que deseas restaurar",
+                options=list(SESSION_KEYS),
+                default=list(SESSION_KEYS),
+                format_func=lambda section: SECTION_LABELS[section],
+            )
+
+            if selected_sections:
+                affected_names = ", ".join(SECTION_LABELS[section] for section in selected_sections)
+                st.info(f"Se reemplazarán únicamente estas secciones: {affected_names}.")
+            else:
+                st.warning("Selecciona por lo menos una sección para continuar.")
+
+            confirmation = st.checkbox(
+                "Entiendo que las secciones seleccionadas reemplazarán sus datos actuales."
+            )
+
+            if st.button(
+                "Restaurar secciones seleccionadas",
+                type="primary",
+                use_container_width=True,
+                disabled=not selected_sections or not confirmation,
+            ):
+                _restore_selected_sections(restored_data, selected_sections)
+                st.success(
+                    f"Se restauraron correctamente {len(selected_sections)} sección(es)."
+                )
+                st.rerun()
 
     render_info_card(
-        "Contenido del archivo",
+        "Restauración selectiva",
         (
-            "El JSON contiene únicamente datos operativos temporales de esta versión: configuración general, "
-            "activos, materiales y precios guardados."
+            "Puedes revisar cuántos registros contiene el respaldo y recuperar solo Configuración, "
+            "Activos, Inventario o Lista de precios sin reemplazar obligatoriamente todo lo demás."
         ),
-        "RESPALDO MANUAL",
+        "CONTROL DE RESTAURACIÓN",
     )
