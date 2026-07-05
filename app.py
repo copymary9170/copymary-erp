@@ -10,6 +10,7 @@ from src.general_settings import render_general_settings
 from src.inventory import render_inventory
 from src.modules import MODULES
 from src.price_export import render_price_export
+from src.price_rounding import render_price_rounding
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -24,11 +25,14 @@ FUNCTIONAL_MODULES = {
     "Activos": render_assets,
     "Inventario": render_inventory,
     "Costeo": render_costing,
+    "Ajustar precios": render_price_rounding,
     "Exportar precios": render_price_export,
 }
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
+if "Ajustar precios" not in NAVIGATION_OPTIONS:
+    NAVIGATION_OPTIONS.append("Ajustar precios")
 if "Exportar precios" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.append("Exportar precios")
 
@@ -58,16 +62,17 @@ def render_home() -> None:
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
     st.subheader("Flujo funcional actual")
-    flow_columns = st.columns(5)
+    flow_columns = st.columns(3)
     flow = (
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
         ("Costeo", "Combina los datos y calcula precios orientativos."),
+        ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
         ("Exportar precios", "Descarga en CSV la lista guardada durante la sesión."),
     )
-    for column, (title, description) in zip(flow_columns, flow, strict=True):
-        with column:
+    for index, (title, description) in enumerate(flow):
+        with flow_columns[index % 3]:
             render_info_card(title, description, "FUNCIÓN TEMPORAL")
 
     st.divider()
