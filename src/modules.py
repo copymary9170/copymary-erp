@@ -84,4 +84,16 @@ MODULES: dict[str, ModuleInfo] = {
         ],
         "dependencies": ["Configuración General", "Costeo", "Producción"],
     },
+    "Costeo": {
+        "description": "Calcula costos y precios orientativos usando la configuración y los activos registrados.",
+        "status": "Primera función temporal conectada con Configuración General y Activos.",
+        "objective": "Evitar precios improvisados y asegurar que cada venta cubra costos, reposición y ganancia.",
+        "planned_functions": [
+            "Costos directos por unidad",
+            "Costos indirectos prorrateados",
+            "Depreciación del activo utilizado",
+            "Precio orientativo y ganancia estimada",
+        ],
+        "dependencies": ["Configuración General", "Activos", "Inventario", "Producción"],
+    },
 }
