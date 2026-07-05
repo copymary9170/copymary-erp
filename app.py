@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from src.accounts_receivable import render_accounts_receivable
 from src.assets import render_assets
 from src.assets_backup import render_assets_backup
 from src.catalog import render_catalog
@@ -39,6 +40,7 @@ FUNCTIONAL_MODULES = {
     "Panel comercial": render_commercial_dashboard,
     "Clientes": render_clients,
     "Ventas y pedidos": render_sales,
+    "Cuentas por cobrar": render_accounts_receivable,
     "Cotizaciones": render_quotes,
     "Comprobantes": render_receipts,
     "Caja": render_cash,
@@ -61,6 +63,7 @@ for extra_page in (
     "Panel comercial",
     "Clientes",
     "Ventas y pedidos",
+    "Cuentas por cobrar",
     "Cotizaciones",
     "Comprobantes",
     "Caja",
@@ -101,7 +104,7 @@ def render_home() -> None:
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
         st.caption(
-            "El ERP conecta clientes, ventas, compras, catálogo, producción, caja, inventario y reportes."
+            "El ERP conecta clientes, ventas, cobranza, compras, catálogo, producción, caja e inventario."
         )
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
@@ -113,6 +116,7 @@ def render_home() -> None:
         ("Clientes", "Registra clientes y consulta su historial."),
         ("Cotizaciones", "Crea propuestas con varios conceptos y conviértelas en ventas."),
         ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
+        ("Cuentas por cobrar", "Registra abonos, saldos y fechas de vencimiento."),
         ("Comprobantes", "Genera documentos descargables para ventas pagadas."),
         ("Caja", "Registra ingresos y egresos y calcula el saldo."),
         ("Reportes comerciales", "Exporta clientes, ventas, caja y cotizaciones."),
