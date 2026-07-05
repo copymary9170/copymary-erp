@@ -21,6 +21,7 @@ from src.inventory_movements import render_inventory_movements
 from src.modules import MODULES
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
+from src.purchasing import render_purchases, render_suppliers
 from src.session_backup import render_session_backup
 from src.stock_alerts import render_stock_alerts
 
@@ -41,6 +42,8 @@ FUNCTIONAL_MODULES = {
     "Comprobantes": render_receipts,
     "Caja": render_cash,
     "Reportes comerciales": render_commercial_reports,
+    "Proveedores": render_suppliers,
+    "Compras": render_purchases,
     "Activos": render_assets,
     "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
@@ -60,6 +63,8 @@ for extra_page in (
     "Comprobantes",
     "Caja",
     "Reportes comerciales",
+    "Proveedores",
+    "Compras",
     "Inventario",
     "Movimientos de inventario",
     "Alertas de inventario",
@@ -92,7 +97,9 @@ def render_home() -> None:
             APP_NAME,
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
-        st.caption("El bloque comercial conecta clientes, cotizaciones, ventas, comprobantes, caja y reportes.")
+        st.caption(
+            "El ERP conecta clientes, ventas, compras, proveedores, caja, inventario y reportes."
+        )
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
@@ -106,6 +113,8 @@ def render_home() -> None:
         ("Comprobantes", "Genera documentos descargables para ventas pagadas."),
         ("Caja", "Registra ingresos y egresos y calcula el saldo."),
         ("Reportes comerciales", "Exporta clientes, ventas, caja y cotizaciones."),
+        ("Proveedores", "Registra proveedores y consulta sus compras."),
+        ("Compras", "Conecta abastecimiento con Inventario y Caja."),
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
