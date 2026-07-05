@@ -28,6 +28,13 @@ def _member_label(member: dict) -> str:
     return f"{member.get('name', 'Colaborador')} · {member.get('member_id', '')}"
 
 
+def _assignment_commission(item: dict) -> float:
+    value = float(item.get("commission_value_snapshot", 0.0))
+    if item.get("commission_mode_snapshot") == "Monto por venta":
+        return value
+    return float(item.get("sale_total_snapshot", 0.0)) * value / 100
+
+
 def _earned(member: dict, assignments: list[dict], sales: list[dict]) -> float:
     member_id = str(member.get("member_id", ""))
     sale_ids = {
@@ -212,6 +219,10 @@ def render_team_commission_control() -> None:
                             "created_at_utc": _now(),
                             "member_id": member_id,
                             "sale_id": sale_id,
+                            "commission_mode_snapshot": str(member.get("commission_mode", "Porcentaje")),
+                            "commission_value_snapshot": float(member.get("commission_value", 0.0)),
+                            "sale_total_snapshot": float(sale.get("total", 0.0)),
+                            "sale_description_snapshot": str(sale.get("description", "Venta")),
                             "active": True,
                         }
                     )
@@ -224,11 +235,27 @@ def render_team_commission_control() -> None:
                 if not item.get("active", True):
                     continue
                 sale = sale_map.get(str(item.get("sale_id", "")), {})
+                description = str(
+                    item.get("sale_description_snapshot", sale.get("description", "Venta"))
+                )
                 with st.container(border=True):
                     row = st.columns([3, 1])
                     row[0].write(
-                        f"**{_name(str(item.get('member_id', '')), members)}** · "
-                        f"{sale.get('description', 'Venta')}"
+                        f"**{_name(str(item.get('member_id', '')), members)}** · {description}"
+                    )
+                    row[1].metric("Comisión", format_money(_assignment_commission(item)))
+                    details = st.columns(3)
+                    details[0].metric(
+                        "Venta guardada",
+                        format_money(float(item.get("sale_total_snapshot", sale.get("total", 0.0)))),
+                    )
+                    details[1].metric(
+                        "Tipo",
+                        str(item.get("commission_mode_snapshot", "Porcentaje")),
+                    )
+                    details[2].metric(
+                        "Valor",
+                        str(item.get("commission_value_snapshot", 0.0)),
                     )
                     if row[1].button(
                         "Quitar",
