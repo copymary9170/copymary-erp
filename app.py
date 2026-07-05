@@ -7,16 +7,12 @@ from src.accounts_receivable import render_accounts_receivable
 from src.assets import render_assets
 from src.assets_backup import render_assets_backup
 from src.catalog import render_catalog
-from src.commercial import (
-    render_cash,
-    render_clients,
-    render_commercial_dashboard,
-    render_sales,
-)
+from src.commercial import render_cash, render_clients, render_commercial_dashboard, render_sales
 from src.commercial_documents import render_quotes, render_receipts
 from src.commercial_reports import render_commercial_reports
 from src.components import apply_base_styles, render_info_card, render_page_header
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
+from src.control_center import render_control_center
 from src.costing import render_costing
 from src.financial import render_financial_dashboard
 from src.general_settings import render_general_settings
@@ -39,7 +35,7 @@ st.set_page_config(
 apply_base_styles()
 
 FUNCTIONAL_MODULES = {
-    "Configuración General": render_general_settings,
+    "Centro de control": render_control_center,
     "Panel comercial": render_commercial_dashboard,
     "Panel financiero y cierres": render_financial_dashboard,
     "Clientes": render_clients,
@@ -54,112 +50,94 @@ FUNCTIONAL_MODULES = {
     "Compras": render_purchases,
     "Cuentas por pagar": render_accounts_payable,
     "Catálogo y producción": render_catalog,
-    "Activos": render_assets,
-    "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
     "Movimientos de inventario": render_inventory_movements,
     "Alertas de inventario": render_stock_alerts,
     "Costeo": render_costing,
     "Ajustar precios": render_price_rounding,
     "Exportar precios": render_price_export,
+    "Activos": render_assets,
+    "Respaldar activos": render_assets_backup,
+    "Configuración General": render_general_settings,
     "Respaldo general": render_session_backup,
 }
-NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
-for extra_page in (
-    "Panel comercial",
-    "Panel financiero y cierres",
-    "Clientes",
-    "Ventas y pedidos",
-    "Agenda de producción y entregas",
-    "Cuentas por cobrar",
-    "Cotizaciones",
-    "Comprobantes",
-    "Caja",
-    "Reportes comerciales",
-    "Proveedores",
-    "Compras",
-    "Cuentas por pagar",
-    "Catálogo y producción",
-    "Inventario",
-    "Movimientos de inventario",
-    "Alertas de inventario",
-    "Respaldar activos",
-    "Ajustar precios",
-    "Exportar precios",
-    "Respaldo general",
-):
-    if extra_page not in NAVIGATION_OPTIONS:
-        NAVIGATION_OPTIONS.append(extra_page)
+
+NAVIGATION_GROUPS = {
+    "Inicio": ("Inicio", "Centro de control", "Panel comercial", "Panel financiero y cierres"),
+    "Ventas y clientes": (
+        "Clientes",
+        "Cotizaciones",
+        "Ventas y pedidos",
+        "Agenda de producción y entregas",
+        "Cuentas por cobrar",
+        "Comprobantes",
+        "Reportes comerciales",
+    ),
+    "Compras y proveedores": ("Proveedores", "Compras", "Cuentas por pagar"),
+    "Productos e inventario": (
+        "Catálogo y producción",
+        "Inventario",
+        "Movimientos de inventario",
+        "Alertas de inventario",
+        "Costeo",
+        "Ajustar precios",
+        "Exportar precios",
+    ),
+    "Administración": (
+        "Caja",
+        "Activos",
+        "Respaldar activos",
+        "Configuración General",
+        "Respaldo general",
+    ),
+    "Planificación futura": tuple(
+        name for name in MODULES if name not in FUNCTIONAL_MODULES
+    ),
+}
 
 with st.sidebar:
     st.title(APP_NAME)
-    st.caption("Panel empresarial en construcción")
+    st.caption("Panel empresarial")
     st.divider()
+    selected_area = st.selectbox("Área", tuple(NAVIGATION_GROUPS.keys()))
     selected_page = st.radio(
-        "Secciones disponibles",
-        NAVIGATION_OPTIONS,
-        label_visibility="collapsed",
+        "Sección",
+        NAVIGATION_GROUPS[selected_area],
+        label_visibility="visible",
     )
     st.divider()
+    if st.button("Ir al Centro de control", use_container_width=True):
+        st.session_state["preferred_area"] = "Inicio"
+        st.session_state["preferred_page"] = "Centro de control"
+        st.rerun()
     st.caption(f"Versión {APP_VERSION}")
     st.caption(f"Estado: {PROJECT_STATUS}")
-    st.info("Las funciones actuales trabajan solo durante la sesión y no guardan datos permanentemente.")
+    st.info("Los datos actuales permanecen solo durante la sesión. Usa Respaldo general antes de cerrar.")
 
 
 def render_home() -> None:
     with st.container(border=True):
         render_page_header(
             APP_NAME,
-            "Sistema empresarial en construcción con módulos temporales conectados.",
+            "Sistema empresarial conectado para ventas, compras, producción, inventario y finanzas.",
         )
-        st.caption(
-            "El ERP conecta ventas, cobranza, compras, pagos, producción, caja, finanzas e inventario."
-        )
+        st.caption("Selecciona un área en el menú lateral para comenzar.")
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
-    st.subheader("Flujo funcional actual")
-    flow_columns = st.columns(3)
-    flow = (
-        ("Panel comercial", "Resume ventas, pedidos, caja y alertas."),
-        ("Panel financiero y cierres", "Analiza resultados por período y registra cierres de caja."),
-        ("Clientes", "Registra clientes y consulta su historial."),
-        ("Cotizaciones", "Crea propuestas con varios conceptos y conviértelas en ventas."),
-        ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
-        ("Agenda de producción y entregas", "Organiza fechas, prioridades, responsables y avance."),
-        ("Cuentas por cobrar", "Registra abonos, saldos y fechas de vencimiento."),
-        ("Comprobantes", "Genera documentos descargables para ventas pagadas."),
-        ("Caja", "Registra ingresos y egresos y calcula el saldo."),
-        ("Reportes comerciales", "Exporta clientes, ventas, caja y cotizaciones."),
-        ("Proveedores", "Registra proveedores y consulta sus compras."),
-        ("Compras", "Conecta abastecimiento con Inventario y Caja."),
-        ("Cuentas por pagar", "Controla pagos parciales, saldos y vencimientos de proveedores."),
-        ("Catálogo y producción", "Define recetas, costos y descuenta materiales al producir."),
-        ("Configuración General", "Define moneda, margen y costos fijos."),
-        ("Activos", "Aporta la depreciación por unidad del equipo."),
-        ("Inventario", "Calcula el costo unitario de los materiales."),
-        ("Movimientos de inventario", "Registra entradas y salidas con trazabilidad."),
-        ("Alertas de inventario", "Detecta faltantes y prepara una lista de reposición."),
-        ("Costeo", "Combina los datos y calcula precios orientativos."),
-        ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
-        ("Exportar precios", "Descarga o recupera la lista de precios en CSV."),
-        ("Respaldo general", "Guarda toda la sesión principal en un solo archivo JSON."),
+    st.subheader("Áreas principales")
+    columns = st.columns(3)
+    cards = (
+        ("Centro de control", "Reúne alertas operativas, financieras y de inventario."),
+        ("Ventas y clientes", "Gestiona cotizaciones, pedidos, cobranza y entregas."),
+        ("Compras y proveedores", "Controla abastecimiento, pagos y vencimientos."),
+        ("Productos e inventario", "Administra recetas, costos, existencias y producción."),
+        ("Administración", "Organiza caja, activos, configuración y respaldos."),
+        ("Panel financiero", "Analiza ingresos, egresos, utilidad y cierres."),
     )
-    for index, (title, description) in enumerate(flow):
-        with flow_columns[index % 3]:
-            render_info_card(title, description, "FUNCIÓN TEMPORAL")
-
-    st.divider()
-    st.subheader("Estado de los demás módulos")
-    descriptive_modules = [
-        (name, info)
-        for name, info in MODULES.items()
-        if name not in FUNCTIONAL_MODULES
-    ]
-    module_columns = st.columns(2)
-    for index, (name, info) in enumerate(descriptive_modules):
-        with module_columns[index % 2]:
-            render_info_card(name, info["description"], "INTERFAZ DESCRIPTIVA")
+    for index, (title, description) in enumerate(cards):
+        with columns[index % 3]:
+            render_info_card(title, description, "ÁREA FUNCIONAL")
 
 
 def render_descriptive_module(module_name: str) -> None:
