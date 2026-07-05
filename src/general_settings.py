@@ -15,6 +15,9 @@ class GeneralSettings:
     monthly_internet: float
     monthly_electricity: float
     estimated_monthly_units: int
+    equipment_name: str
+    equipment_cost: float
+    equipment_lifetime_units: int
 
     @property
     def monthly_fixed_costs(self) -> float:
@@ -23,6 +26,10 @@ class GeneralSettings:
     @property
     def fixed_cost_per_unit(self) -> float:
         return self.monthly_fixed_costs / self.estimated_monthly_units
+
+    @property
+    def equipment_cost_per_unit(self) -> float:
+        return self.equipment_cost / self.equipment_lifetime_units
 
     @property
     def sale_multiplier(self) -> float:
@@ -35,6 +42,7 @@ class PriceEstimate:
     ink_cost: float
     labor_cost: float
     indirect_cost: float
+    equipment_cost: float
     other_cost: float
     quantity: int
     unit_cost: float
@@ -55,11 +63,19 @@ def _calculate_price_estimate(
     ink_cost: float,
     labor_cost: float,
     indirect_cost: float,
+    equipment_cost: float,
     other_cost: float,
     quantity: int,
     settings: GeneralSettings,
 ) -> PriceEstimate:
-    unit_cost = paper_cost + ink_cost + labor_cost + indirect_cost + other_cost
+    unit_cost = (
+        paper_cost
+        + ink_cost
+        + labor_cost
+        + indirect_cost
+        + equipment_cost
+        + other_cost
+    )
     total_cost = unit_cost * quantity
     unit_price = unit_cost * settings.sale_multiplier
     total_price = unit_price * quantity
@@ -68,6 +84,7 @@ def _calculate_price_estimate(
         ink_cost=ink_cost,
         labor_cost=labor_cost,
         indirect_cost=indirect_cost,
+        equipment_cost=equipment_cost,
         other_cost=other_cost,
         quantity=quantity,
         unit_cost=unit_cost,
@@ -99,6 +116,9 @@ def render_general_settings() -> None:
         monthly_internet=25.0,
         monthly_electricity=4.0,
         estimated_monthly_units=400,
+        equipment_name="Equipo principal",
+        equipment_cost=230.0,
+        equipment_lifetime_units=30000,
     )
     stored_settings = st.session_state.get("general_settings")
     defaults = stored_settings if isinstance(stored_settings, GeneralSettings) else default_settings
@@ -147,6 +167,30 @@ def render_general_settings() -> None:
                 help="Cantidad aproximada de unidades, hojas o trabajos producidos al mes.",
             )
 
+        st.markdown("#### Equipo utilizado")
+        equipment_columns = st.columns(3)
+        with equipment_columns[0]:
+            equipment_name = st.text_input(
+                "Nombre del equipo",
+                value=defaults.equipment_name,
+                max_chars=80,
+            )
+        with equipment_columns[1]:
+            equipment_cost = st.number_input(
+                "Costo de adquisición del equipo",
+                min_value=0.0,
+                value=float(defaults.equipment_cost),
+                step=10.0,
+            )
+        with equipment_columns[2]:
+            equipment_lifetime_units = st.number_input(
+                "Vida útil estimada en unidades",
+                min_value=1,
+                value=int(defaults.equipment_lifetime_units),
+                step=100,
+                help="Cantidad total de unidades que esperas producir antes de reemplazar el equipo.",
+            )
+
         submitted = st.form_submit_button(
             "Aplicar configuración",
             type="primary",
@@ -155,8 +199,11 @@ def render_general_settings() -> None:
 
     if submitted:
         cleaned_name = business_name.strip()
+        cleaned_equipment_name = equipment_name.strip()
         if not cleaned_name:
             st.error("El nombre del negocio no puede quedar vacío.")
+        elif not cleaned_equipment_name:
+            st.error("El nombre del equipo no puede quedar vacío.")
         else:
             st.session_state.general_settings = GeneralSettings(
                 business_name=cleaned_name,
@@ -165,6 +212,9 @@ def render_general_settings() -> None:
                 monthly_internet=float(monthly_internet),
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
+                equipment_name=cleaned_equipment_name,
+                equipment_cost=float(equipment_cost),
+                equipment_lifetime_units=int(equipment_lifetime_units),
             )
             st.session_state.pop("price_estimate", None)
             st.success("Configuración aplicada durante esta sesión.")
@@ -176,27 +226,39 @@ def render_general_settings() -> None:
     summary_columns = st.columns(4)
     summary_columns[0].metric("Negocio", settings.business_name)
     summary_columns[1].metric(
-        "Costos fijos mensuales",
-        _format_money(settings.monthly_fixed_costs, settings.currency),
-    )
-    summary_columns[2].metric(
         "Costo fijo por unidad",
         _format_money(settings.fixed_cost_per_unit, settings.currency),
+    )
+    summary_columns[2].metric(
+        "Depreciación por unidad",
+        _format_money(settings.equipment_cost_per_unit, settings.currency),
     )
     summary_columns[3].metric(
         "Multiplicador de venta",
         f"× {settings.sale_multiplier:.2f}",
     )
 
-    render_info_card(
-        "Prorrateo automático de costos fijos",
-        (
-            f"Los costos mensuales de internet y electricidad se distribuyen entre "
-            f"{settings.estimated_monthly_units} unidades estimadas. El resultado es "
-            f"{_format_money(settings.fixed_cost_per_unit, settings.currency)} por unidad."
-        ),
-        "COSTO INDIRECTO SUGERIDO",
-    )
+    summary_cards = st.columns(2)
+    with summary_cards[0]:
+        render_info_card(
+            "Prorrateo de costos fijos",
+            (
+                f"Internet y electricidad se distribuyen entre "
+                f"{settings.estimated_monthly_units} unidades. El resultado es "
+                f"{_format_money(settings.fixed_cost_per_unit, settings.currency)} por unidad."
+            ),
+            "COSTO INDIRECTO SUGERIDO",
+        )
+    with summary_cards[1]:
+        render_info_card(
+            "Reserva para reemplazo del equipo",
+            (
+                f"El costo de {settings.equipment_name} se distribuye entre "
+                f"{settings.equipment_lifetime_units:,} unidades. La reserva sugerida es "
+                f"{_format_money(settings.equipment_cost_per_unit, settings.currency)} por unidad."
+            ),
+            "DEPRECIACIÓN SUGERIDA",
+        )
 
     st.divider()
     st.subheader("Calculadora detallada de costos")
@@ -229,7 +291,7 @@ def render_general_settings() -> None:
                 format="%.2f",
             )
 
-        second_row = st.columns(3)
+        second_row = st.columns(4)
         with second_row[0]:
             indirect_cost = st.number_input(
                 "Gastos indirectos por unidad",
@@ -240,6 +302,15 @@ def render_general_settings() -> None:
                 help="Se completa con el costo fijo por unidad calculado arriba; puedes modificarlo.",
             )
         with second_row[1]:
+            equipment_cost_per_unit = st.number_input(
+                "Depreciación del equipo por unidad",
+                min_value=0.0,
+                value=float(settings.equipment_cost_per_unit),
+                step=0.001,
+                format="%.3f",
+                help="Reserva sugerida para financiar el reemplazo futuro del equipo.",
+            )
+        with second_row[2]:
             other_cost = st.number_input(
                 "Otros costos por unidad",
                 min_value=0.0,
@@ -247,7 +318,7 @@ def render_general_settings() -> None:
                 step=0.01,
                 format="%.2f",
             )
-        with second_row[2]:
+        with second_row[3]:
             quantity = st.number_input(
                 "Cantidad",
                 min_value=1,
@@ -267,6 +338,7 @@ def render_general_settings() -> None:
             ink_cost=float(ink_cost),
             labor_cost=float(labor_cost),
             indirect_cost=float(indirect_cost),
+            equipment_cost=float(equipment_cost_per_unit),
             other_cost=float(other_cost),
             quantity=int(quantity),
             settings=settings,
@@ -296,7 +368,7 @@ def render_general_settings() -> None:
         breakdown_columns = st.columns(2)
         with breakdown_columns[0]:
             render_info_card(
-                "Desglose por unidad",
+                "Costos directos por unidad",
                 (
                     f"Papel: {_format_money(estimate.paper_cost, settings.currency)} · "
                     f"Tinta: {_format_money(estimate.ink_cost, settings.currency)} · "
@@ -306,11 +378,11 @@ def render_general_settings() -> None:
             )
         with breakdown_columns[1]:
             render_info_card(
-                "Otros componentes",
+                "Costos complementarios por unidad",
                 (
                     f"Indirectos: {_format_money(estimate.indirect_cost, settings.currency)} · "
-                    f"Otros: {_format_money(estimate.other_cost, settings.currency)} · "
-                    f"Costo total: {_format_money(estimate.total_cost, settings.currency)}"
+                    f"Equipo: {_format_money(estimate.equipment_cost, settings.currency)} · "
+                    f"Otros: {_format_money(estimate.other_cost, settings.currency)}"
                 ),
                 "COSTOS COMPLEMENTARIOS",
             )
@@ -318,7 +390,8 @@ def render_general_settings() -> None:
         render_info_card(
             "Resultado de la estimación",
             (
-                f"Para {estimate.quantity} unidad(es), la venta orientativa total es "
+                f"Para {estimate.quantity} unidad(es), el costo total es "
+                f"{_format_money(estimate.total_cost, settings.currency)}, la venta orientativa es "
                 f"{_format_money(estimate.total_price, settings.currency)} y la ganancia estimada es "
                 f"{_format_money(estimate.estimated_profit, settings.currency)}."
             ),
@@ -326,6 +399,6 @@ def render_general_settings() -> None:
         )
 
     st.info(
-        "El resultado depende de los costos introducidos. Esta etapa todavía no obtiene datos "
-        "automáticamente desde inventario, activos, nómina o contabilidad."
+        "El resultado depende de los valores introducidos. La vida útil del equipo es una estimación "
+        "editable y todavía no se alimenta automáticamente desde el módulo de Activos."
     )
