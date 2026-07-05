@@ -14,6 +14,7 @@ BACKUP_VERSION = 1
 SESSION_KEYS = (
     "general_settings",
     "customers_registry",
+    "quotes_registry",
     "sales_registry",
     "cash_movements",
     "assets_registry",
@@ -24,6 +25,7 @@ SESSION_KEYS = (
 SECTION_LABELS = {
     "general_settings": "Configuración General",
     "customers_registry": "Clientes",
+    "quotes_registry": "Cotizaciones",
     "sales_registry": "Ventas y pedidos",
     "cash_movements": "Caja",
     "assets_registry": "Activos",
@@ -165,30 +167,33 @@ def render_session_backup() -> None:
             "Guarda o recupera en un solo archivo la información temporal principal del ERP.",
         )
         st.caption(
-            "Incluye configuración, clientes, ventas, caja, activos, inventario, movimientos y precios."
+            "Incluye configuración, clientes, cotizaciones, ventas, caja, activos, inventario, movimientos y precios."
         )
 
     st.warning(
         "Este respaldo es manual y provisional. Descárgalo antes de cerrar la sesión para evitar perder datos."
     )
 
-    summary_columns = st.columns(4)
+    summary_columns = st.columns(3)
     summary_columns[0].metric(
         "Configuración",
         "Sí" if st.session_state.get("general_settings") is not None else "No",
     )
     summary_columns[1].metric("Clientes", str(len(st.session_state.get("customers_registry", []))))
-    summary_columns[2].metric("Ventas", str(len(st.session_state.get("sales_registry", []))))
-    summary_columns[3].metric("Caja", str(len(st.session_state.get("cash_movements", []))))
+    summary_columns[2].metric("Cotizaciones", str(len(st.session_state.get("quotes_registry", []))))
 
-    summary_columns_2 = st.columns(4)
-    summary_columns_2[0].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
-    summary_columns_2[1].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
-    summary_columns_2[2].metric(
+    summary_columns_2 = st.columns(3)
+    summary_columns_2[0].metric("Ventas", str(len(st.session_state.get("sales_registry", []))))
+    summary_columns_2[1].metric("Caja", str(len(st.session_state.get("cash_movements", []))))
+    summary_columns_2[2].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
+
+    summary_columns_3 = st.columns(3)
+    summary_columns_3[0].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
+    summary_columns_3[1].metric(
         "Movimientos",
         str(len(st.session_state.get("inventory_movements", []))),
     )
-    summary_columns_2[3].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
+    summary_columns_3[2].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
 
     st.download_button(
         "Descargar respaldo general",
@@ -217,11 +222,14 @@ def render_session_backup() -> None:
             st.success("El archivo es válido. Revisa el contenido antes de restaurar.")
             st.caption(f"Fecha del respaldo en UTC: {restored_data['created_at_utc']}")
 
-            preview_columns = st.columns(4)
-            preview_columns_2 = st.columns(4)
+            preview_rows = [st.columns(3), st.columns(3), st.columns(3)]
             for index, section in enumerate(SESSION_KEYS):
-                columns = preview_columns if index < 4 else preview_columns_2
-                columns[index % 4].metric(SECTION_LABELS[section], _section_count(restored_data, section))
+                row = index // 3
+                column = index % 3
+                preview_rows[row][column].metric(
+                    SECTION_LABELS[section],
+                    _section_count(restored_data, section),
+                )
 
             selected_sections = st.multiselect(
                 "Secciones que deseas restaurar",
@@ -255,8 +263,8 @@ def render_session_backup() -> None:
     render_info_card(
         "Restauración selectiva",
         (
-            "Puedes recuperar por separado Configuración, Clientes, Ventas, Caja, Activos, Inventario, "
-            "Movimientos o Lista de precios."
+            "Puedes recuperar por separado Configuración, Clientes, Cotizaciones, Ventas, Caja, Activos, "
+            "Inventario, Movimientos o Lista de precios."
         ),
         "CONTROL DE RESTAURACIÓN",
     )
