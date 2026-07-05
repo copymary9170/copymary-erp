@@ -6,6 +6,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+from src.money import format_money
 
 
 @dataclass(frozen=True)
@@ -33,13 +34,6 @@ class Asset:
     @property
     def usage_percent(self) -> float:
         return min((self.current_units / self.lifetime_units) * 100, 100.0)
-
-
-CURRENCY_SYMBOL = "$"
-
-
-def _format_money(value: float) -> str:
-    return f"{CURRENCY_SYMBOL} {value:,.2f}"
 
 
 def _get_assets() -> list[Asset]:
@@ -153,8 +147,8 @@ def render_assets() -> None:
     total_units = sum(asset.current_units for asset in assets)
     summary_columns = st.columns(4)
     summary_columns[0].metric("Activos registrados", str(len(assets)))
-    summary_columns[1].metric("Inversión registrada", _format_money(total_cost))
-    summary_columns[2].metric("Valor pendiente", _format_money(total_remaining))
+    summary_columns[1].metric("Inversión registrada", format_money(total_cost))
+    summary_columns[2].metric("Valor pendiente", format_money(total_remaining))
     summary_columns[3].metric("Unidades acumuladas", f"{total_units:,}")
 
     if not assets:
@@ -174,11 +168,11 @@ def render_assets() -> None:
                     st.rerun()
 
             metric_columns = st.columns(5)
-            metric_columns[0].metric("Costo", _format_money(asset.acquisition_cost))
-            metric_columns[1].metric("Depreciación/unidad", _format_money(asset.depreciation_per_unit))
+            metric_columns[0].metric("Costo", format_money(asset.acquisition_cost))
+            metric_columns[1].metric("Depreciación/unidad", format_money(asset.depreciation_per_unit))
             metric_columns[2].metric("Unidades acumuladas", f"{asset.current_units:,}")
             metric_columns[3].metric("Uso estimado", f"{asset.usage_percent:.1f}%")
-            metric_columns[4].metric("Valor pendiente", _format_money(asset.remaining_value))
+            metric_columns[4].metric("Valor pendiente", format_money(asset.remaining_value))
 
             st.progress(asset.usage_percent / 100)
 
@@ -217,7 +211,7 @@ def render_assets() -> None:
                     "Depreciación acumulada",
                     (
                         f"Según las unidades registradas, este equipo ha consumido aproximadamente "
-                        f"{_format_money(asset.accumulated_depreciation)} de su valor."
+                        f"{format_money(asset.accumulated_depreciation)} de su valor."
                     ),
                     "SEGUIMIENTO DE USO",
                 )
@@ -226,7 +220,7 @@ def render_assets() -> None:
                     "Reserva sugerida",
                     (
                         f"Para financiar el reemplazo futuro de este equipo, reserva aproximadamente "
-                        f"{_format_money(asset.depreciation_per_unit)} por cada unidad producida."
+                        f"{format_money(asset.depreciation_per_unit)} por cada unidad producida."
                     ),
                     "DEPRECIACIÓN ORIENTATIVA",
                 )
