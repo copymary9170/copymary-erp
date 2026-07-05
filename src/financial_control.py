@@ -1,4 +1,4 @@
-"""Panel financiero con cierres de caja por método de pago."""
+"""Panel financiero con cierres de caja seguros por método de pago."""
 
 from datetime import date, datetime, timezone
 from uuid import uuid4
@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.financial import _build_financial_csv, _cash_totals, _filter_by_period, _sales_totals
+from src.financial_reconciliation import _cash_by_reference, _check_record, _expected_records
 from src.money import format_money
 
 METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro")
@@ -62,11 +63,7 @@ def _pending_movements(cash: list[dict], closings: list[dict], scope: tuple[str,
     return pending
 
 
-def _expected_by_method(
-    cash: list[dict],
-    closings: list[dict],
-    scope: tuple[str, ...],
-) -> tuple[dict[str, float], list[dict]]:
+def _expected_by_method(cash: list[dict], closings: list[dict], scope: tuple[str, ...]) -> tuple[dict[str, float], list[dict]]:
     opening = _opening_by_method(closings)
     pending = _pending_movements(cash, closings, scope)
     expected = {method: opening[method] for method in scope}
@@ -78,13 +75,33 @@ def _expected_by_method(
     return expected, pending
 
 
+def _closing_blockers(cash: list[dict], pending: list[dict]) -> list[str]:
+    blockers: list[str] = []
+    cash_map = _cash_by_reference(cash)
+    for record in _expected_records():
+        issues = _check_record(record, cash_map)
+        if issues:
+            blockers.append(f"{record.get('kind', 'Pago')} {record.get('payment_id', '')}: {issues[0]}")
+
+    movement_ids = [str(item.get("_closing_movement_id", "")) for item in pending]
+    duplicates = sorted({movement_id for movement_id in movement_ids if movement_id and movement_ids.count(movement_id) > 1})
+    if duplicates:
+        blockers.append(f"Hay movimientos repetidos en el cierre: {', '.join(duplicates)}")
+
+    for item in pending:
+        if not item.get("movement_id"):
+            blockers.append("Hay movimientos antiguos sin ID único; revísalos antes de cerrar.")
+            break
+        if float(item.get("amount", 0.0)) <= 0:
+            blockers.append(f"Movimiento {item.get('movement_id', '')} tiene monto igual o menor que cero.")
+
+    return blockers
+
+
 def render_financial_control() -> None:
     with st.container(border=True):
-        render_page_header(
-            "Panel financiero y cierres",
-            "Analiza resultados y realiza cierres de caja separados por método de pago.",
-        )
-        st.caption("Cada movimiento se incluye una sola vez en un cierre.")
+        render_page_header("Panel financiero y cierres", "Analiza resultados y realiza cierres seguros por método de pago.")
+        st.caption("Cada movimiento se incluye una sola vez y la conciliación debe estar correcta antes de cerrar.")
 
     cash = _rows("cash_movements")
     sales = _rows("sales_registry")
@@ -104,11 +121,7 @@ def render_financial_control() -> None:
     period_purchases = _filter_by_period(purchases, start_date, end_date)
     income, expenses, balance = _cash_totals(period_cash)
     billed, estimated_costs, estimated_profit = _sales_totals(period_sales)
-    purchases_total = sum(
-        float(item.get("total", 0.0))
-        for item in period_purchases
-        if item.get("receipt_status") != "Cancelada"
-    )
+    purchases_total = sum(float(item.get("total", 0.0)) for item in period_purchases if item.get("receipt_status") != "Cancelada")
 
     first = st.columns(4)
     first[0].metric("Ingresos", format_money(income))
@@ -120,13 +133,7 @@ def render_financial_control() -> None:
     second[1].metric("Costos estimados", format_money(estimated_costs))
     second[2].metric("Utilidad estimada", format_money(estimated_profit))
 
-    st.download_button(
-        "Descargar reporte financiero CSV",
-        data=_build_financial_csv(period_cash, period_sales, period_purchases, start_date, end_date),
-        file_name=f"copymary_finanzas_{start_date}_{end_date}.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
+    st.download_button("Descargar reporte financiero CSV", data=_build_financial_csv(period_cash, period_sales, period_purchases, start_date, end_date), file_name=f"copymary_finanzas_{start_date}_{end_date}.csv", mime="text/csv", use_container_width=True)
 
     st.divider()
     st.subheader("Saldos por método")
@@ -138,13 +145,17 @@ def render_financial_control() -> None:
 
     st.divider()
     st.subheader("Registrar cierre")
-    scope_label = st.radio(
-        "Alcance",
-        ("Solo efectivo", "Todos los métodos"),
-        horizontal=True,
-    )
+    scope_label = st.radio("Alcance", ("Solo efectivo", "Todos los métodos"), horizontal=True)
     scope = ("Efectivo",) if scope_label == "Solo efectivo" else METHODS
     expected, pending = _expected_by_method(cash, closings, scope)
+    blockers = _closing_blockers(cash, pending)
+
+    if blockers:
+        st.error("El cierre está bloqueado hasta corregir la conciliación financiera.")
+        for blocker in blockers[:8]:
+            st.warning(blocker)
+    else:
+        st.success("Conciliación correcta: el cierre puede registrarse.")
 
     with st.form("cash_closing_by_method"):
         top = st.columns(3)
@@ -153,47 +164,34 @@ def render_financial_control() -> None:
         notes = top[2].text_input("Observaciones", max_chars=180)
         counted: dict[str, float] = {}
         for method in scope:
-            counted[method] = st.number_input(
-                f"Contado o conciliado · {method}",
-                min_value=0.0,
-                value=max(float(expected.get(method, 0.0)), 0.0),
-                step=1.0,
-                key=f"counted_{method}",
-            )
-        submitted = st.form_submit_button("Guardar cierre", type="primary", use_container_width=True)
+            counted[method] = st.number_input(f"Contado o conciliado · {method}", min_value=0.0, value=max(float(expected.get(method, 0.0)), 0.0), step=1.0, key=f"counted_{method}")
+        submitted = st.form_submit_button("Guardar cierre", type="primary", use_container_width=True, disabled=bool(blockers))
 
     if submitted:
-        differences = {
-            method: float(counted[method]) - float(expected.get(method, 0.0))
-            for method in scope
-        }
-        closings.append(
-            {
-                "closing_id": uuid4().hex[:10],
-                "created_at_utc": _now(),
-                "closing_date": closing_date.isoformat(),
-                "responsible": responsible.strip(),
-                "notes": notes.strip(),
-                "method_scope": scope_label,
-                "methods": list(scope),
-                "expected_by_method": expected,
-                "counted_by_method": counted,
-                "difference_by_method": differences,
-                "expected_balance": sum(expected.values()),
-                "counted_cash": sum(counted.values()),
-                "difference": sum(differences.values()),
-                "movement_ids": [str(item.get("_closing_movement_id", "")) for item in pending],
-                "movement_count": len(pending),
-            }
-        )
+        differences = {method: float(counted[method]) - float(expected.get(method, 0.0)) for method in scope}
+        closings.append({
+            "closing_id": uuid4().hex[:10],
+            "created_at_utc": _now(),
+            "closing_date": closing_date.isoformat(),
+            "responsible": responsible.strip(),
+            "notes": notes.strip(),
+            "method_scope": scope_label,
+            "methods": list(scope),
+            "expected_by_method": expected,
+            "counted_by_method": counted,
+            "difference_by_method": differences,
+            "expected_balance": sum(expected.values()),
+            "counted_cash": sum(counted.values()),
+            "difference": sum(differences.values()),
+            "movement_ids": [str(item.get("_closing_movement_id", "")) for item in pending],
+            "movement_count": len(pending),
+            "reconciliation_status": "Conciliado",
+        })
         st.session_state["cash_closings"] = closings
-        st.success("Cierre guardado sin repetir movimientos anteriores.")
+        st.success("Cierre conciliado guardado sin repetir movimientos anteriores.")
         st.rerun()
 
-    pending_total = sum(
-        float(item.get("amount", 0.0)) * (1 if item.get("movement_type") == "Ingreso" else -1)
-        for item in pending
-    )
+    pending_total = sum(float(item.get("amount", 0.0)) * (1 if item.get("movement_type") == "Ingreso" else -1) for item in pending)
     info = st.columns(3)
     info[0].metric("Movimientos pendientes", str(len(pending)))
     info[1].metric("Apertura heredada", format_money(sum(_opening_by_method(closings).get(method, 0.0) for method in scope)))
@@ -206,11 +204,7 @@ def render_financial_control() -> None:
     for closing in reversed(closings):
         with st.container(border=True):
             st.markdown(f"### Cierre {closing.get('closing_date', '')}")
-            st.caption(
-                f"ID {closing.get('closing_id', '')} · Responsable: "
-                f"{closing.get('responsible') or 'No indicado'} · "
-                f"Movimientos: {closing.get('movement_count', 'Sin detalle')}"
-            )
+            st.caption(f"ID {closing.get('closing_id', '')} · Responsable: {closing.get('responsible') or 'No indicado'} · Movimientos: {closing.get('movement_count', 'Sin detalle')}")
             columns = st.columns(4)
             columns[0].metric("Esperado", format_money(float(closing.get("expected_balance", 0.0))))
             columns[1].metric("Contado", format_money(float(closing.get("counted_cash", 0.0))))
@@ -220,13 +214,6 @@ def render_financial_control() -> None:
             counted_detail = closing.get("counted_by_method", {})
             if isinstance(expected_detail, dict) and expected_detail:
                 for method in closing.get("methods", expected_detail.keys()):
-                    st.write(
-                        f"**{method}:** esperado {format_money(float(expected_detail.get(method, 0.0)))} · "
-                        f"contado {format_money(float(counted_detail.get(method, 0.0)))}"
-                    )
+                    st.write(f"**{method}:** esperado {format_money(float(expected_detail.get(method, 0.0)))} · contado {format_money(float(counted_detail.get(method, 0.0)))}")
 
-    render_info_card(
-        "Conciliación",
-        "El efectivo se cuenta físicamente; los demás métodos se concilian con sus comprobantes o saldos.",
-        "CIERRE POR MÉTODO",
-    )
+    render_info_card("Conciliación", "El cierre se bloquea cuando existen diferencias entre pagos, reversos y movimientos de Caja.", "CIERRE SEGURO")
