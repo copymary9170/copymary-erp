@@ -13,6 +13,9 @@ from src.general_settings import GeneralSettings
 BACKUP_VERSION = 1
 SESSION_KEYS = (
     "general_settings",
+    "customers_registry",
+    "sales_registry",
+    "cash_movements",
     "assets_registry",
     "inventory_registry",
     "inventory_movements",
@@ -20,6 +23,9 @@ SESSION_KEYS = (
 )
 SECTION_LABELS = {
     "general_settings": "Configuración General",
+    "customers_registry": "Clientes",
+    "sales_registry": "Ventas y pedidos",
+    "cash_movements": "Caja",
     "assets_registry": "Activos",
     "inventory_registry": "Inventario",
     "inventory_movements": "Movimientos de inventario",
@@ -112,17 +118,15 @@ def _parse_backup(file_bytes: bytes) -> dict:
     if not isinstance(data, dict):
         raise ValueError("El respaldo no contiene una sección de datos válida.")
 
-    return {
+    restored = {
         "created_at_utc": str(payload.get("created_at_utc", "No disponible")),
         "general_settings": _validate_general_settings(data.get("general_settings")),
-        "assets_registry": _validate_list("assets_registry", data.get("assets_registry")),
-        "inventory_registry": _validate_list("inventory_registry", data.get("inventory_registry")),
-        "inventory_movements": _validate_list(
-            "inventory_movements",
-            data.get("inventory_movements"),
-        ),
-        "saved_prices": _validate_list("saved_prices", data.get("saved_prices")),
     }
+    for key in SESSION_KEYS:
+        if key == "general_settings":
+            continue
+        restored[key] = _validate_list(key, data.get(key))
+    return restored
 
 
 def _restore_selected_sections(restored_data: dict, selected_sections: list[str]) -> None:
@@ -133,14 +137,10 @@ def _restore_selected_sections(restored_data: dict, selected_sections: list[str]
         else:
             st.session_state.general_settings = settings
 
-    if "assets_registry" in selected_sections:
-        st.session_state.assets_registry = restored_data["assets_registry"]
-    if "inventory_registry" in selected_sections:
-        st.session_state.inventory_registry = restored_data["inventory_registry"]
-    if "inventory_movements" in selected_sections:
-        st.session_state.inventory_movements = restored_data["inventory_movements"]
-    if "saved_prices" in selected_sections:
-        st.session_state.saved_prices = restored_data["saved_prices"]
+    for section in selected_sections:
+        if section == "general_settings":
+            continue
+        st.session_state[section] = restored_data[section]
 
     for transient_key in (
         "connected_costing_result",
@@ -165,25 +165,30 @@ def render_session_backup() -> None:
             "Guarda o recupera en un solo archivo la información temporal principal del ERP.",
         )
         st.caption(
-            "Incluye configuración, activos, inventario, movimientos de inventario y lista de precios."
+            "Incluye configuración, clientes, ventas, caja, activos, inventario, movimientos y precios."
         )
 
     st.warning(
         "Este respaldo es manual y provisional. Descárgalo antes de cerrar la sesión para evitar perder datos."
     )
 
-    summary_columns = st.columns(5)
+    summary_columns = st.columns(4)
     summary_columns[0].metric(
         "Configuración",
         "Sí" if st.session_state.get("general_settings") is not None else "No",
     )
-    summary_columns[1].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
-    summary_columns[2].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
-    summary_columns[3].metric(
+    summary_columns[1].metric("Clientes", str(len(st.session_state.get("customers_registry", []))))
+    summary_columns[2].metric("Ventas", str(len(st.session_state.get("sales_registry", []))))
+    summary_columns[3].metric("Caja", str(len(st.session_state.get("cash_movements", []))))
+
+    summary_columns_2 = st.columns(4)
+    summary_columns_2[0].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
+    summary_columns_2[1].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
+    summary_columns_2[2].metric(
         "Movimientos",
         str(len(st.session_state.get("inventory_movements", []))),
     )
-    summary_columns[4].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
+    summary_columns_2[3].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
 
     st.download_button(
         "Descargar respaldo general",
@@ -212,9 +217,11 @@ def render_session_backup() -> None:
             st.success("El archivo es válido. Revisa el contenido antes de restaurar.")
             st.caption(f"Fecha del respaldo en UTC: {restored_data['created_at_utc']}")
 
-            preview_columns = st.columns(5)
-            for column, section in zip(preview_columns, SESSION_KEYS, strict=True):
-                column.metric(SECTION_LABELS[section], _section_count(restored_data, section))
+            preview_columns = st.columns(4)
+            preview_columns_2 = st.columns(4)
+            for index, section in enumerate(SESSION_KEYS):
+                columns = preview_columns if index < 4 else preview_columns_2
+                columns[index % 4].metric(SECTION_LABELS[section], _section_count(restored_data, section))
 
             selected_sections = st.multiselect(
                 "Secciones que deseas restaurar",
@@ -248,8 +255,8 @@ def render_session_backup() -> None:
     render_info_card(
         "Restauración selectiva",
         (
-            "Puedes revisar cuántos registros contiene el respaldo y recuperar solo Configuración, "
-            "Activos, Inventario, Movimientos o Lista de precios sin reemplazar obligatoriamente todo lo demás."
+            "Puedes recuperar por separado Configuración, Clientes, Ventas, Caja, Activos, Inventario, "
+            "Movimientos o Lista de precios."
         ),
         "CONTROL DE RESTAURACIÓN",
     )
