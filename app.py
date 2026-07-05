@@ -15,6 +15,7 @@ from src.config import (
     PLANNED_MODULES,
     PROJECT_STATUS,
 )
+from src.general_settings import render_general_settings
 from src.modules import MODULES
 
 
@@ -57,8 +58,8 @@ def render_home() -> None:
         st.caption("Etapa actual: interfaz descriptiva y validación de la estructura inicial.")
 
     st.warning(
-        "Sistema en construcción. Esta versión presenta únicamente navegación y contenido descriptivo; "
-        "no guarda información ni ejecuta procesos empresariales."
+        "Sistema en construcción. Esta versión presenta navegación, contenido descriptivo y una primera función temporal; "
+        "todavía no guarda información de forma permanente."
     )
 
     st.subheader("Resumen del proyecto")
@@ -77,10 +78,11 @@ def render_home() -> None:
     module_columns = st.columns(2)
     for index, (module_name, module_info) in enumerate(MODULES.items()):
         with module_columns[index % 2]:
+            label = "FUNCIÓN TEMPORAL" if module_name == "Configuración General" else "INTERFAZ DESCRIPTIVA"
             render_info_card(
                 module_name,
                 module_info["description"],
-                "INTERFAZ DESCRIPTIVA",
+                label,
             )
 
     st.divider()
@@ -94,19 +96,19 @@ def render_home() -> None:
             "COMPLETADO",
         )
         render_info_card(
-            "Módulos fundacionales visibles",
-            "Cinco módulos base están disponibles para consulta descriptiva y validación de alcance.",
-            "COMPLETADO",
+            "Primera función utilizable",
+            "Configuración General permite aplicar parámetros y obtener un resumen calculado durante la sesión.",
+            "NUEVO",
         )
 
     with right_column:
         render_list_section(
             "Próximos pasos",
             [
+                "Validar la utilidad de la primera configuración temporal.",
                 "Revisar y aprobar el alcance de cada Blueprint.",
-                "Definir un modelo de usuarios, roles y permisos sin implementarlo todavía.",
                 "Diseñar la estrategia de datos antes de seleccionar una base de datos.",
-                "Desarrollar una sola función real, pequeña y verificable.",
+                "Elegir la siguiente función real, pequeña y verificable.",
             ],
         )
 
@@ -149,6 +151,8 @@ def render_module(module_name: str) -> None:
 
 if selected_page == "Inicio":
     render_home()
+elif selected_page == "Configuración General":
+    render_general_settings()
 elif selected_page in MODULES:
     render_module(selected_page)
 else:
