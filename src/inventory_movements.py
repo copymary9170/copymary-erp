@@ -1,11 +1,27 @@
 """Movimientos temporales de inventario con historial para CopyMary ERP."""
 
+import csv
 from datetime import datetime, timezone
+from io import StringIO
 from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+
+
+CSV_HEADERS = [
+    "ID movimiento",
+    "Fecha UTC",
+    "ID material",
+    "Material",
+    "Tipo",
+    "Cantidad",
+    "Unidad",
+    "Motivo",
+    "Existencia anterior",
+    "Existencia resultante",
+]
 
 
 def _get_items() -> list[dict]:
@@ -56,14 +72,58 @@ def _apply_movement(
         updated_item = dict(item)
         if str(item.get("item_id", "")) == item_id:
             previous_quantity = float(item.get("available_quantity", 0.0))
-            if movement_type == "Entrada":
-                resulting_quantity = previous_quantity + quantity
-            else:
-                resulting_quantity = previous_quantity - quantity
+            resulting_quantity = (
+                previous_quantity + quantity
+                if movement_type == "Entrada"
+                else previous_quantity - quantity
+            )
             updated_item["available_quantity"] = resulting_quantity
         updated_items.append(updated_item)
 
     return updated_items, previous_quantity, resulting_quantity
+
+
+def _filter_movements(
+    movements: list[dict],
+    item_name: str,
+    movement_type: str,
+) -> list[dict]:
+    filtered = movements
+    if item_name != "Todos los materiales":
+        filtered = [
+            movement
+            for movement in filtered
+            if str(movement.get("item_name", "")) == item_name
+        ]
+    if movement_type != "Todos los tipos":
+        filtered = [
+            movement
+            for movement in filtered
+            if str(movement.get("movement_type", "")) == movement_type
+        ]
+    return filtered
+
+
+def _build_movements_csv(movements: list[dict]) -> bytes:
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
+    writer.writerow(CSV_HEADERS)
+    for movement in movements:
+        writer.writerow(
+            [
+                movement.get("movement_id", ""),
+                movement.get("created_at_utc", ""),
+                movement.get("item_id", ""),
+                movement.get("item_name", ""),
+                movement.get("movement_type", ""),
+                f"{float(movement.get('quantity', 0.0)):.4f}",
+                movement.get("unit_name", "unidad"),
+                movement.get("reason", ""),
+                f"{float(movement.get('previous_quantity', 0.0)):.4f}",
+                f"{float(movement.get('resulting_quantity', 0.0)):.4f}",
+            ]
+        )
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
 
 def render_inventory_movements() -> None:
@@ -71,7 +131,7 @@ def render_inventory_movements() -> None:
     with st.container(border=True):
         render_page_header(
             "Movimientos de inventario",
-            "Registra entradas y salidas con fecha, motivo y existencia resultante.",
+            "Registra, filtra y exporta entradas y salidas con trazabilidad.",
         )
         st.caption("El historial permanece únicamente durante la sesión actual.")
 
@@ -166,8 +226,47 @@ def render_inventory_movements() -> None:
         st.info("Todavía no hay movimientos registrados en esta sesión.")
         return
 
+    st.subheader("Filtrar y exportar")
+    material_names = sorted(
+        {str(movement.get("item_name", "Material")) for movement in movements}
+    )
+    filter_columns = st.columns(2)
+    with filter_columns[0]:
+        selected_material_filter = st.selectbox(
+            "Material del historial",
+            ("Todos los materiales", *material_names),
+        )
+    with filter_columns[1]:
+        selected_type_filter = st.selectbox(
+            "Tipo de movimiento del historial",
+            ("Todos los tipos", "Entrada", "Salida"),
+        )
+
+    filtered_movements = _filter_movements(
+        movements,
+        item_name=selected_material_filter,
+        movement_type=selected_type_filter,
+    )
+
+    export_columns = st.columns(2)
+    export_columns[0].metric("Registros filtrados", str(len(filtered_movements)))
+    with export_columns[1]:
+        st.download_button(
+            "Descargar movimientos filtrados",
+            data=_build_movements_csv(filtered_movements),
+            file_name="copymary_movimientos_inventario.csv",
+            mime="text/csv",
+            type="primary",
+            use_container_width=True,
+            disabled=not filtered_movements,
+        )
+
     st.subheader("Historial")
-    for movement in reversed(movements):
+    if not filtered_movements:
+        st.info("No hay movimientos que coincidan con los filtros seleccionados.")
+        return
+
+    for movement in reversed(filtered_movements):
         with st.container(border=True):
             title_columns = st.columns([3, 1])
             with title_columns[0]:
