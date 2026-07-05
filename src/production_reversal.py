@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import streamlit as st
 
+from src.catalog_safe import aggregate_recipe
 from src.components import render_info_card, render_page_header
 from src.money import format_money
 
@@ -17,31 +18,26 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _aggregate(recipe: list[dict]) -> list[dict]:
-    totals: dict[str, float] = {}
-    for component in recipe:
-        item_id = str(component.get("item_id", ""))
-        quantity = float(component.get("quantity", 0.0))
-        if item_id and quantity > 0:
-            totals[item_id] = totals.get(item_id, 0.0) + quantity
-    return [{"item_id": item_id, "quantity": quantity} for item_id, quantity in totals.items()]
-
-
 def render_production_reversal() -> None:
     with st.container(border=True):
-        render_page_header("Reversos de producción", "Devuelve al inventario los materiales de una producción anulada.")
-        st.caption("Cada producción solo puede revertirse una vez.")
+        render_page_header(
+            "Reversos de producción",
+            "Devuelve al inventario los materiales exactos usados en una producción anulada.",
+        )
+        st.caption("Las producciones nuevas guardan una copia de su receta y solo pueden revertirse una vez.")
 
     products = _rows("products_registry")
     inventory = _rows("inventory_registry")
     movements = _rows("inventory_movements")
     production_log = _rows("production_log")
     product_map = {str(item.get("product_id", "")): item for item in products}
+    inventory_ids = {str(item.get("item_id", "")) for item in inventory}
 
-    metrics = st.columns(3)
+    metrics = st.columns(4)
     metrics[0].metric("Producciones", str(len(production_log)))
     metrics[1].metric("Aplicadas", str(sum(1 for item in production_log if not item.get("reversed"))))
     metrics[2].metric("Revertidas", str(sum(1 for item in production_log if item.get("reversed"))))
+    metrics[3].metric("Con receta guardada", str(sum(1 for item in production_log if item.get("recipe_snapshot"))))
 
     if not production_log:
         st.info("No hay producciones registradas.")
@@ -49,28 +45,41 @@ def render_production_reversal() -> None:
 
     for production in reversed(production_log):
         production_id = str(production.get("production_id", ""))
+        snapshot = aggregate_recipe(
+            [dict(item) for item in production.get("recipe_snapshot", []) if isinstance(item, dict)]
+        )
+        source = "Receta guardada"
+        if not snapshot:
+            product = product_map.get(str(production.get("product_id", "")))
+            snapshot = aggregate_recipe(
+                [dict(item) for item in product.get("recipe", []) if isinstance(item, dict)]
+            ) if product else []
+            source = "Receta actual de respaldo"
+
         with st.container(border=True):
             columns = st.columns(5)
             columns[0].metric("Producto", str(production.get("product_name", "")))
             columns[1].metric("Cantidad", f"{float(production.get('quantity', 0.0)):,.2f}")
             columns[2].metric("Costo total", format_money(float(production.get("total_cost", 0.0))))
             columns[3].metric("Estado", "Revertida" if production.get("reversed") else "Aplicada")
+            missing_materials = [item["item_id"] for item in snapshot if item["item_id"] not in inventory_ids]
+            disabled = bool(production.get("reversed")) or not snapshot or bool(missing_materials)
             reverse = columns[4].button(
                 "Revertir",
                 key=f"reverse_production_{production_id}",
-                disabled=bool(production.get("reversed")),
+                disabled=disabled,
                 use_container_width=True,
             )
+            st.caption(f"Base del reverso: {source}.")
+            if not snapshot:
+                st.error("No existe una receta disponible para calcular el reverso.")
+            elif missing_materials:
+                st.error("No se puede revertir porque uno o más materiales ya no existen en Inventario.")
 
             if reverse:
-                product = product_map.get(str(production.get("product_id", "")))
-                if product is None:
-                    st.error("No se puede revertir porque el producto ya no existe.")
-                    continue
-                recipe = _aggregate([dict(item) for item in product.get("recipe", []) if isinstance(item, dict)])
                 required = {
                     item["item_id"]: item["quantity"] * float(production.get("quantity", 0.0))
-                    for item in recipe
+                    for item in snapshot
                 }
                 updated_inventory: list[dict] = []
                 new_movements: list[dict] = []
@@ -102,6 +111,7 @@ def render_production_reversal() -> None:
                     if str(current.get("production_id", "")) == production_id:
                         item["reversed"] = True
                         item["reversed_at_utc"] = _now()
+                        item["recipe_snapshot"] = snapshot
                     updated_log.append(item)
 
                 st.session_state["inventory_registry"] = updated_inventory
@@ -109,4 +119,8 @@ def render_production_reversal() -> None:
                 st.session_state["production_log"] = updated_log
                 st.rerun()
 
-    render_info_card("Trazabilidad", "Los materiales regresan como movimientos de entrada vinculados a la producción original.", "REVERSO CONTROLADO")
+    render_info_card(
+        "Trazabilidad",
+        "Los materiales regresan como entradas vinculadas a la producción y se usa la receta guardada cuando está disponible.",
+        "REVERSO CONTROLADO",
+    )
