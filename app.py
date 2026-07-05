@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from src.assets import render_assets
 from src.components import (
     apply_base_styles,
     render_info_card,
@@ -28,6 +29,7 @@ st.set_page_config(
 apply_base_styles()
 
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
+FUNCTIONAL_MODULES = {"Configuración General", "Activos"}
 
 with st.sidebar:
     st.title(APP_NAME)
@@ -45,7 +47,7 @@ with st.sidebar:
     st.caption(f"Versión {APP_VERSION}")
     st.caption(f"Estado: {PROJECT_STATUS}")
     st.info(
-        "Esta etapa es únicamente descriptiva. No existen operaciones reales, autenticación ni almacenamiento de datos."
+        "Esta etapa incluye funciones temporales sin autenticación ni almacenamiento permanente."
     )
 
 
@@ -55,11 +57,11 @@ def render_home() -> None:
             APP_NAME,
             "Base visual y estructural del futuro sistema empresarial de CopyMary.",
         )
-        st.caption("Etapa actual: interfaz descriptiva y validación de la estructura inicial.")
+        st.caption("Etapa actual: validación de funciones pequeñas antes de incorporar persistencia.")
 
     st.warning(
-        "Sistema en construcción. Esta versión presenta navegación, contenido descriptivo y una primera función temporal; "
-        "todavía no guarda información de forma permanente."
+        "Sistema en construcción. La configuración y los activos funcionan durante la sesión, "
+        "pero todavía no guardan información de forma permanente."
     )
 
     st.subheader("Resumen del proyecto")
@@ -78,7 +80,7 @@ def render_home() -> None:
     module_columns = st.columns(2)
     for index, (module_name, module_info) in enumerate(MODULES.items()):
         with module_columns[index % 2]:
-            label = "FUNCIÓN TEMPORAL" if module_name == "Configuración General" else "INTERFAZ DESCRIPTIVA"
+            label = "FUNCIÓN TEMPORAL" if module_name in FUNCTIONAL_MODULES else "INTERFAZ DESCRIPTIVA"
             render_info_card(
                 module_name,
                 module_info["description"],
@@ -91,13 +93,13 @@ def render_home() -> None:
         st.subheader("Hitos de esta etapa")
         st.caption("Avances estructurales ya incorporados en la interfaz actual.")
         render_info_card(
-            "Estructura inicial organizada",
-            "La navegación, la configuración y los componentes visuales se encuentran separados para facilitar su mantenimiento.",
+            "Configuración y costeo inicial",
+            "Permite calcular costos fijos, depreciación y precios orientativos durante la sesión.",
             "COMPLETADO",
         )
         render_info_card(
-            "Primera función utilizable",
-            "Configuración General permite aplicar parámetros y obtener un resumen calculado durante la sesión.",
+            "Primer registro operativo",
+            "Activos permite registrar equipos y revisar su depreciación orientativa durante la sesión.",
             "NUEVO",
         )
 
@@ -105,10 +107,10 @@ def render_home() -> None:
         render_list_section(
             "Próximos pasos",
             [
-                "Validar la utilidad de la primera configuración temporal.",
-                "Revisar y aprobar el alcance de cada Blueprint.",
-                "Diseñar la estrategia de datos antes de seleccionar una base de datos.",
-                "Elegir la siguiente función real, pequeña y verificable.",
+                "Validar el registro temporal de activos.",
+                "Definir cómo se relacionarán Activos, Producción y Costeo.",
+                "Diseñar la estrategia de almacenamiento antes de elegir una base de datos.",
+                "Mantener cambios pequeños, verificables y reversibles.",
             ],
         )
 
@@ -153,6 +155,8 @@ if selected_page == "Inicio":
     render_home()
 elif selected_page == "Configuración General":
     render_general_settings()
+elif selected_page == "Activos":
+    render_assets()
 elif selected_page in MODULES:
     render_module(selected_page)
 else:
