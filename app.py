@@ -14,6 +14,7 @@ from src.modules import MODULES
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
 from src.session_backup import render_session_backup
+from src.stock_alerts import render_stock_alerts
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -29,6 +30,7 @@ FUNCTIONAL_MODULES = {
     "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
     "Movimientos de inventario": render_inventory_movements,
+    "Alertas de inventario": render_stock_alerts,
     "Costeo": render_costing,
     "Ajustar precios": render_price_rounding,
     "Exportar precios": render_price_export,
@@ -39,6 +41,7 @@ if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
 for extra_page in (
     "Movimientos de inventario",
+    "Alertas de inventario",
     "Respaldar activos",
     "Ajustar precios",
     "Exportar precios",
@@ -80,6 +83,7 @@ def render_home() -> None:
         ("Respaldar activos", "Guarda y recupera equipos mediante CSV."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
         ("Movimientos de inventario", "Registra entradas y salidas con trazabilidad."),
+        ("Alertas de inventario", "Detecta faltantes y prepara una lista de reposición."),
         ("Costeo", "Combina los datos y calcula precios orientativos."),
         ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
         ("Exportar precios", "Descarga o recupera la lista de precios en CSV."),
