@@ -7,6 +7,7 @@ from src.deletion_protection import activate_deletion_protection
 from src.financial_reconciliation import render_financial_reconciliation
 from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
+from src.safe_session_backup import render_safe_session_backup
 
 
 activate_payment_consistency()
@@ -15,6 +16,7 @@ activate_closing_reopen_support()
 app_shell.FUNCTIONAL_MODULES["Reversos de pagos"] = render_payment_reversals
 app_shell.FUNCTIONAL_MODULES["Conciliación financiera"] = render_financial_reconciliation
 app_shell.FUNCTIONAL_MODULES["Reabrir cierre de caja"] = render_cash_closing_reopen
+app_shell.FUNCTIONAL_MODULES["Respaldo general"] = render_safe_session_backup
 app_shell.NAVIGATION_GROUPS["Administración"] = (
     "Caja",
     "Conciliación financiera",
