@@ -1,6 +1,6 @@
 """Registro temporal de activos productivos de CopyMary ERP."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from uuid import uuid4
 
 import streamlit as st
@@ -35,8 +35,11 @@ class Asset:
         return min((self.current_units / self.lifetime_units) * 100, 100.0)
 
 
+CURRENCY_SYMBOL = "$"
+
+
 def _format_money(value: float) -> str:
-    return f"$ {value:,.2f}"
+    return f"{CURRENCY_SYMBOL} {value:,.2f}"
 
 
 def _get_assets() -> list[Asset]:
@@ -54,12 +57,24 @@ def _save_assets(assets: list[Asset]) -> None:
     st.session_state.assets_registry = [asdict(asset) for asset in assets]
 
 
+def _update_asset_units(assets: list[Asset], asset_id: str, units_to_add: int) -> list[Asset]:
+    updated_assets: list[Asset] = []
+    for asset in assets:
+        if asset.asset_id == asset_id:
+            updated_assets.append(
+                replace(asset, current_units=asset.current_units + units_to_add)
+            )
+        else:
+            updated_assets.append(asset)
+    return updated_assets
+
+
 def render_assets() -> None:
     """Renderiza el registro temporal de activos productivos."""
     with st.container(border=True):
         render_page_header(
             "Activos",
-            "Registra máquinas y calcula su depreciación orientativa por unidad producida.",
+            "Registra máquinas y actualiza su uso para estimar depreciación y reposición.",
         )
         st.caption("Los registros se conservan únicamente durante la sesión actual.")
 
@@ -97,7 +112,7 @@ def render_assets() -> None:
             )
         with second_row[2]:
             current_units = st.number_input(
-                "Unidades acumuladas",
+                "Unidades acumuladas iniciales",
                 min_value=0,
                 value=0,
                 step=100,
@@ -135,10 +150,12 @@ def render_assets() -> None:
 
     total_cost = sum(asset.acquisition_cost for asset in assets)
     total_remaining = sum(asset.remaining_value for asset in assets)
-    summary_columns = st.columns(3)
+    total_units = sum(asset.current_units for asset in assets)
+    summary_columns = st.columns(4)
     summary_columns[0].metric("Activos registrados", str(len(assets)))
     summary_columns[1].metric("Inversión registrada", _format_money(total_cost))
     summary_columns[2].metric("Valor pendiente", _format_money(total_remaining))
+    summary_columns[3].metric("Unidades acumuladas", f"{total_units:,}")
 
     if not assets:
         st.info("Todavía no hay activos registrados en esta sesión.")
@@ -156,18 +173,60 @@ def render_assets() -> None:
                     _save_assets([item for item in assets if item.asset_id != asset.asset_id])
                     st.rerun()
 
-            metric_columns = st.columns(4)
+            metric_columns = st.columns(5)
             metric_columns[0].metric("Costo", _format_money(asset.acquisition_cost))
             metric_columns[1].metric("Depreciación/unidad", _format_money(asset.depreciation_per_unit))
-            metric_columns[2].metric("Uso estimado", f"{asset.usage_percent:.1f}%")
-            metric_columns[3].metric("Valor pendiente", _format_money(asset.remaining_value))
+            metric_columns[2].metric("Unidades acumuladas", f"{asset.current_units:,}")
+            metric_columns[3].metric("Uso estimado", f"{asset.usage_percent:.1f}%")
+            metric_columns[4].metric("Valor pendiente", _format_money(asset.remaining_value))
 
             st.progress(asset.usage_percent / 100)
-            render_info_card(
-                "Reserva sugerida",
-                (
-                    f"Para financiar el reemplazo futuro de este equipo, reserva aproximadamente "
-                    f"{_format_money(asset.depreciation_per_unit)} por cada unidad producida."
-                ),
-                "DEPRECIACIÓN ORIENTATIVA",
-            )
+
+            with st.form(f"asset_usage_form_{asset.asset_id}", clear_on_submit=True):
+                usage_columns = st.columns([2, 1])
+                with usage_columns[0]:
+                    units_to_add = st.number_input(
+                        "Agregar unidades producidas",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"units_to_add_{asset.asset_id}",
+                        help="Suma nuevas unidades al contador acumulado del equipo.",
+                    )
+                with usage_columns[1]:
+                    update_submitted = st.form_submit_button(
+                        "Actualizar uso",
+                        type="primary",
+                        use_container_width=True,
+                    )
+
+            if update_submitted:
+                _save_assets(
+                    _update_asset_units(
+                        assets,
+                        asset_id=asset.asset_id,
+                        units_to_add=int(units_to_add),
+                    )
+                )
+                st.success(f"Se agregaron {int(units_to_add):,} unidades a {asset.name}.")
+                st.rerun()
+
+            detail_columns = st.columns(2)
+            with detail_columns[0]:
+                render_info_card(
+                    "Depreciación acumulada",
+                    (
+                        f"Según las unidades registradas, este equipo ha consumido aproximadamente "
+                        f"{_format_money(asset.accumulated_depreciation)} de su valor."
+                    ),
+                    "SEGUIMIENTO DE USO",
+                )
+            with detail_columns[1]:
+                render_info_card(
+                    "Reserva sugerida",
+                    (
+                        f"Para financiar el reemplazo futuro de este equipo, reserva aproximadamente "
+                        f"{_format_money(asset.depreciation_per_unit)} por cada unidad producida."
+                    ),
+                    "DEPRECIACIÓN ORIENTATIVA",
+                )
