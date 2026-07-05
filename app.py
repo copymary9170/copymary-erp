@@ -4,6 +4,12 @@ import streamlit as st
 
 from src.assets import render_assets
 from src.assets_backup import render_assets_backup
+from src.commercial import (
+    render_cash,
+    render_clients,
+    render_commercial_dashboard,
+    render_sales,
+)
 from src.components import apply_base_styles, render_info_card, render_page_header
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
@@ -26,6 +32,10 @@ apply_base_styles()
 
 FUNCTIONAL_MODULES = {
     "Configuración General": render_general_settings,
+    "Panel comercial": render_commercial_dashboard,
+    "Clientes": render_clients,
+    "Ventas y pedidos": render_sales,
+    "Caja": render_cash,
     "Activos": render_assets,
     "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
@@ -37,9 +47,12 @@ FUNCTIONAL_MODULES = {
     "Respaldo general": render_session_backup,
 }
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
-if "Inventario" not in NAVIGATION_OPTIONS:
-    NAVIGATION_OPTIONS.insert(-1, "Inventario")
 for extra_page in (
+    "Panel comercial",
+    "Clientes",
+    "Ventas y pedidos",
+    "Caja",
+    "Inventario",
     "Movimientos de inventario",
     "Alertas de inventario",
     "Respaldar activos",
@@ -71,16 +84,19 @@ def render_home() -> None:
             APP_NAME,
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
-        st.caption("Configuración, activos, inventario y costeo funcionan durante la sesión actual.")
+        st.caption("El bloque comercial conecta clientes, ventas, caja, inventario y costeo.")
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
     st.subheader("Flujo funcional actual")
     flow_columns = st.columns(3)
     flow = (
+        ("Panel comercial", "Resume ventas, pedidos, caja y alertas."),
+        ("Clientes", "Registra clientes y consulta su historial."),
+        ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
+        ("Caja", "Registra ingresos y egresos y calcula el saldo."),
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
-        ("Respaldar activos", "Guarda y recupera equipos mediante CSV."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
         ("Movimientos de inventario", "Registra entradas y salidas con trazabilidad."),
         ("Alertas de inventario", "Detecta faltantes y prepara una lista de reposición."),
