@@ -8,6 +8,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+from src.money import format_money
 
 
 CSV_HEADERS = [
@@ -44,10 +45,6 @@ class InventoryItem:
     @property
     def is_low_stock(self) -> bool:
         return self.available_quantity <= self.minimum_stock
-
-
-def _format_money(value: float) -> str:
-    return f"$ {value:,.2f}"
 
 
 def _get_items() -> list[InventoryItem]:
@@ -342,7 +339,7 @@ def render_inventory() -> None:
     low_stock_count = sum(1 for item in items if item.is_low_stock)
     summary_columns = st.columns(3)
     summary_columns[0].metric("Materiales registrados", str(len(items)))
-    summary_columns[1].metric("Valor disponible", _format_money(total_value))
+    summary_columns[1].metric("Valor disponible", format_money(total_value))
     summary_columns[2].metric("Existencias bajas", str(low_stock_count))
 
     if not items:
@@ -362,12 +359,12 @@ def render_inventory() -> None:
                     st.rerun()
 
             metric_columns = st.columns(4)
-            metric_columns[0].metric("Costo unitario", _format_money(item.unit_cost))
+            metric_columns[0].metric("Costo unitario", format_money(item.unit_cost))
             metric_columns[1].metric(
                 "Existencia",
                 f"{item.available_quantity:,.2f} {item.unit_name}",
             )
-            metric_columns[2].metric("Valor disponible", _format_money(item.stock_value))
+            metric_columns[2].metric("Valor disponible", format_money(item.stock_value))
             metric_columns[3].metric(
                 "Estado",
                 "BAJO" if item.is_low_stock else "DISPONIBLE",
@@ -419,7 +416,7 @@ def render_inventory() -> None:
                 "Costo utilizable en Costeo",
                 (
                     f"Cada {item.unit_name} de {item.name} tiene un costo orientativo de "
-                    f"{_format_money(item.unit_cost)}."
+                    f"{format_money(item.unit_cost)}."
                 ),
                 "COSTO UNITARIO",
             )
