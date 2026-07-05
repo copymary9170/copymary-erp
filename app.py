@@ -86,17 +86,17 @@ def render_home() -> None:
     st.divider()
     left_column, right_column = st.columns(2)
     with left_column:
-        st.subheader("Actividad reciente")
-        st.caption("Demostración · Los siguientes datos no representan actividad real.")
+        st.subheader("Hitos de esta etapa")
+        st.caption("Avances estructurales ya incorporados en la interfaz actual.")
         render_info_card(
             "Estructura inicial organizada",
-            "Dato de ejemplo: se separó la navegación, configuración y contenido descriptivo.",
-            "DEMOSTRACIÓN",
+            "La navegación, la configuración y los componentes visuales se encuentran separados para facilitar su mantenimiento.",
+            "COMPLETADO",
         )
         render_info_card(
             "Módulos fundacionales visibles",
-            "Dato de ejemplo: cinco módulos aparecen disponibles para consulta descriptiva.",
-            "DEMOSTRACIÓN",
+            "Cinco módulos base están disponibles para consulta descriptiva y validación de alcance.",
+            "COMPLETADO",
         )
 
     with right_column:
