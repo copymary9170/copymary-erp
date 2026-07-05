@@ -17,6 +17,7 @@ from src.commercial_reports import render_commercial_reports
 from src.components import apply_base_styles, render_info_card, render_page_header
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
+from src.financial import render_financial_dashboard
 from src.general_settings import render_general_settings
 from src.inventory import render_inventory
 from src.inventory_movements import render_inventory_movements
@@ -39,6 +40,7 @@ apply_base_styles()
 FUNCTIONAL_MODULES = {
     "Configuración General": render_general_settings,
     "Panel comercial": render_commercial_dashboard,
+    "Panel financiero y cierres": render_financial_dashboard,
     "Clientes": render_clients,
     "Ventas y pedidos": render_sales,
     "Agenda de producción y entregas": render_order_planning,
@@ -63,6 +65,7 @@ FUNCTIONAL_MODULES = {
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 for extra_page in (
     "Panel comercial",
+    "Panel financiero y cierres",
     "Clientes",
     "Ventas y pedidos",
     "Agenda de producción y entregas",
@@ -107,7 +110,7 @@ def render_home() -> None:
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
         st.caption(
-            "El ERP conecta ventas, agenda, cobranza, compras, producción, caja e inventario."
+            "El ERP conecta ventas, agenda, cobranza, compras, producción, caja, finanzas e inventario."
         )
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
@@ -116,6 +119,7 @@ def render_home() -> None:
     flow_columns = st.columns(3)
     flow = (
         ("Panel comercial", "Resume ventas, pedidos, caja y alertas."),
+        ("Panel financiero y cierres", "Analiza resultados por período y registra cierres de caja."),
         ("Clientes", "Registra clientes y consulta su historial."),
         ("Cotizaciones", "Crea propuestas con varios conceptos y conviértelas en ventas."),
         ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
