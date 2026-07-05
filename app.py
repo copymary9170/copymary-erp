@@ -21,6 +21,7 @@ from src.general_settings import render_general_settings
 from src.inventory import render_inventory
 from src.inventory_movements import render_inventory_movements
 from src.modules import MODULES
+from src.order_planning import render_order_planning
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
 from src.purchasing import render_purchases, render_suppliers
@@ -40,6 +41,7 @@ FUNCTIONAL_MODULES = {
     "Panel comercial": render_commercial_dashboard,
     "Clientes": render_clients,
     "Ventas y pedidos": render_sales,
+    "Agenda de producción y entregas": render_order_planning,
     "Cuentas por cobrar": render_accounts_receivable,
     "Cotizaciones": render_quotes,
     "Comprobantes": render_receipts,
@@ -63,6 +65,7 @@ for extra_page in (
     "Panel comercial",
     "Clientes",
     "Ventas y pedidos",
+    "Agenda de producción y entregas",
     "Cuentas por cobrar",
     "Cotizaciones",
     "Comprobantes",
@@ -104,7 +107,7 @@ def render_home() -> None:
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
         st.caption(
-            "El ERP conecta clientes, ventas, cobranza, compras, catálogo, producción, caja e inventario."
+            "El ERP conecta ventas, agenda, cobranza, compras, producción, caja e inventario."
         )
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
@@ -116,6 +119,7 @@ def render_home() -> None:
         ("Clientes", "Registra clientes y consulta su historial."),
         ("Cotizaciones", "Crea propuestas con varios conceptos y conviértelas en ventas."),
         ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
+        ("Agenda de producción y entregas", "Organiza fechas, prioridades, responsables y avance."),
         ("Cuentas por cobrar", "Registra abonos, saldos y fechas de vencimiento."),
         ("Comprobantes", "Genera documentos descargables para ventas pagadas."),
         ("Caja", "Registra ingresos y egresos y calcula el saldo."),
