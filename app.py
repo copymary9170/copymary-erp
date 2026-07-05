@@ -1,25 +1,14 @@
-"""Punto de entrada de la primera interfaz funcional de CopyMary ERP."""
+"""Punto de entrada de CopyMary ERP."""
 
 import streamlit as st
 
 from src.assets import render_assets
-from src.components import (
-    apply_base_styles,
-    render_info_card,
-    render_list_section,
-    render_page_header,
-)
-from src.config import (
-    APP_NAME,
-    APP_VERSION,
-    CREATED_BLUEPRINTS,
-    PLANNED_MODULES,
-    PROJECT_STATUS,
-)
+from src.components import apply_base_styles, render_info_card, render_page_header
+from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
 from src.general_settings import render_general_settings
+from src.inventory import render_inventory
 from src.modules import MODULES
-
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -29,94 +18,67 @@ st.set_page_config(
 )
 apply_base_styles()
 
+FUNCTIONAL_MODULES = {
+    "Configuración General": render_general_settings,
+    "Activos": render_assets,
+    "Inventario": render_inventory,
+    "Costeo": render_costing,
+}
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
-FUNCTIONAL_MODULES = {"Configuración General", "Activos", "Costeo"}
+if "Inventario" not in NAVIGATION_OPTIONS:
+    NAVIGATION_OPTIONS.insert(-1, "Inventario")
 
 with st.sidebar:
     st.title(APP_NAME)
     st.caption("Panel empresarial en construcción")
     st.divider()
-
-    st.subheader("Navegación")
     selected_page = st.radio(
         "Secciones disponibles",
         NAVIGATION_OPTIONS,
         label_visibility="collapsed",
     )
-
     st.divider()
     st.caption(f"Versión {APP_VERSION}")
     st.caption(f"Estado: {PROJECT_STATUS}")
-    st.info(
-        "Esta etapa incluye funciones temporales sin autenticación ni almacenamiento permanente."
-    )
+    st.info("Las funciones actuales trabajan solo durante la sesión y no guardan datos permanentemente.")
 
 
 def render_home() -> None:
     with st.container(border=True):
         render_page_header(
             APP_NAME,
-            "Base visual y estructural del futuro sistema empresarial de CopyMary.",
+            "Sistema empresarial en construcción con módulos temporales conectados.",
         )
-        st.caption("Etapa actual: validación de funciones pequeñas antes de incorporar persistencia.")
+        st.caption("Configuración, activos, inventario y costeo funcionan durante la sesión actual.")
 
-    st.warning(
-        "Sistema en construcción. Configuración General, Activos y Costeo funcionan durante la sesión, "
-        "pero todavía no guardan información de forma permanente."
-    )
+    st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
-    st.subheader("Resumen del proyecto")
-    metric_columns = st.columns(4)
-    metrics = (
-        ("Estado del proyecto", PROJECT_STATUS),
-        ("Módulos planificados", str(PLANNED_MODULES)),
-        ("Blueprints creados", str(CREATED_BLUEPRINTS)),
-        ("Módulos disponibles", str(len(MODULES))),
+    st.subheader("Flujo funcional actual")
+    flow_columns = st.columns(4)
+    flow = (
+        ("Configuración General", "Define moneda, margen y costos fijos."),
+        ("Activos", "Aporta la depreciación por unidad del equipo."),
+        ("Inventario", "Calcula el costo unitario de los materiales."),
+        ("Costeo", "Combina los datos y calcula precios orientativos."),
     )
-    for column, (label, value) in zip(metric_columns, metrics, strict=True):
-        column.metric(label, value)
+    for column, (title, description) in zip(flow_columns, flow, strict=True):
+        with column:
+            render_info_card(title, description, "FUNCIÓN TEMPORAL")
 
     st.divider()
-    st.subheader("Módulos actualmente disponibles")
+    st.subheader("Estado de los demás módulos")
+    descriptive_modules = [
+        (name, info)
+        for name, info in MODULES.items()
+        if name not in FUNCTIONAL_MODULES
+    ]
     module_columns = st.columns(2)
-    for index, (module_name, module_info) in enumerate(MODULES.items()):
+    for index, (name, info) in enumerate(descriptive_modules):
         with module_columns[index % 2]:
-            label = "FUNCIÓN TEMPORAL" if module_name in FUNCTIONAL_MODULES else "INTERFAZ DESCRIPTIVA"
-            render_info_card(
-                module_name,
-                module_info["description"],
-                label,
-            )
-
-    st.divider()
-    left_column, right_column = st.columns(2)
-    with left_column:
-        st.subheader("Hitos de esta etapa")
-        st.caption("Avances estructurales ya incorporados en la interfaz actual.")
-        render_info_card(
-            "Configuración y activos conectados",
-            "La configuración aporta margen y costos fijos, mientras Activos aporta depreciación por unidad.",
-            "COMPLETADO",
-        )
-        render_info_card(
-            "Primer flujo entre módulos",
-            "Costeo utiliza datos temporales de Configuración General y Activos para calcular precios.",
-            "NUEVO",
-        )
-
-    with right_column:
-        render_list_section(
-            "Próximos pasos",
-            [
-                "Validar el cálculo conectado entre Configuración, Activos y Costeo.",
-                "Definir cómo Inventario aportará el costo real del papel y otros materiales.",
-                "Diseñar la estrategia de almacenamiento antes de elegir una base de datos.",
-                "Mantener cambios pequeños, verificables y reversibles.",
-            ],
-        )
+            render_info_card(name, info["description"], "INTERFAZ DESCRIPTIVA")
 
 
-def render_module(module_name: str) -> None:
+def render_descriptive_module(module_name: str) -> None:
     module_info = MODULES.get(module_name)
     if module_info is None:
         st.error("La sección solicitada no está disponible.")
@@ -124,43 +86,21 @@ def render_module(module_name: str) -> None:
 
     with st.container(border=True):
         render_page_header(module_name, module_info["description"])
-        st.caption("Alcance actual: documentación visual del módulo y revisión de su Blueprint.")
+        st.caption("Este módulo permanece en etapa de Blueprint.")
 
-    st.warning(
-        "Este módulo todavía no está desarrollado. La pantalla es informativa y no ejecuta ni guarda operaciones."
-    )
-
-    st.subheader("Resumen del módulo")
-    status_column, dependency_column = st.columns(2)
-    with status_column:
-        render_info_card("Estado", module_info["status"], "SITUACIÓN ACTUAL")
-    with dependency_column:
-        render_info_card(
-            "Dependencias",
-            " · ".join(module_info["dependencies"]),
-            "RELACIONES PREVISTAS",
-        )
-
-    st.divider()
+    st.warning("Esta pantalla todavía no ejecuta operaciones ni guarda datos.")
+    render_info_card("Estado", module_info["status"], "SITUACIÓN ACTUAL")
     render_info_card("Objetivo", module_info["objective"], "PROPÓSITO")
-
     st.subheader("Funciones previstas")
-    st.caption("Contenido planificado. Ninguna de estas funciones está implementada todavía.")
     for planned_function in module_info["planned_functions"]:
         st.markdown(f"- {planned_function}")
-
-    st.info("No hay formularios, botones operativos, autenticación real ni almacenamiento de datos en esta etapa.")
 
 
 if selected_page == "Inicio":
     render_home()
-elif selected_page == "Configuración General":
-    render_general_settings()
-elif selected_page == "Activos":
-    render_assets()
-elif selected_page == "Costeo":
-    render_costing()
+elif selected_page in FUNCTIONAL_MODULES:
+    FUNCTIONAL_MODULES[selected_page]()
 elif selected_page in MODULES:
-    render_module(selected_page)
+    render_descriptive_module(selected_page)
 else:
-    st.error("La opción seleccionada no existe. Regrese a Inicio desde la navegación lateral.")
+    st.error("La opción seleccionada no existe.")

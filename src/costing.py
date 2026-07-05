@@ -1,4 +1,4 @@
-"""Módulo temporal de costeo conectado con configuración y activos."""
+"""Módulo temporal de costeo conectado con configuración, activos e inventario."""
 
 from dataclasses import dataclass
 
@@ -9,7 +9,7 @@ from src.components import render_info_card, render_page_header
 
 @dataclass(frozen=True)
 class CostingResult:
-    paper_cost: float
+    material_cost: float
     ink_cost: float
     labor_cost: float
     indirect_cost: float
@@ -57,13 +57,37 @@ def _get_assets() -> list[dict]:
     return assets
 
 
+def _get_inventory_items() -> list[dict]:
+    raw_items = st.session_state.get("inventory_registry", [])
+    items: list[dict] = []
+    for raw_item in raw_items:
+        if isinstance(raw_item, dict):
+            items.append(raw_item)
+        else:
+            items.append(
+                {
+                    "item_id": getattr(raw_item, "item_id", ""),
+                    "name": getattr(raw_item, "name", "Material"),
+                    "purchase_cost": float(getattr(raw_item, "purchase_cost", 0.0)),
+                    "purchased_quantity": float(getattr(raw_item, "purchased_quantity", 1.0)),
+                    "unit_name": getattr(raw_item, "unit_name", "unidad"),
+                }
+            )
+    return items
+
+
 def _asset_depreciation(asset: dict) -> float:
     lifetime_units = max(int(asset.get("lifetime_units", 1)), 1)
     return float(asset.get("acquisition_cost", 0.0)) / lifetime_units
 
 
+def _inventory_unit_cost(item: dict) -> float:
+    purchased_quantity = max(float(item.get("purchased_quantity", 1.0)), 0.01)
+    return float(item.get("purchase_cost", 0.0)) / purchased_quantity
+
+
 def _calculate_result(
-    paper_cost: float,
+    material_cost: float,
     ink_cost: float,
     labor_cost: float,
     indirect_cost: float,
@@ -72,12 +96,12 @@ def _calculate_result(
     quantity: int,
     profit_margin: float,
 ) -> CostingResult:
-    unit_cost = paper_cost + ink_cost + labor_cost + indirect_cost + asset_cost + other_cost
+    unit_cost = material_cost + ink_cost + labor_cost + indirect_cost + asset_cost + other_cost
     unit_price = unit_cost * (1 + profit_margin / 100)
     total_cost = unit_cost * quantity
     total_price = unit_price * quantity
     return CostingResult(
-        paper_cost=paper_cost,
+        material_cost=material_cost,
         ink_cost=ink_cost,
         labor_cost=labor_cost,
         indirect_cost=indirect_cost,
@@ -97,51 +121,66 @@ def render_costing() -> None:
     with st.container(border=True):
         render_page_header(
             "Costeo",
-            "Calcula precios orientativos usando la configuración y los activos registrados.",
+            "Calcula precios usando configuración, activos y materiales registrados.",
         )
         st.caption("Los cálculos se conservan únicamente durante la sesión actual.")
 
     st.warning(
-        "Este módulo todavía no utiliza base de datos. La configuración, los activos y los resultados pueden perderse al reiniciar."
+        "Este módulo todavía no utiliza base de datos. La configuración, los activos, el inventario y los resultados pueden perderse al reiniciar."
     )
 
     currency, profit_margin, fixed_cost_per_unit = _get_settings()
     assets = _get_assets()
+    inventory_items = _get_inventory_items()
 
-    status_columns = st.columns(3)
+    status_columns = st.columns(4)
     status_columns[0].metric("Moneda", currency)
     status_columns[1].metric("Margen configurado", f"{profit_margin:.0f}%")
-    status_columns[2].metric(
-        "Costo fijo sugerido",
-        _format_money(fixed_cost_per_unit, currency),
-    )
+    status_columns[2].metric("Costo fijo sugerido", _format_money(fixed_cost_per_unit, currency))
+    status_columns[3].metric("Materiales disponibles", str(len(inventory_items)))
 
-    if not assets:
+    if not inventory_items:
         st.info(
-            "No hay activos registrados. Puedes calcular sin equipo o registrar uno primero en el módulo Activos."
+            "No hay materiales registrados. Puedes introducir un costo manual o registrar materiales primero en Inventario."
         )
 
     st.subheader("Calcular precio")
     asset_labels = ["Sin equipo registrado"] + [
         f"{asset.get('name', 'Equipo')} · {asset.get('asset_id', '')}" for asset in assets
     ]
+    material_labels = ["Costo manual"] + [
+        f"{item.get('name', 'Material')} · {item.get('item_id', '')}" for item in inventory_items
+    ]
 
     with st.form("connected_costing_form"):
-        selected_asset_label = st.selectbox("Equipo utilizado", asset_labels)
+        selector_columns = st.columns(2)
+        with selector_columns[0]:
+            selected_material_label = st.selectbox("Material principal", material_labels)
+        with selector_columns[1]:
+            selected_asset_label = st.selectbox("Equipo utilizado", asset_labels)
+
+        selected_material_cost = 0.0
+        selected_material_unit = "unidad"
+        if selected_material_label != "Costo manual":
+            selected_material_index = material_labels.index(selected_material_label) - 1
+            selected_material = inventory_items[selected_material_index]
+            selected_material_cost = _inventory_unit_cost(selected_material)
+            selected_material_unit = str(selected_material.get("unit_name", "unidad"))
 
         selected_asset_cost = 0.0
         if selected_asset_label != "Sin equipo registrado":
-            selected_index = asset_labels.index(selected_asset_label) - 1
-            selected_asset_cost = _asset_depreciation(assets[selected_index])
+            selected_asset_index = asset_labels.index(selected_asset_label) - 1
+            selected_asset_cost = _asset_depreciation(assets[selected_asset_index])
 
         first_row = st.columns(3)
         with first_row[0]:
-            paper_cost = st.number_input(
-                "Papel por unidad",
+            material_cost = st.number_input(
+                f"Material por unidad de venta ({selected_material_unit})",
                 min_value=0.0,
-                value=0.0,
+                value=selected_material_cost,
                 step=0.01,
-                format="%.2f",
+                format="%.3f",
+                help="Se completa con el costo unitario del material seleccionado y puede modificarse.",
             )
         with first_row[1]:
             ink_cost = st.number_input(
@@ -202,7 +241,7 @@ def render_costing() -> None:
 
     if submitted:
         st.session_state.connected_costing_result = _calculate_result(
-            paper_cost=float(paper_cost),
+            material_cost=float(material_cost),
             ink_cost=float(ink_cost),
             labor_cost=float(labor_cost),
             indirect_cost=float(indirect_cost),
@@ -212,6 +251,7 @@ def render_costing() -> None:
             profit_margin=profit_margin,
         )
         st.session_state.connected_costing_asset = selected_asset_label
+        st.session_state.connected_costing_material = selected_material_label
 
     result = st.session_state.get("connected_costing_result")
     if result is None:
@@ -230,7 +270,7 @@ def render_costing() -> None:
         render_info_card(
             "Costos directos",
             (
-                f"Papel: {_format_money(result.paper_cost, currency)} · "
+                f"Material: {_format_money(result.material_cost, currency)} · "
                 f"Tinta: {_format_money(result.ink_cost, currency)} · "
                 f"Mano de obra: {_format_money(result.labor_cost, currency)}"
             ),
@@ -250,6 +290,7 @@ def render_costing() -> None:
     render_info_card(
         "Resumen del cálculo",
         (
+            f"Material: {st.session_state.get('connected_costing_material', 'Costo manual')}. "
             f"Equipo: {st.session_state.get('connected_costing_asset', 'Sin equipo registrado')}. "
             f"Para {result.quantity} unidad(es), el costo total es {_format_money(result.total_cost, currency)} "
             f"y la venta orientativa es {_format_money(result.total_price, currency)}."
