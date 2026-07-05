@@ -16,6 +16,7 @@ from src.config import (
     PLANNED_MODULES,
     PROJECT_STATUS,
 )
+from src.costing import render_costing
 from src.general_settings import render_general_settings
 from src.modules import MODULES
 
@@ -29,7 +30,7 @@ st.set_page_config(
 apply_base_styles()
 
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
-FUNCTIONAL_MODULES = {"Configuración General", "Activos"}
+FUNCTIONAL_MODULES = {"Configuración General", "Activos", "Costeo"}
 
 with st.sidebar:
     st.title(APP_NAME)
@@ -60,7 +61,7 @@ def render_home() -> None:
         st.caption("Etapa actual: validación de funciones pequeñas antes de incorporar persistencia.")
 
     st.warning(
-        "Sistema en construcción. La configuración y los activos funcionan durante la sesión, "
+        "Sistema en construcción. Configuración General, Activos y Costeo funcionan durante la sesión, "
         "pero todavía no guardan información de forma permanente."
     )
 
@@ -93,13 +94,13 @@ def render_home() -> None:
         st.subheader("Hitos de esta etapa")
         st.caption("Avances estructurales ya incorporados en la interfaz actual.")
         render_info_card(
-            "Configuración y costeo inicial",
-            "Permite calcular costos fijos, depreciación y precios orientativos durante la sesión.",
+            "Configuración y activos conectados",
+            "La configuración aporta margen y costos fijos, mientras Activos aporta depreciación por unidad.",
             "COMPLETADO",
         )
         render_info_card(
-            "Primer registro operativo",
-            "Activos permite registrar equipos y revisar su depreciación orientativa durante la sesión.",
+            "Primer flujo entre módulos",
+            "Costeo utiliza datos temporales de Configuración General y Activos para calcular precios.",
             "NUEVO",
         )
 
@@ -107,8 +108,8 @@ def render_home() -> None:
         render_list_section(
             "Próximos pasos",
             [
-                "Validar el registro temporal de activos.",
-                "Definir cómo se relacionarán Activos, Producción y Costeo.",
+                "Validar el cálculo conectado entre Configuración, Activos y Costeo.",
+                "Definir cómo Inventario aportará el costo real del papel y otros materiales.",
                 "Diseñar la estrategia de almacenamiento antes de elegir una base de datos.",
                 "Mantener cambios pequeños, verificables y reversibles.",
             ],
@@ -157,6 +158,8 @@ elif selected_page == "Configuración General":
     render_general_settings()
 elif selected_page == "Activos":
     render_assets()
+elif selected_page == "Costeo":
+    render_costing()
 elif selected_page in MODULES:
     render_module(selected_page)
 else:
