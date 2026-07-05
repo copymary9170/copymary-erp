@@ -6,9 +6,10 @@ from src.catalog_maintenance import render_catalog_maintenance
 from src.catalog_safe import render_safe_catalog
 from src.financial_control import render_financial_control
 from src.production_reversal import render_production_reversal
-from src.purchase_receipt_control import render_purchases_with_trace
+from src.purchase_receipt_control import activate_purchase_trace, render_purchases_with_trace
 
 
+activate_purchase_trace()
 app_shell.FUNCTIONAL_MODULES["Metas del negocio"] = render_business_goals
 app_shell.FUNCTIONAL_MODULES["Panel financiero y cierres"] = render_financial_control
 app_shell.FUNCTIONAL_MODULES["Compras"] = render_purchases_with_trace
