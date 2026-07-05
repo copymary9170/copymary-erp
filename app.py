@@ -10,6 +10,8 @@ from src.commercial import (
     render_commercial_dashboard,
     render_sales,
 )
+from src.commercial_documents import render_quotes, render_receipts
+from src.commercial_reports import render_commercial_reports
 from src.components import apply_base_styles, render_info_card, render_page_header
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
@@ -35,7 +37,10 @@ FUNCTIONAL_MODULES = {
     "Panel comercial": render_commercial_dashboard,
     "Clientes": render_clients,
     "Ventas y pedidos": render_sales,
+    "Cotizaciones": render_quotes,
+    "Comprobantes": render_receipts,
     "Caja": render_cash,
+    "Reportes comerciales": render_commercial_reports,
     "Activos": render_assets,
     "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
@@ -51,7 +56,10 @@ for extra_page in (
     "Panel comercial",
     "Clientes",
     "Ventas y pedidos",
+    "Cotizaciones",
+    "Comprobantes",
     "Caja",
+    "Reportes comerciales",
     "Inventario",
     "Movimientos de inventario",
     "Alertas de inventario",
@@ -84,7 +92,7 @@ def render_home() -> None:
             APP_NAME,
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
-        st.caption("El bloque comercial conecta clientes, ventas, caja, inventario y costeo.")
+        st.caption("El bloque comercial conecta clientes, cotizaciones, ventas, comprobantes, caja y reportes.")
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
 
@@ -93,8 +101,11 @@ def render_home() -> None:
     flow = (
         ("Panel comercial", "Resume ventas, pedidos, caja y alertas."),
         ("Clientes", "Registra clientes y consulta su historial."),
+        ("Cotizaciones", "Crea propuestas con varios conceptos y conviértelas en ventas."),
         ("Ventas y pedidos", "Controla trabajos, pagos, entregas y ganancias."),
+        ("Comprobantes", "Genera documentos descargables para ventas pagadas."),
         ("Caja", "Registra ingresos y egresos y calcula el saldo."),
+        ("Reportes comerciales", "Exporta clientes, ventas, caja y cotizaciones."),
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
