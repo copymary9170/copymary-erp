@@ -2,6 +2,7 @@
 
 from src import accounts_payable, accounts_receivable, adjustments, app_shell, control_center
 from src.inventory_adjustments import render_inventory_adjustments
+from src.status_consistency import normalize_session_statuses
 
 
 def _receivable_payments_for(sale_id: str, payments: list[dict]) -> list[dict]:
@@ -41,6 +42,7 @@ def _linked_references(reference_id: str, payments: list[dict], link_key: str) -
 
 
 def activate_payment_consistency() -> None:
+    normalize_session_statuses()
     accounts_receivable._payments_for = _receivable_payments_for
     accounts_payable._payments_for = _payable_payments_for
     control_center._sale_paid = _sale_paid
