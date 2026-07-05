@@ -6,6 +6,7 @@ from io import StringIO
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+from src.money import format_money, get_currency
 
 
 def _get_items() -> list[dict]:
@@ -41,7 +42,7 @@ def _reorder_quantity(item: dict, multiplier: float) -> float:
     return max(target_stock - available_quantity, 0.0)
 
 
-def _build_reorder_csv(items: list[dict], multiplier: float) -> bytes:
+def _build_reorder_csv(items: list[dict], multiplier: float, currency: str) -> bytes:
     buffer = StringIO()
     writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
     writer.writerow(
@@ -55,6 +56,7 @@ def _build_reorder_csv(items: list[dict], multiplier: float) -> bytes:
             "Unidad",
             "Costo unitario",
             "Costo estimado de reposición",
+            "Moneda",
         ]
     )
     for item in items:
@@ -71,6 +73,7 @@ def _build_reorder_csv(items: list[dict], multiplier: float) -> bytes:
                 item.get("unit_name", "unidad"),
                 f"{unit_cost:.4f}",
                 f"{(reorder_quantity * unit_cost):.4f}",
+                currency,
             ]
         )
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
@@ -86,6 +89,7 @@ def render_stock_alerts() -> None:
         st.caption("Las alertas se calculan con las existencias y mínimos de la sesión actual.")
 
     items = _get_items()
+    currency = get_currency()
     if not items:
         st.info("No hay materiales registrados. Primero agrega o importa inventario.")
         return
@@ -118,7 +122,7 @@ def render_stock_alerts() -> None:
     summary_columns[2].metric("Agotados", str(len(out_of_stock_items)))
     summary_columns[3].metric(
         "Reposición estimada",
-        f"$ {estimated_reorder_cost:,.2f}",
+        format_money(estimated_reorder_cost, currency),
     )
 
     if not low_stock_items:
@@ -127,7 +131,7 @@ def render_stock_alerts() -> None:
 
     st.download_button(
         "Descargar lista de reposición",
-        data=_build_reorder_csv(low_stock_items, multiplier),
+        data=_build_reorder_csv(low_stock_items, multiplier, currency),
         file_name="copymary_lista_reposicion.csv",
         mime="text/csv",
         type="primary",
@@ -167,7 +171,7 @@ def render_stock_alerts() -> None:
             )
             metric_columns[3].metric(
                 "Costo estimado",
-                f"$ {estimated_cost:,.2f}",
+                format_money(estimated_cost, currency),
             )
 
             status = "AGOTADO" if available_quantity <= 0 else "EXISTENCIA BAJA"
