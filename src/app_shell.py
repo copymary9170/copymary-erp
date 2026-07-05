@@ -74,22 +74,32 @@ NAVIGATION_GROUPS = {
 
 
 def render_home() -> None:
-    with st.container(border=True):
-        render_page_header(APP_NAME, "Sistema empresarial conectado para ventas, compras, producción, inventario y finanzas.")
-        st.caption("Selecciona un área en el menú lateral para comenzar.")
-    st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
+    st.markdown(
+        '<section class="cm-hero">'
+        '<div class="cm-hero-kicker">COPYMARY ERP · PANEL PRINCIPAL</div>'
+        '<h1>Todo tu negocio, en un solo lugar.</h1>'
+        '<p>Controla ventas, compras, inventario, producción y finanzas desde una interfaz clara, conectada y pensada para Copy Mary.</p>'
+        '<div class="cm-badges">'
+        '<span class="cm-badge">Ventas conectadas</span>'
+        '<span class="cm-badge">Inventario controlado</span>'
+        '<span class="cm-badge">Finanzas conciliadas</span>'
+        '</div></section>',
+        unsafe_allow_html=True,
+    )
+    st.warning("Los datos viven en esta sesión. Descarga un respaldo antes de cerrar o reiniciar la aplicación.")
+    st.subheader("Accesos principales")
     columns = st.columns(3)
     cards = (
-        ("Centro de control", "Reúne alertas operativas, financieras y de inventario."),
-        ("Auditoría de datos", "Detecta duplicados y referencias rotas."),
-        ("Ventas y clientes", "Gestiona cotizaciones, pedidos y cobranza."),
-        ("Compras y proveedores", "Controla abastecimiento y pagos."),
-        ("Productos e inventario", "Administra recetas, costos y existencias."),
-        ("Administración", "Organiza caja, gastos, equipo y respaldos."),
+        ("Centro de control", "Alertas, pendientes y estado general del negocio."),
+        ("Auditoría de datos", "Duplicados, referencias rotas y controles de integridad."),
+        ("Ventas y clientes", "Cotizaciones, pedidos, pagos y seguimiento comercial."),
+        ("Compras y proveedores", "Abastecimiento, proveedores y cuentas por pagar."),
+        ("Productos e inventario", "Recetas, costos, producción y existencias."),
+        ("Administración", "Caja, gastos, equipo, activos y respaldos."),
     )
     for index, (title, description) in enumerate(cards):
         with columns[index % 3]:
-            render_info_card(title, description, "ÁREA FUNCIONAL")
+            render_info_card(title, description, "ÁREA CLAVE")
 
 
 def render_descriptive_module(name: str) -> None:
@@ -110,12 +120,18 @@ def run_app() -> None:
     apply_base_styles()
     apply_modern_styles()
     with st.sidebar:
-        st.title(APP_NAME)
-        st.caption("Gestión simple para un negocio creativo")
-        selected_area = st.selectbox("Área", tuple(NAVIGATION_GROUPS.keys()))
+        st.markdown(
+            '<div class="cm-brand">'
+            '<div class="cm-brand-mark">CM</div>'
+            '<div><div class="cm-brand-name">CopyMary ERP</div>'
+            '<div class="cm-brand-sub">Gestión creativa y ordenada</div></div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        selected_area = st.selectbox("Área de trabajo", tuple(NAVIGATION_GROUPS.keys()))
         selected_page = st.radio("Sección", NAVIGATION_GROUPS[selected_area])
         st.caption(f"Versión {APP_VERSION} · {PROJECT_STATUS}")
-        st.info("Los datos permanecen solo durante la sesión. Usa Respaldo general antes de cerrar.")
+        st.info("Usa Respaldo general antes de cerrar la sesión.")
 
     if selected_page == "Inicio":
         render_home()
