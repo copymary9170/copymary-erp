@@ -26,6 +26,7 @@ from src.price_rounding import render_price_rounding
 from src.purchasing import render_purchases, render_suppliers
 from src.session_backup import render_session_backup
 from src.stock_alerts import render_stock_alerts
+from src.team_commissions import render_team_commissions
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -47,6 +48,7 @@ FUNCTIONAL_MODULES = {
     "Comprobantes": render_receipts,
     "Caja": render_cash,
     "Gastos y presupuesto": render_expenses_budget,
+    "Equipo y comisiones": render_team_commissions,
     "Reportes comerciales": render_commercial_reports,
     "Proveedores": render_suppliers,
     "Compras": render_purchases,
@@ -88,6 +90,7 @@ NAVIGATION_GROUPS = {
     "Administración": (
         "Caja",
         "Gastos y presupuesto",
+        "Equipo y comisiones",
         "Activos",
         "Respaldar activos",
         "Configuración General",
@@ -124,7 +127,7 @@ def render_home() -> None:
         ("Ventas y clientes", "Gestiona cotizaciones, pedidos, cobranza y entregas."),
         ("Compras y proveedores", "Controla abastecimiento, pagos y vencimientos."),
         ("Productos e inventario", "Administra recetas, costos, existencias y producción."),
-        ("Administración", "Organiza caja, gastos, presupuesto, activos y respaldos."),
+        ("Administración", "Organiza caja, gastos, equipo, comisiones, activos y respaldos."),
         ("Panel financiero", "Analiza ingresos, egresos, utilidad y cierres."),
     )
     for index, (title, description) in enumerate(cards):
