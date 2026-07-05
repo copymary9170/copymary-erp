@@ -4,6 +4,7 @@ import streamlit as st
 
 from src.accounts_payable import render_accounts_payable
 from src.accounts_receivable import render_accounts_receivable
+from src.adjustments import render_adjustments
 from src.assets import render_assets
 from src.assets_backup import render_assets_backup
 from src.catalog import render_catalog
@@ -28,12 +29,7 @@ from src.session_backup import render_session_backup
 from src.stock_alerts import render_stock_alerts
 from src.team_commissions import render_team_commissions
 
-st.set_page_config(
-    page_title=APP_NAME,
-    page_icon="CM",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title=APP_NAME, page_icon="CM", layout="wide", initial_sidebar_state="expanded")
 apply_base_styles()
 
 FUNCTIONAL_MODULES = {
@@ -49,6 +45,7 @@ FUNCTIONAL_MODULES = {
     "Caja": render_cash,
     "Gastos y presupuesto": render_expenses_budget,
     "Equipo y comisiones": render_team_commissions,
+    "Anulaciones y ajustes": render_adjustments,
     "Reportes comerciales": render_commercial_reports,
     "Proveedores": render_suppliers,
     "Compras": render_purchases,
@@ -68,34 +65,10 @@ FUNCTIONAL_MODULES = {
 
 NAVIGATION_GROUPS = {
     "Inicio": ("Inicio", "Centro de control", "Panel comercial", "Panel financiero y cierres"),
-    "Ventas y clientes": (
-        "Clientes",
-        "Cotizaciones",
-        "Ventas y pedidos",
-        "Agenda de producción y entregas",
-        "Cuentas por cobrar",
-        "Comprobantes",
-        "Reportes comerciales",
-    ),
+    "Ventas y clientes": ("Clientes", "Cotizaciones", "Ventas y pedidos", "Agenda de producción y entregas", "Cuentas por cobrar", "Comprobantes", "Reportes comerciales"),
     "Compras y proveedores": ("Proveedores", "Compras", "Cuentas por pagar"),
-    "Productos e inventario": (
-        "Catálogo y producción",
-        "Inventario",
-        "Movimientos de inventario",
-        "Alertas de inventario",
-        "Costeo",
-        "Ajustar precios",
-        "Exportar precios",
-    ),
-    "Administración": (
-        "Caja",
-        "Gastos y presupuesto",
-        "Equipo y comisiones",
-        "Activos",
-        "Respaldar activos",
-        "Configuración General",
-        "Respaldo general",
-    ),
+    "Productos e inventario": ("Catálogo y producción", "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo", "Ajustar precios", "Exportar precios"),
+    "Administración": ("Caja", "Gastos y presupuesto", "Equipo y comisiones", "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general"),
     "Planificación futura": tuple(name for name in MODULES if name not in FUNCTIONAL_MODULES),
 }
 
@@ -113,12 +86,8 @@ with st.sidebar:
 
 def render_home() -> None:
     with st.container(border=True):
-        render_page_header(
-            APP_NAME,
-            "Sistema empresarial conectado para ventas, compras, producción, inventario y finanzas.",
-        )
+        render_page_header(APP_NAME, "Sistema empresarial conectado para ventas, compras, producción, inventario y finanzas.")
         st.caption("Selecciona un área en el menú lateral para comenzar.")
-
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
     st.subheader("Áreas principales")
     columns = st.columns(3)
@@ -127,7 +96,7 @@ def render_home() -> None:
         ("Ventas y clientes", "Gestiona cotizaciones, pedidos, cobranza y entregas."),
         ("Compras y proveedores", "Controla abastecimiento, pagos y vencimientos."),
         ("Productos e inventario", "Administra recetas, costos, existencias y producción."),
-        ("Administración", "Organiza caja, gastos, equipo, comisiones, activos y respaldos."),
+        ("Administración", "Organiza caja, gastos, equipo, ajustes, activos y respaldos."),
         ("Panel financiero", "Analiza ingresos, egresos, utilidad y cierres."),
     )
     for index, (title, description) in enumerate(cards):
