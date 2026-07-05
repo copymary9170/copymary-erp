@@ -74,22 +74,28 @@ NAVIGATION_GROUPS = {
 
 
 def render_home() -> None:
-    with st.container(border=True):
-        render_page_header(APP_NAME, "Sistema empresarial conectado para ventas, compras, producción, inventario y finanzas.")
-        st.caption("Selecciona un área en el menú lateral para comenzar.")
-    st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
+    render_page_header(
+        APP_NAME,
+        "Tu centro de gestión para organizar ventas, producción, inventario, dinero y crecimiento sin perder la parte creativa del negocio.",
+    )
+    st.markdown(
+        '<div class="cm-home-note"><strong>Sesión protegida por respaldo</strong><span>Descarga una copia antes de cerrar o reiniciar la aplicación.</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("### Todo tu negocio, organizado en un solo lugar")
+    st.caption("Entra al área que necesites y continúa trabajando desde allí.")
     columns = st.columns(3)
     cards = (
-        ("Centro de control", "Reúne alertas operativas, financieras y de inventario."),
-        ("Auditoría de datos", "Detecta duplicados y referencias rotas."),
-        ("Ventas y clientes", "Gestiona cotizaciones, pedidos y cobranza."),
-        ("Compras y proveedores", "Controla abastecimiento y pagos."),
-        ("Productos e inventario", "Administra recetas, costos y existencias."),
-        ("Administración", "Organiza caja, gastos, equipo y respaldos."),
+        ("Centro de control", "Una vista rápida de alertas, pendientes y decisiones importantes."),
+        ("Auditoría de datos", "Comprueba duplicados, referencias rotas y riesgos antes de que crezcan."),
+        ("Ventas y clientes", "Gestiona clientes, cotizaciones, pedidos, cobros y comprobantes."),
+        ("Compras y proveedores", "Organiza compras, proveedores y cuentas pendientes de pago."),
+        ("Productos e inventario", "Controla materiales, recetas, costos, producción y existencias."),
+        ("Administración", "Supervisa caja, gastos, equipo, activos, cierres y respaldos."),
     )
     for index, (title, description) in enumerate(cards):
         with columns[index % 3]:
-            render_info_card(title, description, "ÁREA FUNCIONAL")
+            render_info_card(title, description, "ÁREA DE TRABAJO")
 
 
 def render_descriptive_module(name: str) -> None:
@@ -109,13 +115,26 @@ def run_app() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="CM", layout="wide", initial_sidebar_state="expanded")
     apply_base_styles()
     apply_modern_styles()
+    st.markdown(
+        """
+        <style>
+        .cm-home-note{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1.1rem;margin:.2rem 0 1.4rem;border-radius:14px;background:linear-gradient(135deg,rgba(34,166,161,.11),rgba(109,74,255,.08));border:1px solid rgba(34,166,161,.18);color:#334155}.cm-home-note strong{color:#0f766e}.cm-home-note span{color:#64748b;font-size:.92rem}
+        .cm-sidebrand{display:flex;align-items:center;gap:.8rem;padding:.45rem 0 1rem}.cm-sidebrand__mark{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#6D4AFF,#22A6A1);color:white;font-weight:900;box-shadow:0 10px 22px rgba(109,74,255,.25)}.cm-sidebrand__name{font-weight:850;font-size:1.08rem;letter-spacing:-.02em;color:#1f2937}.cm-sidebrand__tag{font-size:.75rem;color:#7c8494;margin-top:.08rem}
+        @media(max-width:768px){.cm-home-note{align-items:flex-start;flex-direction:column;gap:.25rem}}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     with st.sidebar:
-        st.title(APP_NAME)
-        st.caption("Gestión simple para un negocio creativo")
-        selected_area = st.selectbox("Área", tuple(NAVIGATION_GROUPS.keys()))
+        st.markdown(
+            '<div class="cm-sidebrand"><div class="cm-sidebrand__mark">CM</div><div><div class="cm-sidebrand__name">CopyMary ERP</div><div class="cm-sidebrand__tag">Tu negocio, claro y organizado</div></div></div>',
+            unsafe_allow_html=True,
+        )
+        selected_area = st.selectbox("Área de trabajo", tuple(NAVIGATION_GROUPS.keys()))
         selected_page = st.radio("Sección", NAVIGATION_GROUPS[selected_area])
+        st.divider()
         st.caption(f"Versión {APP_VERSION} · {PROJECT_STATUS}")
-        st.info("Los datos permanecen solo durante la sesión. Usa Respaldo general antes de cerrar.")
+        st.info("Guarda un respaldo general antes de cerrar la sesión.")
 
     if selected_page == "Inicio":
         render_home()
