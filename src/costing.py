@@ -1,6 +1,7 @@
 """Módulo temporal de costeo conectado con configuración, activos e inventario."""
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from uuid import uuid4
 
 import streamlit as st
 
@@ -21,6 +22,18 @@ class CostingResult:
     total_cost: float
     total_price: float
     estimated_profit: float
+
+
+@dataclass(frozen=True)
+class SavedPrice:
+    price_id: str
+    name: str
+    material_label: str
+    asset_label: str
+    currency: str
+    profit_margin: float
+    unit_cost: float
+    unit_price: float
 
 
 def _format_money(value: float, currency: str) -> str:
@@ -76,6 +89,21 @@ def _get_inventory_items() -> list[dict]:
     return items
 
 
+def _get_saved_prices() -> list[SavedPrice]:
+    raw_prices = st.session_state.get("saved_prices", [])
+    prices: list[SavedPrice] = []
+    for raw_price in raw_prices:
+        if isinstance(raw_price, SavedPrice):
+            prices.append(raw_price)
+        elif isinstance(raw_price, dict):
+            prices.append(SavedPrice(**raw_price))
+    return prices
+
+
+def _save_prices(prices: list[SavedPrice]) -> None:
+    st.session_state.saved_prices = [asdict(price) for price in prices]
+
+
 def _asset_depreciation(asset: dict) -> float:
     lifetime_units = max(int(asset.get("lifetime_units", 1)), 1)
     return float(asset.get("acquisition_cost", 0.0)) / lifetime_units
@@ -117,32 +145,28 @@ def _calculate_result(
 
 
 def render_costing() -> None:
-    """Renderiza una calculadora temporal conectada con los datos de la sesión."""
+    """Renderiza costeo y lista temporal de precios."""
     with st.container(border=True):
         render_page_header(
             "Costeo",
-            "Calcula precios usando configuración, activos y materiales registrados.",
+            "Calcula precios y guarda resultados temporales como lista de precios.",
         )
-        st.caption("Los cálculos se conservan únicamente durante la sesión actual.")
+        st.caption("Los cálculos y precios guardados se conservan únicamente durante la sesión actual.")
 
     st.warning(
-        "Este módulo todavía no utiliza base de datos. La configuración, los activos, el inventario y los resultados pueden perderse al reiniciar."
+        "Este módulo todavía no utiliza base de datos. La configuración, los activos, el inventario y los precios guardados pueden perderse al reiniciar."
     )
 
     currency, profit_margin, fixed_cost_per_unit = _get_settings()
     assets = _get_assets()
     inventory_items = _get_inventory_items()
+    saved_prices = _get_saved_prices()
 
     status_columns = st.columns(4)
     status_columns[0].metric("Moneda", currency)
     status_columns[1].metric("Margen configurado", f"{profit_margin:.0f}%")
     status_columns[2].metric("Costo fijo sugerido", _format_money(fixed_cost_per_unit, currency))
-    status_columns[3].metric("Materiales disponibles", str(len(inventory_items)))
-
-    if not inventory_items:
-        st.info(
-            "No hay materiales registrados. Puedes introducir un costo manual o registrar materiales primero en Inventario."
-        )
+    status_columns[3].metric("Precios guardados", str(len(saved_prices)))
 
     st.subheader("Calcular precio")
     asset_labels = ["Sin equipo registrado"] + [
@@ -180,7 +204,6 @@ def render_costing() -> None:
                 value=selected_material_cost,
                 step=0.01,
                 format="%.3f",
-                help="Se completa con el costo unitario del material seleccionado y puede modificarse.",
             )
         with first_row[1]:
             ink_cost = st.number_input(
@@ -215,7 +238,6 @@ def render_costing() -> None:
                 value=selected_asset_cost,
                 step=0.001,
                 format="%.3f",
-                help="Se completa automáticamente según el activo seleccionado.",
             )
         with second_row[2]:
             other_cost = st.number_input(
@@ -226,12 +248,7 @@ def render_costing() -> None:
                 format="%.2f",
             )
         with second_row[3]:
-            quantity = st.number_input(
-                "Cantidad",
-                min_value=1,
-                value=1,
-                step=1,
-            )
+            quantity = st.number_input("Cantidad", min_value=1, value=1, step=1)
 
         submitted = st.form_submit_button(
             "Calcular costo y precio",
@@ -252,48 +269,110 @@ def render_costing() -> None:
         )
         st.session_state.connected_costing_asset = selected_asset_label
         st.session_state.connected_costing_material = selected_material_label
+        st.session_state.pop("save_price_name", None)
 
     result = st.session_state.get("connected_costing_result")
-    if result is None:
-        return
+    if result is not None:
+        st.divider()
+        st.subheader("Resultado")
+        result_columns = st.columns(4)
+        result_columns[0].metric("Costo por unidad", _format_money(result.unit_cost, currency))
+        result_columns[1].metric("Precio por unidad", _format_money(result.unit_price, currency))
+        result_columns[2].metric("Venta total", _format_money(result.total_price, currency))
+        result_columns[3].metric("Ganancia estimada", _format_money(result.estimated_profit, currency))
+
+        detail_columns = st.columns(2)
+        with detail_columns[0]:
+            render_info_card(
+                "Costos directos",
+                (
+                    f"Material: {_format_money(result.material_cost, currency)} · "
+                    f"Tinta: {_format_money(result.ink_cost, currency)} · "
+                    f"Mano de obra: {_format_money(result.labor_cost, currency)}"
+                ),
+                "POR UNIDAD",
+            )
+        with detail_columns[1]:
+            render_info_card(
+                "Costos complementarios",
+                (
+                    f"Indirectos: {_format_money(result.indirect_cost, currency)} · "
+                    f"Equipo: {_format_money(result.asset_cost, currency)} · "
+                    f"Otros: {_format_money(result.other_cost, currency)}"
+                ),
+                "POR UNIDAD",
+            )
+
+        st.subheader("Guardar en lista de precios")
+        with st.form("save_price_form", clear_on_submit=True):
+            price_name = st.text_input(
+                "Nombre del producto o servicio",
+                max_chars=100,
+                placeholder="Ejemplo: Impresión color en papel fotográfico",
+            )
+            save_submitted = st.form_submit_button(
+                "Guardar precio temporal",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if save_submitted:
+            cleaned_name = price_name.strip()
+            if not cleaned_name:
+                st.error("Debes escribir un nombre para guardar el precio.")
+            else:
+                saved_prices.append(
+                    SavedPrice(
+                        price_id=uuid4().hex[:8],
+                        name=cleaned_name,
+                        material_label=st.session_state.get("connected_costing_material", "Costo manual"),
+                        asset_label=st.session_state.get("connected_costing_asset", "Sin equipo registrado"),
+                        currency=currency,
+                        profit_margin=profit_margin,
+                        unit_cost=result.unit_cost,
+                        unit_price=result.unit_price,
+                    )
+                )
+                _save_prices(saved_prices)
+                st.success("Precio guardado durante esta sesión.")
+                st.rerun()
 
     st.divider()
-    st.subheader("Resultado")
-    result_columns = st.columns(4)
-    result_columns[0].metric("Costo por unidad", _format_money(result.unit_cost, currency))
-    result_columns[1].metric("Precio por unidad", _format_money(result.unit_price, currency))
-    result_columns[2].metric("Venta total", _format_money(result.total_price, currency))
-    result_columns[3].metric("Ganancia estimada", _format_money(result.estimated_profit, currency))
+    st.subheader("Lista temporal de precios")
+    saved_prices = _get_saved_prices()
+    if not saved_prices:
+        st.info("Todavía no hay precios guardados en esta sesión.")
+        return
 
-    detail_columns = st.columns(2)
-    with detail_columns[0]:
-        render_info_card(
-            "Costos directos",
-            (
-                f"Material: {_format_money(result.material_cost, currency)} · "
-                f"Tinta: {_format_money(result.ink_cost, currency)} · "
-                f"Mano de obra: {_format_money(result.labor_cost, currency)}"
-            ),
-            "POR UNIDAD",
-        )
-    with detail_columns[1]:
-        render_info_card(
-            "Costos complementarios",
-            (
-                f"Indirectos: {_format_money(result.indirect_cost, currency)} · "
-                f"Equipo: {_format_money(result.asset_cost, currency)} · "
-                f"Otros: {_format_money(result.other_cost, currency)}"
-            ),
-            "POR UNIDAD",
-        )
+    for saved_price in saved_prices:
+        with st.container(border=True):
+            title_columns = st.columns([3, 1])
+            with title_columns[0]:
+                st.markdown(f"### {saved_price.name}")
+                st.caption(f"ID {saved_price.price_id} · Margen {saved_price.profit_margin:.0f}%")
+            with title_columns[1]:
+                if st.button(
+                    "Eliminar",
+                    key=f"delete_price_{saved_price.price_id}",
+                    use_container_width=True,
+                ):
+                    _save_prices(
+                        [price for price in saved_prices if price.price_id != saved_price.price_id]
+                    )
+                    st.rerun()
 
-    render_info_card(
-        "Resumen del cálculo",
-        (
-            f"Material: {st.session_state.get('connected_costing_material', 'Costo manual')}. "
-            f"Equipo: {st.session_state.get('connected_costing_asset', 'Sin equipo registrado')}. "
-            f"Para {result.quantity} unidad(es), el costo total es {_format_money(result.total_cost, currency)} "
-            f"y la venta orientativa es {_format_money(result.total_price, currency)}."
-        ),
-        "RESULTADO TEMPORAL",
-    )
+            price_columns = st.columns(2)
+            price_columns[0].metric(
+                "Costo unitario",
+                _format_money(saved_price.unit_cost, saved_price.currency),
+            )
+            price_columns[1].metric(
+                "Precio de venta",
+                _format_money(saved_price.unit_price, saved_price.currency),
+            )
+
+            render_info_card(
+                "Base del precio",
+                f"Material: {saved_price.material_label}. Equipo: {saved_price.asset_label}.",
+                "REFERENCIA TEMPORAL",
+            )
