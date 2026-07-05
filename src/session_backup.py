@@ -17,6 +17,8 @@ SESSION_KEYS = (
     "quotes_registry",
     "sales_registry",
     "cash_movements",
+    "suppliers_registry",
+    "purchases_registry",
     "assets_registry",
     "inventory_registry",
     "inventory_movements",
@@ -28,6 +30,8 @@ SECTION_LABELS = {
     "quotes_registry": "Cotizaciones",
     "sales_registry": "Ventas y pedidos",
     "cash_movements": "Caja",
+    "suppliers_registry": "Proveedores",
+    "purchases_registry": "Compras",
     "assets_registry": "Activos",
     "inventory_registry": "Inventario",
     "inventory_movements": "Movimientos de inventario",
@@ -125,9 +129,8 @@ def _parse_backup(file_bytes: bytes) -> dict:
         "general_settings": _validate_general_settings(data.get("general_settings")),
     }
     for key in SESSION_KEYS:
-        if key == "general_settings":
-            continue
-        restored[key] = _validate_list(key, data.get(key))
+        if key != "general_settings":
+            restored[key] = _validate_list(key, data.get(key))
     return restored
 
 
@@ -140,9 +143,8 @@ def _restore_selected_sections(restored_data: dict, selected_sections: list[str]
             st.session_state.general_settings = settings
 
     for section in selected_sections:
-        if section == "general_settings":
-            continue
-        st.session_state[section] = restored_data[section]
+        if section != "general_settings":
+            st.session_state[section] = restored_data[section]
 
     for transient_key in (
         "connected_costing_result",
@@ -167,33 +169,23 @@ def render_session_backup() -> None:
             "Guarda o recupera en un solo archivo la información temporal principal del ERP.",
         )
         st.caption(
-            "Incluye configuración, clientes, cotizaciones, ventas, caja, activos, inventario, movimientos y precios."
+            "Incluye configuración, clientes, cotizaciones, ventas, caja, proveedores, compras, activos, inventario, movimientos y precios."
         )
 
     st.warning(
         "Este respaldo es manual y provisional. Descárgalo antes de cerrar la sesión para evitar perder datos."
     )
 
-    summary_columns = st.columns(3)
-    summary_columns[0].metric(
-        "Configuración",
-        "Sí" if st.session_state.get("general_settings") is not None else "No",
-    )
-    summary_columns[1].metric("Clientes", str(len(st.session_state.get("customers_registry", []))))
-    summary_columns[2].metric("Cotizaciones", str(len(st.session_state.get("quotes_registry", []))))
-
-    summary_columns_2 = st.columns(3)
-    summary_columns_2[0].metric("Ventas", str(len(st.session_state.get("sales_registry", []))))
-    summary_columns_2[1].metric("Caja", str(len(st.session_state.get("cash_movements", []))))
-    summary_columns_2[2].metric("Activos", str(len(st.session_state.get("assets_registry", []))))
-
-    summary_columns_3 = st.columns(3)
-    summary_columns_3[0].metric("Materiales", str(len(st.session_state.get("inventory_registry", []))))
-    summary_columns_3[1].metric(
-        "Movimientos",
-        str(len(st.session_state.get("inventory_movements", []))),
-    )
-    summary_columns_3[2].metric("Precios", str(len(st.session_state.get("saved_prices", []))))
+    metric_rows = [st.columns(4), st.columns(4), st.columns(3)]
+    for index, section in enumerate(SESSION_KEYS):
+        row = 0 if index < 4 else 1 if index < 8 else 2
+        column = index if row == 0 else index - 4 if row == 1 else index - 8
+        value = (
+            "Sí" if st.session_state.get(section) is not None else "No"
+            if section == "general_settings"
+            else str(len(st.session_state.get(section, [])))
+        )
+        metric_rows[row][column].metric(SECTION_LABELS[section], value)
 
     st.download_button(
         "Descargar respaldo general",
@@ -212,7 +204,6 @@ def render_session_backup() -> None:
         accept_multiple_files=False,
     )
 
-    restored_data = None
     if uploaded_file is not None:
         try:
             restored_data = _parse_backup(uploaded_file.getvalue())
@@ -222,10 +213,10 @@ def render_session_backup() -> None:
             st.success("El archivo es válido. Revisa el contenido antes de restaurar.")
             st.caption(f"Fecha del respaldo en UTC: {restored_data['created_at_utc']}")
 
-            preview_rows = [st.columns(3), st.columns(3), st.columns(3)]
+            preview_rows = [st.columns(4), st.columns(4), st.columns(3)]
             for index, section in enumerate(SESSION_KEYS):
-                row = index // 3
-                column = index % 3
+                row = 0 if index < 4 else 1 if index < 8 else 2
+                column = index if row == 0 else index - 4 if row == 1 else index - 8
                 preview_rows[row][column].metric(
                     SECTION_LABELS[section],
                     _section_count(restored_data, section),
@@ -263,8 +254,8 @@ def render_session_backup() -> None:
     render_info_card(
         "Restauración selectiva",
         (
-            "Puedes recuperar por separado Configuración, Clientes, Cotizaciones, Ventas, Caja, Activos, "
-            "Inventario, Movimientos o Lista de precios."
+            "Puedes recuperar por separado Configuración, Clientes, Cotizaciones, Ventas, Caja, Proveedores, "
+            "Compras, Activos, Inventario, Movimientos o Lista de precios."
         ),
         "CONTROL DE RESTAURACIÓN",
     )
