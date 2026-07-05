@@ -3,6 +3,7 @@
 import streamlit as st
 
 from src.assets import render_assets
+from src.assets_backup import render_assets_backup
 from src.components import apply_base_styles, render_info_card, render_page_header
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.costing import render_costing
@@ -23,6 +24,7 @@ apply_base_styles()
 FUNCTIONAL_MODULES = {
     "Configuración General": render_general_settings,
     "Activos": render_assets,
+    "Respaldar activos": render_assets_backup,
     "Inventario": render_inventory,
     "Costeo": render_costing,
     "Ajustar precios": render_price_rounding,
@@ -31,10 +33,9 @@ FUNCTIONAL_MODULES = {
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
-if "Ajustar precios" not in NAVIGATION_OPTIONS:
-    NAVIGATION_OPTIONS.append("Ajustar precios")
-if "Exportar precios" not in NAVIGATION_OPTIONS:
-    NAVIGATION_OPTIONS.append("Exportar precios")
+for extra_page in ("Respaldar activos", "Ajustar precios", "Exportar precios"):
+    if extra_page not in NAVIGATION_OPTIONS:
+        NAVIGATION_OPTIONS.append(extra_page)
 
 with st.sidebar:
     st.title(APP_NAME)
@@ -66,10 +67,11 @@ def render_home() -> None:
     flow = (
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
+        ("Respaldar activos", "Guarda y recupera equipos mediante CSV."),
         ("Inventario", "Calcula el costo unitario de los materiales."),
         ("Costeo", "Combina los datos y calcula precios orientativos."),
         ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
-        ("Exportar precios", "Descarga en CSV la lista guardada durante la sesión."),
+        ("Exportar precios", "Descarga o recupera la lista de precios en CSV."),
     )
     for index, (title, description) in enumerate(flow):
         with flow_columns[index % 3]:
