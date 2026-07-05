@@ -21,6 +21,7 @@ from src.financial import render_financial_dashboard
 from src.general_settings import render_general_settings
 from src.inventory import render_inventory
 from src.inventory_movements import render_inventory_movements
+from src.modern_styles import apply_modern_styles
 from src.modules import MODULES
 from src.order_planning import render_order_planning
 from src.price_export import render_price_export
@@ -29,7 +30,6 @@ from src.purchasing import render_purchases, render_suppliers
 from src.session_backup import render_session_backup
 from src.stock_alerts import render_stock_alerts
 from src.team_commissions import render_team_commissions
-
 
 FUNCTIONAL_MODULES = {
     "Centro de control": render_control_center,
@@ -108,8 +108,10 @@ def render_descriptive_module(name: str) -> None:
 def run_app() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="CM", layout="wide", initial_sidebar_state="expanded")
     apply_base_styles()
+    apply_modern_styles()
     with st.sidebar:
         st.title(APP_NAME)
+        st.caption("Gestión simple para un negocio creativo")
         selected_area = st.selectbox("Área", tuple(NAVIGATION_GROUPS.keys()))
         selected_page = st.radio("Sección", NAVIGATION_GROUPS[selected_area])
         st.caption(f"Versión {APP_VERSION} · {PROJECT_STATUS}")
@@ -119,7 +121,5 @@ def run_app() -> None:
         render_home()
     elif selected_page in FUNCTIONAL_MODULES:
         FUNCTIONAL_MODULES[selected_page]()
-    elif selected_page in MODULES:
-        render_descriptive_module(selected_page)
     else:
-        st.error("La opción seleccionada no existe.")
+        render_descriptive_module(selected_page)
