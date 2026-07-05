@@ -14,10 +14,15 @@ class GeneralSettings:
     profit_margin: float
     monthly_internet: float
     monthly_electricity: float
+    estimated_monthly_units: int
 
     @property
     def monthly_fixed_costs(self) -> float:
         return self.monthly_internet + self.monthly_electricity
+
+    @property
+    def fixed_cost_per_unit(self) -> float:
+        return self.monthly_fixed_costs / self.estimated_monthly_units
 
     @property
     def sale_multiplier(self) -> float:
@@ -87,16 +92,16 @@ def render_general_settings() -> None:
         "la configuración y los cálculos pueden perderse."
     )
 
-    defaults = st.session_state.get(
-        "general_settings",
-        GeneralSettings(
-            business_name="Copy Mary",
-            currency="USD",
-            profit_margin=40.0,
-            monthly_internet=25.0,
-            monthly_electricity=4.0,
-        ),
+    default_settings = GeneralSettings(
+        business_name="Copy Mary",
+        currency="USD",
+        profit_margin=40.0,
+        monthly_internet=25.0,
+        monthly_electricity=4.0,
+        estimated_monthly_units=400,
     )
+    stored_settings = st.session_state.get("general_settings")
+    defaults = stored_settings if isinstance(stored_settings, GeneralSettings) else default_settings
 
     st.subheader("Datos del negocio")
     with st.form("general_settings_form"):
@@ -118,7 +123,7 @@ def render_general_settings() -> None:
             step=1.0,
         )
 
-        cost_columns = st.columns(2)
+        cost_columns = st.columns(3)
         with cost_columns[0]:
             monthly_internet = st.number_input(
                 "Internet mensual",
@@ -132,6 +137,14 @@ def render_general_settings() -> None:
                 min_value=0.0,
                 value=float(defaults.monthly_electricity),
                 step=1.0,
+            )
+        with cost_columns[2]:
+            estimated_monthly_units = st.number_input(
+                "Producción mensual estimada",
+                min_value=1,
+                value=int(defaults.estimated_monthly_units),
+                step=1,
+                help="Cantidad aproximada de unidades, hojas o trabajos producidos al mes.",
             )
 
         submitted = st.form_submit_button(
@@ -151,31 +164,38 @@ def render_general_settings() -> None:
                 profit_margin=float(profit_margin),
                 monthly_internet=float(monthly_internet),
                 monthly_electricity=float(monthly_electricity),
+                estimated_monthly_units=int(estimated_monthly_units),
             )
+            st.session_state.pop("price_estimate", None)
             st.success("Configuración aplicada durante esta sesión.")
 
     settings = st.session_state.get("general_settings", defaults)
 
     st.divider()
     st.subheader("Resumen calculado")
-    summary_columns = st.columns(3)
+    summary_columns = st.columns(4)
     summary_columns[0].metric("Negocio", settings.business_name)
     summary_columns[1].metric(
         "Costos fijos mensuales",
         _format_money(settings.monthly_fixed_costs, settings.currency),
     )
     summary_columns[2].metric(
+        "Costo fijo por unidad",
+        _format_money(settings.fixed_cost_per_unit, settings.currency),
+    )
+    summary_columns[3].metric(
         "Multiplicador de venta",
         f"× {settings.sale_multiplier:.2f}",
     )
 
     render_info_card(
-        "Cómo se interpreta el multiplicador",
+        "Prorrateo automático de costos fijos",
         (
-            f"Con un margen de {settings.profit_margin:.0f}%, cada costo total por unidad se "
-            f"multiplica por {settings.sale_multiplier:.2f} para obtener un precio orientativo."
+            f"Los costos mensuales de internet y electricidad se distribuyen entre "
+            f"{settings.estimated_monthly_units} unidades estimadas. El resultado es "
+            f"{_format_money(settings.fixed_cost_per_unit, settings.currency)} por unidad."
         ),
-        "CÁLCULO DE REFERENCIA",
+        "COSTO INDIRECTO SUGERIDO",
     )
 
     st.divider()
@@ -214,10 +234,10 @@ def render_general_settings() -> None:
             indirect_cost = st.number_input(
                 "Gastos indirectos por unidad",
                 min_value=0.0,
-                value=0.00,
+                value=float(settings.fixed_cost_per_unit),
                 step=0.01,
                 format="%.2f",
-                help="Puede incluir electricidad, internet, mantenimiento o depreciación prorrateada.",
+                help="Se completa con el costo fijo por unidad calculado arriba; puedes modificarlo.",
             )
         with second_row[1]:
             other_cost = st.number_input(
