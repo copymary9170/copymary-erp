@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from src.accounts_payable import render_accounts_payable
 from src.accounts_receivable import render_accounts_receivable
 from src.assets import render_assets
 from src.assets_backup import render_assets_backup
@@ -51,6 +52,7 @@ FUNCTIONAL_MODULES = {
     "Reportes comerciales": render_commercial_reports,
     "Proveedores": render_suppliers,
     "Compras": render_purchases,
+    "Cuentas por pagar": render_accounts_payable,
     "Catálogo y producción": render_catalog,
     "Activos": render_assets,
     "Respaldar activos": render_assets_backup,
@@ -76,6 +78,7 @@ for extra_page in (
     "Reportes comerciales",
     "Proveedores",
     "Compras",
+    "Cuentas por pagar",
     "Catálogo y producción",
     "Inventario",
     "Movimientos de inventario",
@@ -110,7 +113,7 @@ def render_home() -> None:
             "Sistema empresarial en construcción con módulos temporales conectados.",
         )
         st.caption(
-            "El ERP conecta ventas, agenda, cobranza, compras, producción, caja, finanzas e inventario."
+            "El ERP conecta ventas, cobranza, compras, pagos, producción, caja, finanzas e inventario."
         )
 
     st.warning("Los datos pueden perderse al cerrar o reiniciar la aplicación.")
@@ -130,6 +133,7 @@ def render_home() -> None:
         ("Reportes comerciales", "Exporta clientes, ventas, caja y cotizaciones."),
         ("Proveedores", "Registra proveedores y consulta sus compras."),
         ("Compras", "Conecta abastecimiento con Inventario y Caja."),
+        ("Cuentas por pagar", "Controla pagos parciales, saldos y vencimientos de proveedores."),
         ("Catálogo y producción", "Define recetas, costos y descuenta materiales al producir."),
         ("Configuración General", "Define moneda, margen y costos fijos."),
         ("Activos", "Aporta la depreciación por unidad del equipo."),
