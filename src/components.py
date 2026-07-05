@@ -63,6 +63,23 @@ def apply_base_styles() -> None:
                 color: {COLORS['muted']};
                 line-height: 1.55;
             }}
+
+            @media (max-width: 768px) {{
+                .block-container {{
+                    padding-top: 1rem;
+                    padding-left: 1rem;
+                    padding-right: 1rem;
+                }}
+
+                [data-testid="stMetric"] {{
+                    min-height: auto;
+                }}
+
+                .cm-card {{
+                    min-height: auto;
+                    padding: 1rem;
+                }}
+            }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -93,5 +110,3 @@ def render_list_section(title: str, items: Iterable[str]) -> None:
 
     for item in items:
         st.markdown(f"- {item}")
-        
-
