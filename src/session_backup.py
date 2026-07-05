@@ -16,6 +16,7 @@ SESSION_KEYS = (
     "customers_registry",
     "quotes_registry",
     "sales_registry",
+    "order_plans",
     "payment_records",
     "receivables_registry",
     "cash_movements",
@@ -33,6 +34,7 @@ SECTION_LABELS = {
     "customers_registry": "Clientes",
     "quotes_registry": "Cotizaciones",
     "sales_registry": "Ventas y pedidos",
+    "order_plans": "Agenda de pedidos",
     "payment_records": "Abonos",
     "receivables_registry": "Seguimiento de cobro",
     "cash_movements": "Caja",
@@ -186,7 +188,7 @@ def render_session_backup() -> None:
             "Guarda o recupera en un solo archivo la información temporal principal del ERP.",
         )
         st.caption(
-            "Incluye configuración, clientes, ventas, abonos, cobranza, caja, compras, catálogo, producción e inventario."
+            "Incluye configuración, clientes, ventas, agenda, abonos, cobranza, caja, compras, catálogo, producción e inventario."
         )
 
     st.warning(
