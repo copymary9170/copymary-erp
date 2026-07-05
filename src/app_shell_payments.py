@@ -10,7 +10,6 @@ from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
 from src.restore_rollback import activate_restore_rollback, render_backup_with_rollback
 
-
 activate_payment_consistency()
 activate_deletion_protection()
 activate_closing_reopen_support()
@@ -21,19 +20,12 @@ app_shell.FUNCTIONAL_MODULES["Conciliación financiera"] = render_financial_reco
 app_shell.FUNCTIONAL_MODULES["Reabrir cierre de caja"] = render_cash_closing_reopen
 app_shell.FUNCTIONAL_MODULES["Respaldo general"] = render_backup_with_rollback
 app_shell.NAVIGATION_GROUPS["Administración"] = (
-    "Caja",
-    "Conciliación financiera",
-    "Reabrir cierre de caja",
-    "Gastos y presupuesto",
-    "Equipo y comisiones",
-    "Reversos de pagos",
-    "Anulaciones y ajustes",
-    "Activos",
-    "Respaldar activos",
-    "Configuración General",
-    "Respaldo general",
+    "Caja", "Conciliación financiera", "Reabrir cierre de caja",
+    "Gastos y presupuesto", "Equipo y comisiones", "Reversos de pagos",
+    "Anulaciones y ajustes", "Activos", "Respaldar activos",
+    "Configuración General", "Respaldo general",
 )
 
-
 def run_app() -> None:
+    activate_commission_snapshots()
     _run_base_app()
