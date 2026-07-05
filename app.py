@@ -117,11 +117,15 @@ def render_module(module_name: str) -> None:
         st.error("La sección solicitada no está disponible.")
         return
 
-    render_page_header(module_name, module_info["description"])
+    with st.container(border=True):
+        render_page_header(module_name, module_info["description"])
+        st.caption("Alcance actual: documentación visual del módulo y revisión de su Blueprint.")
+
     st.warning(
         "Este módulo todavía no está desarrollado. La pantalla es informativa y no ejecuta ni guarda operaciones."
     )
 
+    st.subheader("Resumen del módulo")
     status_column, dependency_column = st.columns(2)
     with status_column:
         render_info_card("Estado", module_info["status"], "SITUACIÓN ACTUAL")
@@ -132,8 +136,14 @@ def render_module(module_name: str) -> None:
             "RELACIONES PREVISTAS",
         )
 
+    st.divider()
     render_info_card("Objetivo", module_info["objective"], "PROPÓSITO")
-    render_list_section("Funciones previstas", module_info["planned_functions"])
+
+    st.subheader("Funciones previstas")
+    st.caption("Contenido planificado. Ninguna de estas funciones está implementada todavía.")
+    for planned_function in module_info["planned_functions"]:
+        st.markdown(f"- {planned_function}")
+
     st.info("No hay formularios, botones operativos, autenticación real ni almacenamiento de datos en esta etapa.")
 
 
