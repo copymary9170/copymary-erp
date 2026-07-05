@@ -1,11 +1,25 @@
 """Inventario temporal de materiales para CopyMary ERP."""
 
+import csv
 from dataclasses import asdict, dataclass, replace
+from io import StringIO
 from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+
+
+CSV_HEADERS = [
+    "ID",
+    "Nombre",
+    "Categoría",
+    "Costo total de compra",
+    "Cantidad comprada",
+    "Existencia disponible",
+    "Unidad",
+    "Existencia mínima",
+]
 
 
 @dataclass(frozen=True)
@@ -68,21 +82,186 @@ def _adjust_stock(
     return updated_items
 
 
+def _build_inventory_csv(items: list[InventoryItem]) -> bytes:
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
+    writer.writerow(CSV_HEADERS)
+    for item in items:
+        writer.writerow(
+            [
+                item.item_id,
+                item.name,
+                item.category,
+                f"{item.purchase_cost:.4f}",
+                f"{item.purchased_quantity:.4f}",
+                f"{item.available_quantity:.4f}",
+                item.unit_name,
+                f"{item.minimum_stock:.4f}",
+            ]
+        )
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+def _parse_number(value: str, field_name: str, row_number: int, allow_zero: bool = True) -> float:
+    cleaned_value = value.strip().replace(",", ".")
+    try:
+        number = float(cleaned_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Fila {row_number}: el campo '{field_name}' debe contener un número válido."
+        ) from exc
+
+    if number < 0 or (not allow_zero and number == 0):
+        condition = "mayor que cero" if not allow_zero else "igual o mayor que cero"
+        raise ValueError(
+            f"Fila {row_number}: el campo '{field_name}' debe ser {condition}."
+        )
+    return number
+
+
+def _parse_inventory_csv(file_bytes: bytes) -> list[InventoryItem]:
+    try:
+        decoded = file_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError("El archivo debe estar guardado con codificación UTF-8.") from exc
+
+    reader = csv.DictReader(StringIO(decoded), delimiter=";")
+    if reader.fieldnames != CSV_HEADERS:
+        raise ValueError(
+            "El archivo no tiene las columnas esperadas. Usa un CSV exportado desde el módulo Inventario."
+        )
+
+    imported_items: list[InventoryItem] = []
+    for row_number, row in enumerate(reader, start=2):
+        name = (row.get("Nombre") or "").strip()
+        category = (row.get("Categoría") or "").strip()
+        unit_name = (row.get("Unidad") or "").strip()
+
+        if not name:
+            raise ValueError(f"Fila {row_number}: falta el nombre del material.")
+        if not category:
+            raise ValueError(f"Fila {row_number}: falta la categoría.")
+        if not unit_name:
+            raise ValueError(f"Fila {row_number}: falta la unidad de control.")
+
+        purchase_cost = _parse_number(
+            row.get("Costo total de compra") or "0",
+            "Costo total de compra",
+            row_number,
+            allow_zero=False,
+        )
+        purchased_quantity = _parse_number(
+            row.get("Cantidad comprada") or "0",
+            "Cantidad comprada",
+            row_number,
+            allow_zero=False,
+        )
+        available_quantity = _parse_number(
+            row.get("Existencia disponible") or "0",
+            "Existencia disponible",
+            row_number,
+        )
+        minimum_stock = _parse_number(
+            row.get("Existencia mínima") or "0",
+            "Existencia mínima",
+            row_number,
+        )
+
+        imported_items.append(
+            InventoryItem(
+                item_id=(row.get("ID") or "").strip() or uuid4().hex[:8],
+                name=name,
+                category=category,
+                purchase_cost=purchase_cost,
+                purchased_quantity=purchased_quantity,
+                available_quantity=available_quantity,
+                unit_name=unit_name,
+                minimum_stock=minimum_stock,
+            )
+        )
+
+    if not imported_items:
+        raise ValueError("El archivo no contiene materiales para importar.")
+    return imported_items
+
+
+def _merge_items(
+    current_items: list[InventoryItem], imported_items: list[InventoryItem]
+) -> list[InventoryItem]:
+    merged_by_id = {item.item_id: item for item in current_items}
+    for item in imported_items:
+        merged_by_id[item.item_id] = item
+    return list(merged_by_id.values())
+
+
 def render_inventory() -> None:
     """Renderiza el inventario temporal de materiales."""
     with st.container(border=True):
         render_page_header(
             "Inventario",
-            "Registra materiales, calcula su costo unitario y controla existencias durante la sesión.",
+            "Registra materiales, controla existencias y respalda la lista en CSV.",
         )
         st.caption("Los registros se conservan únicamente mientras la sesión permanezca abierta.")
 
     st.warning(
-        "Este inventario todavía no usa base de datos. Los materiales y movimientos pueden perderse al reiniciar la aplicación."
+        "Este inventario todavía no usa base de datos. Exporta el CSV antes de cerrar y vuelve a importarlo al comenzar otra sesión."
     )
 
     items = _get_items()
 
+    st.subheader("Respaldar o recuperar inventario")
+    backup_columns = st.columns(2)
+    with backup_columns[0]:
+        uploaded_file = st.file_uploader(
+            "Importar inventario desde CSV",
+            type=("csv",),
+            accept_multiple_files=False,
+        )
+        import_mode = st.radio(
+            "Cómo aplicar la importación",
+            ("Reemplazar inventario actual", "Combinar por ID"),
+            horizontal=True,
+            help="Combinar conserva los materiales actuales y reemplaza solo los que tengan el mismo ID.",
+        )
+        if uploaded_file is not None and st.button(
+            "Importar inventario",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                imported_items = _parse_inventory_csv(uploaded_file.getvalue())
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                if import_mode == "Combinar por ID":
+                    _save_items(_merge_items(items, imported_items))
+                else:
+                    _save_items(imported_items)
+                st.success(f"Se importaron {len(imported_items)} material(es) correctamente.")
+                st.rerun()
+
+    with backup_columns[1]:
+        if items:
+            st.download_button(
+                "Descargar inventario en CSV",
+                data=_build_inventory_csv(items),
+                file_name="copymary_inventario.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True,
+            )
+            render_info_card(
+                "Contenido del respaldo",
+                (
+                    "Incluye identificación, nombre, categoría, costos, cantidades, unidad de control "
+                    "y existencia mínima de cada material."
+                ),
+                "CSV PARA EXCEL",
+            )
+        else:
+            st.info("Registra o importa materiales para habilitar la descarga del inventario.")
+
+    st.divider()
     st.subheader("Registrar material")
     with st.form("inventory_item_form", clear_on_submit=True):
         first_row = st.columns(3)
@@ -158,6 +337,7 @@ def render_inventory() -> None:
 
     st.divider()
     st.subheader("Resumen de inventario")
+    items = _get_items()
     total_value = sum(item.stock_value for item in items)
     low_stock_count = sum(1 for item in items if item.is_low_stock)
     summary_columns = st.columns(3)
