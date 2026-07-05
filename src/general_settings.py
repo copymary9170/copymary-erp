@@ -26,8 +26,13 @@ class GeneralSettings:
 
 @dataclass(frozen=True)
 class PriceEstimate:
-    unit_cost: float
+    paper_cost: float
+    ink_cost: float
+    labor_cost: float
+    indirect_cost: float
+    other_cost: float
     quantity: int
+    unit_cost: float
     total_cost: float
     unit_price: float
     total_price: float
@@ -41,16 +46,26 @@ def _format_money(value: float, currency: str) -> str:
 
 
 def _calculate_price_estimate(
-    unit_cost: float,
+    paper_cost: float,
+    ink_cost: float,
+    labor_cost: float,
+    indirect_cost: float,
+    other_cost: float,
     quantity: int,
     settings: GeneralSettings,
 ) -> PriceEstimate:
+    unit_cost = paper_cost + ink_cost + labor_cost + indirect_cost + other_cost
     total_cost = unit_cost * quantity
     unit_price = unit_cost * settings.sale_multiplier
     total_price = unit_price * quantity
     return PriceEstimate(
-        unit_cost=unit_cost,
+        paper_cost=paper_cost,
+        ink_cost=ink_cost,
+        labor_cost=labor_cost,
+        indirect_cost=indirect_cost,
+        other_cost=other_cost,
         quantity=quantity,
+        unit_cost=unit_cost,
         total_cost=total_cost,
         unit_price=unit_price,
         total_price=total_price,
@@ -59,17 +74,17 @@ def _calculate_price_estimate(
 
 
 def render_general_settings() -> None:
-    """Renderiza un formulario funcional sin persistencia permanente."""
+    """Renderiza configuración y costeo temporal sin persistencia permanente."""
     with st.container(border=True):
         render_page_header(
             "Configuración General",
-            "Define parámetros básicos para realizar cálculos iniciales dentro del sistema.",
+            "Define parámetros básicos y calcula precios orientativos para el negocio.",
         )
         st.caption("Los valores se conservan únicamente mientras esta sesión permanezca abierta.")
 
     st.warning(
-        "Esta primera función no utiliza base de datos. Al cerrar o reiniciar la aplicación, "
-        "la configuración puede perderse."
+        "Esta función no utiliza base de datos. Al cerrar o reiniciar la aplicación, "
+        "la configuración y los cálculos pueden perderse."
     )
 
     defaults = st.session_state.get(
@@ -157,28 +172,62 @@ def render_general_settings() -> None:
     render_info_card(
         "Cómo se interpreta el multiplicador",
         (
-            f"Con un margen de {settings.profit_margin:.0f}%, un costo base de "
-            f"{_format_money(10, settings.currency)} produciría un precio orientativo de "
-            f"{_format_money(10 * settings.sale_multiplier, settings.currency)}."
+            f"Con un margen de {settings.profit_margin:.0f}%, cada costo total por unidad se "
+            f"multiplica por {settings.sale_multiplier:.2f} para obtener un precio orientativo."
         ),
         "CÁLCULO DE REFERENCIA",
     )
 
     st.divider()
-    st.subheader("Calculadora de precio orientativo")
-    st.caption("Calcula un precio de venta temporal usando el margen configurado arriba.")
+    st.subheader("Calculadora detallada de costos")
+    st.caption("Suma los costos por unidad y aplica el margen configurado arriba.")
 
     with st.form("price_estimate_form"):
-        calculator_columns = st.columns(2)
-        with calculator_columns[0]:
-            unit_cost = st.number_input(
-                "Costo base por unidad",
+        first_row = st.columns(3)
+        with first_row[0]:
+            paper_cost = st.number_input(
+                "Papel por unidad",
                 min_value=0.0,
-                value=1.0,
-                step=0.10,
+                value=0.00,
+                step=0.01,
                 format="%.2f",
             )
-        with calculator_columns[1]:
+        with first_row[1]:
+            ink_cost = st.number_input(
+                "Tinta por unidad",
+                min_value=0.0,
+                value=0.00,
+                step=0.01,
+                format="%.2f",
+            )
+        with first_row[2]:
+            labor_cost = st.number_input(
+                "Mano de obra por unidad",
+                min_value=0.0,
+                value=0.00,
+                step=0.01,
+                format="%.2f",
+            )
+
+        second_row = st.columns(3)
+        with second_row[0]:
+            indirect_cost = st.number_input(
+                "Gastos indirectos por unidad",
+                min_value=0.0,
+                value=0.00,
+                step=0.01,
+                format="%.2f",
+                help="Puede incluir electricidad, internet, mantenimiento o depreciación prorrateada.",
+            )
+        with second_row[1]:
+            other_cost = st.number_input(
+                "Otros costos por unidad",
+                min_value=0.0,
+                value=0.00,
+                step=0.01,
+                format="%.2f",
+            )
+        with second_row[2]:
             quantity = st.number_input(
                 "Cantidad",
                 min_value=1,
@@ -187,28 +236,33 @@ def render_general_settings() -> None:
             )
 
         calculate_submitted = st.form_submit_button(
-            "Calcular precio",
+            "Calcular precio detallado",
             type="primary",
             use_container_width=True,
         )
 
     if calculate_submitted:
         st.session_state.price_estimate = _calculate_price_estimate(
-            unit_cost=float(unit_cost),
+            paper_cost=float(paper_cost),
+            ink_cost=float(ink_cost),
+            labor_cost=float(labor_cost),
+            indirect_cost=float(indirect_cost),
+            other_cost=float(other_cost),
             quantity=int(quantity),
             settings=settings,
         )
 
     estimate = st.session_state.get("price_estimate")
     if estimate is not None:
+        st.subheader("Resultado")
         result_columns = st.columns(4)
         result_columns[0].metric(
-            "Precio por unidad",
-            _format_money(estimate.unit_price, settings.currency),
+            "Costo por unidad",
+            _format_money(estimate.unit_cost, settings.currency),
         )
         result_columns[1].metric(
-            "Costo total",
-            _format_money(estimate.total_cost, settings.currency),
+            "Precio por unidad",
+            _format_money(estimate.unit_price, settings.currency),
         )
         result_columns[2].metric(
             "Venta total",
@@ -219,17 +273,39 @@ def render_general_settings() -> None:
             _format_money(estimate.estimated_profit, settings.currency),
         )
 
+        breakdown_columns = st.columns(2)
+        with breakdown_columns[0]:
+            render_info_card(
+                "Desglose por unidad",
+                (
+                    f"Papel: {_format_money(estimate.paper_cost, settings.currency)} · "
+                    f"Tinta: {_format_money(estimate.ink_cost, settings.currency)} · "
+                    f"Mano de obra: {_format_money(estimate.labor_cost, settings.currency)}"
+                ),
+                "COSTOS DIRECTOS",
+            )
+        with breakdown_columns[1]:
+            render_info_card(
+                "Otros componentes",
+                (
+                    f"Indirectos: {_format_money(estimate.indirect_cost, settings.currency)} · "
+                    f"Otros: {_format_money(estimate.other_cost, settings.currency)} · "
+                    f"Costo total: {_format_money(estimate.total_cost, settings.currency)}"
+                ),
+                "COSTOS COMPLEMENTARIOS",
+            )
+
         render_info_card(
             "Resultado de la estimación",
             (
-                f"Para {estimate.quantity} unidad(es), el precio orientativo total es "
-                f"{_format_money(estimate.total_price, settings.currency)}, usando un margen de "
-                f"{settings.profit_margin:.0f}%."
+                f"Para {estimate.quantity} unidad(es), la venta orientativa total es "
+                f"{_format_money(estimate.total_price, settings.currency)} y la ganancia estimada es "
+                f"{_format_money(estimate.estimated_profit, settings.currency)}."
             ),
             "RESULTADO TEMPORAL",
         )
 
     st.info(
-        "Este cálculo es orientativo. Todavía no incluye tinta, papel, mano de obra, "
-        "depreciación, comisiones ni otros costos del negocio."
+        "El resultado depende de los costos introducidos. Esta etapa todavía no obtiene datos "
+        "automáticamente desde inventario, activos, nómina o contabilidad."
     )
