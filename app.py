@@ -12,6 +12,7 @@ from src.inventory import render_inventory
 from src.modules import MODULES
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
+from src.session_backup import render_session_backup
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -29,11 +30,17 @@ FUNCTIONAL_MODULES = {
     "Costeo": render_costing,
     "Ajustar precios": render_price_rounding,
     "Exportar precios": render_price_export,
+    "Respaldo general": render_session_backup,
 }
 NAVIGATION_OPTIONS = ["Inicio", *MODULES.keys()]
 if "Inventario" not in NAVIGATION_OPTIONS:
     NAVIGATION_OPTIONS.insert(-1, "Inventario")
-for extra_page in ("Respaldar activos", "Ajustar precios", "Exportar precios"):
+for extra_page in (
+    "Respaldar activos",
+    "Ajustar precios",
+    "Exportar precios",
+    "Respaldo general",
+):
     if extra_page not in NAVIGATION_OPTIONS:
         NAVIGATION_OPTIONS.append(extra_page)
 
@@ -72,6 +79,7 @@ def render_home() -> None:
         ("Costeo", "Combina los datos y calcula precios orientativos."),
         ("Ajustar precios", "Redondea hacia arriba para proteger el margen."),
         ("Exportar precios", "Descarga o recupera la lista de precios en CSV."),
+        ("Respaldo general", "Guarda toda la sesión principal en un solo archivo JSON."),
     )
     for index, (title, description) in enumerate(flow):
         with flow_columns[index % 3]:
