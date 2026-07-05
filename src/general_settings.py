@@ -24,10 +24,38 @@ class GeneralSettings:
         return 1 + (self.profit_margin / 100)
 
 
+@dataclass(frozen=True)
+class PriceEstimate:
+    unit_cost: float
+    quantity: int
+    total_cost: float
+    unit_price: float
+    total_price: float
+    estimated_profit: float
+
+
 def _format_money(value: float, currency: str) -> str:
     symbols = {"USD": "$", "VES": "Bs", "EUR": "€"}
     symbol = symbols.get(currency, currency)
     return f"{symbol} {value:,.2f}"
+
+
+def _calculate_price_estimate(
+    unit_cost: float,
+    quantity: int,
+    settings: GeneralSettings,
+) -> PriceEstimate:
+    total_cost = unit_cost * quantity
+    unit_price = unit_cost * settings.sale_multiplier
+    total_price = unit_price * quantity
+    return PriceEstimate(
+        unit_cost=unit_cost,
+        quantity=quantity,
+        total_cost=total_cost,
+        unit_price=unit_price,
+        total_price=total_price,
+        estimated_profit=total_price - total_cost,
+    )
 
 
 def render_general_settings() -> None:
@@ -135,6 +163,71 @@ def render_general_settings() -> None:
         ),
         "CÁLCULO DE REFERENCIA",
     )
+
+    st.divider()
+    st.subheader("Calculadora de precio orientativo")
+    st.caption("Calcula un precio de venta temporal usando el margen configurado arriba.")
+
+    with st.form("price_estimate_form"):
+        calculator_columns = st.columns(2)
+        with calculator_columns[0]:
+            unit_cost = st.number_input(
+                "Costo base por unidad",
+                min_value=0.0,
+                value=1.0,
+                step=0.10,
+                format="%.2f",
+            )
+        with calculator_columns[1]:
+            quantity = st.number_input(
+                "Cantidad",
+                min_value=1,
+                value=1,
+                step=1,
+            )
+
+        calculate_submitted = st.form_submit_button(
+            "Calcular precio",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if calculate_submitted:
+        st.session_state.price_estimate = _calculate_price_estimate(
+            unit_cost=float(unit_cost),
+            quantity=int(quantity),
+            settings=settings,
+        )
+
+    estimate = st.session_state.get("price_estimate")
+    if estimate is not None:
+        result_columns = st.columns(4)
+        result_columns[0].metric(
+            "Precio por unidad",
+            _format_money(estimate.unit_price, settings.currency),
+        )
+        result_columns[1].metric(
+            "Costo total",
+            _format_money(estimate.total_cost, settings.currency),
+        )
+        result_columns[2].metric(
+            "Venta total",
+            _format_money(estimate.total_price, settings.currency),
+        )
+        result_columns[3].metric(
+            "Ganancia estimada",
+            _format_money(estimate.estimated_profit, settings.currency),
+        )
+
+        render_info_card(
+            "Resultado de la estimación",
+            (
+                f"Para {estimate.quantity} unidad(es), el precio orientativo total es "
+                f"{_format_money(estimate.total_price, settings.currency)}, usando un margen de "
+                f"{settings.profit_margin:.0f}%."
+            ),
+            "RESULTADO TEMPORAL",
+        )
 
     st.info(
         "Este cálculo es orientativo. Todavía no incluye tinta, papel, mano de obra, "
