@@ -9,7 +9,7 @@ from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
 from src.quotes_followup import render_quotes_followup
 from src.restore_rollback import activate_restore_rollback, render_backup_with_rollback
-from src.sales_orders_plus import render_sales_orders_plus
+from src.sales_orders_tracking import render_sales_orders_tracking
 
 activate_payment_consistency()
 activate_deletion_protection()
@@ -22,7 +22,7 @@ app_shell.FUNCTIONAL_MODULES['Reabrir cierre de caja'] = render_cash_closing_reo
 app_shell.FUNCTIONAL_MODULES['Historial de comisiones'] = render_commission_history
 app_shell.FUNCTIONAL_MODULES['Respaldo general'] = render_backup_with_rollback
 app_shell.FUNCTIONAL_MODULES['Cotizaciones'] = render_quotes_followup
-app_shell.FUNCTIONAL_MODULES['Ventas y pedidos'] = render_sales_orders_plus
+app_shell.FUNCTIONAL_MODULES['Ventas y pedidos'] = render_sales_orders_tracking
 app_shell.NAVIGATION_GROUPS['Administración'] = (
     'Caja', 'Conciliación financiera', 'Reabrir cierre de caja',
     'Gastos y presupuesto', 'Equipo y comisiones', 'Historial de comisiones',
