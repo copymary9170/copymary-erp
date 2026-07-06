@@ -77,6 +77,16 @@ def _rows(key: str) -> list[dict]:
     return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
 
 
+def _navigate(area: str, page: str) -> None:
+    """Cambia los widgets del menú lateral y abre la sección elegida."""
+    if area not in NAVIGATION_GROUPS or page not in NAVIGATION_GROUPS[area]:
+        st.error("El acceso rápido solicitado no está disponible.")
+        return
+    st.session_state["navigation_area"] = area
+    st.session_state["navigation_page"] = page
+    st.rerun()
+
+
 def _home_metrics() -> tuple[int, int, int, int]:
     clients = len(_rows("customers_registry"))
     sales = [
@@ -124,19 +134,26 @@ def render_home() -> None:
     )
 
     st.markdown("### Accesos principales")
-    st.caption("Las áreas más importantes para trabajar durante el día.")
+    st.caption("Pulsa Abrir para entrar directamente en la sección correspondiente.")
     columns = st.columns(3)
-    cards = (
-        ("Centro de control", "Revisa alertas, pendientes y decisiones importantes del negocio."),
-        ("Ventas y clientes", "Registra clientes, prepara cotizaciones y gestiona pedidos y cobros."),
-        ("Productos e inventario", "Controla materiales, recetas, producción, costos y existencias."),
-        ("Compras y proveedores", "Organiza abastecimiento, compras y pagos a proveedores."),
-        ("Finanzas", "Consulta caja, gastos, cierres y el estado financiero del negocio."),
-        ("Respaldos", "Descarga o restaura una copia segura de toda la información."),
+    shortcuts = (
+        ("Centro de control", "Revisa alertas, pendientes y decisiones importantes del negocio.", "Inicio", "Centro de control"),
+        ("Ventas y clientes", "Registra clientes, prepara cotizaciones y gestiona pedidos y cobros.", "Ventas y clientes", "Ventas y pedidos"),
+        ("Productos e inventario", "Controla materiales, recetas, producción, costos y existencias.", "Productos e inventario", "Catálogo y producción"),
+        ("Compras y proveedores", "Organiza abastecimiento, compras y pagos a proveedores.", "Compras y proveedores", "Compras"),
+        ("Finanzas", "Consulta caja, gastos, cierres y el estado financiero del negocio.", "Inicio", "Panel financiero y cierres"),
+        ("Respaldos", "Descarga o restaura una copia segura de toda la información.", "Administración", "Respaldo general"),
     )
-    for index, (title, description) in enumerate(cards):
+    for index, (title, description, area, page) in enumerate(shortcuts):
         with columns[index % 3]:
             render_info_card(title, description, "ACCESO RÁPIDO")
+            if st.button(
+                f"Abrir {title}",
+                key=f"home_shortcut_{index}",
+                use_container_width=True,
+                type="primary" if index == 0 else "secondary",
+            ):
+                _navigate(area, page)
 
     st.markdown("### Estado general")
     status_columns = st.columns(2)
@@ -181,13 +198,32 @@ def run_app() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+    st.session_state.setdefault("navigation_area", "Inicio")
+    if st.session_state["navigation_area"] not in NAVIGATION_GROUPS:
+        st.session_state["navigation_area"] = "Inicio"
+    valid_pages = NAVIGATION_GROUPS[st.session_state["navigation_area"]]
+    if st.session_state.get("navigation_page") not in valid_pages:
+        st.session_state["navigation_page"] = valid_pages[0]
+
     with st.sidebar:
         st.markdown(
             '<div class="cm-sidebrand"><div class="cm-sidebrand__mark">CM</div><div><div class="cm-sidebrand__name">CopyMary ERP</div><div class="cm-sidebrand__tag">Tu negocio, claro y organizado</div></div></div>',
             unsafe_allow_html=True,
         )
-        selected_area = st.selectbox("Área de trabajo", tuple(NAVIGATION_GROUPS.keys()))
-        selected_page = st.radio("Sección", NAVIGATION_GROUPS[selected_area])
+        selected_area = st.selectbox(
+            "Área de trabajo",
+            tuple(NAVIGATION_GROUPS.keys()),
+            key="navigation_area",
+        )
+        available_pages = NAVIGATION_GROUPS[selected_area]
+        if st.session_state.get("navigation_page") not in available_pages:
+            st.session_state["navigation_page"] = available_pages[0]
+        selected_page = st.radio(
+            "Sección",
+            available_pages,
+            key="navigation_page",
+        )
         st.divider()
         st.caption(f"Versión {APP_VERSION} · {PROJECT_STATUS}")
         st.info("Guarda un respaldo general antes de cerrar la sesión.")
