@@ -12,6 +12,7 @@ from src.payment_reversals import render_payment_reversals
 from src.quotes_followup import render_quotes_followup
 from src.restore_rollback import activate_restore_rollback, render_backup_with_rollback
 from src.sales_orders_tracking import render_sales_orders_tracking
+from src.suppliers_plus import render_suppliers_plus
 
 activate_payment_consistency()
 activate_deletion_protection()
@@ -27,6 +28,7 @@ app_shell.FUNCTIONAL_MODULES['Cotizaciones'] = render_quotes_followup
 app_shell.FUNCTIONAL_MODULES['Ventas y pedidos'] = render_sales_orders_tracking
 app_shell.FUNCTIONAL_MODULES['Agenda de producción y entregas'] = render_order_planning_capacity
 app_shell.FUNCTIONAL_MODULES['Reportes comerciales'] = render_commercial_reports_intelligence
+app_shell.FUNCTIONAL_MODULES['Proveedores'] = render_suppliers_plus
 app_shell.NAVIGATION_GROUPS['Administración'] = (
     'Caja', 'Conciliación financiera', 'Reabrir cierre de caja',
     'Gastos y presupuesto', 'Equipo y comisiones', 'Historial de comisiones',
