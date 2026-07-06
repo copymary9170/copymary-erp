@@ -73,29 +73,85 @@ NAVIGATION_GROUPS = {
 }
 
 
-def render_home() -> None:
-    render_page_header(
-        APP_NAME,
-        "Tu centro de gestión para organizar ventas, producción, inventario, dinero y crecimiento sin perder la parte creativa del negocio.",
+def _rows(key: str) -> list[dict]:
+    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
+
+
+def _home_metrics() -> tuple[int, int, int, int]:
+    clients = len(_rows("customers_registry"))
+    sales = [
+        item for item in _rows("sales_registry")
+        if str(item.get("order_status", "")).strip().lower() not in {"cancelado", "cancelada", "anulado", "anulada"}
+    ]
+    active_sales = sum(
+        1 for item in sales
+        if str(item.get("order_status", "Pendiente")) not in {"Entregado", "Entregada"}
     )
+    inventory = _rows("inventory_registry")
+    low_stock = 0
+    for item in inventory:
+        try:
+            available = float(item.get("available_quantity", item.get("quantity", 0.0)))
+            minimum = float(item.get("minimum_stock", item.get("reorder_point", 0.0)))
+        except (TypeError, ValueError):
+            continue
+        if minimum > 0 and available <= minimum:
+            low_stock += 1
+    pending_payments = sum(
+        1 for item in sales
+        if str(item.get("payment_status", "Pendiente")) != "Pagado"
+    )
+    return clients, active_sales, low_stock, pending_payments
+
+
+def render_home() -> None:
+    clients, active_sales, low_stock, pending_payments = _home_metrics()
+
+    render_page_header(
+        "Buenos días, Copy Mary",
+        "Aquí tienes una vista rápida del negocio y los accesos principales para comenzar tu jornada.",
+    )
+
+    metrics = st.columns(4)
+    metrics[0].metric("Clientes registrados", str(clients))
+    metrics[1].metric("Pedidos activos", str(active_sales))
+    metrics[2].metric("Cobros pendientes", str(pending_payments))
+    metrics[3].metric("Alertas de inventario", str(low_stock))
+
     st.markdown(
-        '<div class="cm-home-note"><strong>Sesión protegida por respaldo</strong><span>Descarga una copia antes de cerrar o reiniciar la aplicación.</span></div>',
+        '<div class="cm-home-note"><div><strong>Respaldo recomendado</strong><span>Guarda una copia antes de cerrar o reiniciar la aplicación.</span></div><div class="cm-home-note__badge">Protege tu trabajo</div></div>',
         unsafe_allow_html=True,
     )
-    st.markdown("### Todo tu negocio, organizado en un solo lugar")
-    st.caption("Entra al área que necesites y continúa trabajando desde allí.")
+
+    st.markdown("### Accesos principales")
+    st.caption("Las áreas más importantes para trabajar durante el día.")
     columns = st.columns(3)
     cards = (
-        ("Centro de control", "Una vista rápida de alertas, pendientes y decisiones importantes."),
-        ("Auditoría de datos", "Comprueba duplicados, referencias rotas y riesgos antes de que crezcan."),
-        ("Ventas y clientes", "Gestiona clientes, cotizaciones, pedidos, cobros y comprobantes."),
-        ("Compras y proveedores", "Organiza compras, proveedores y cuentas pendientes de pago."),
-        ("Productos e inventario", "Controla materiales, recetas, costos, producción y existencias."),
-        ("Administración", "Supervisa caja, gastos, equipo, activos, cierres y respaldos."),
+        ("Centro de control", "Revisa alertas, pendientes y decisiones importantes del negocio."),
+        ("Ventas y clientes", "Registra clientes, prepara cotizaciones y gestiona pedidos y cobros."),
+        ("Productos e inventario", "Controla materiales, recetas, producción, costos y existencias."),
+        ("Compras y proveedores", "Organiza abastecimiento, compras y pagos a proveedores."),
+        ("Finanzas", "Consulta caja, gastos, cierres y el estado financiero del negocio."),
+        ("Respaldos", "Descarga o restaura una copia segura de toda la información."),
     )
     for index, (title, description) in enumerate(cards):
         with columns[index % 3]:
-            render_info_card(title, description, "ÁREA DE TRABAJO")
+            render_info_card(title, description, "ACCESO RÁPIDO")
+
+    st.markdown("### Estado general")
+    status_columns = st.columns(2)
+    with status_columns[0]:
+        render_info_card(
+            "Operación",
+            "El inicio resume pedidos, cobros e inventario para ayudarte a decidir qué atender primero.",
+            "RESUMEN DIARIO",
+        )
+    with status_columns[1]:
+        render_info_card(
+            "Seguridad de datos",
+            "La información vive en la sesión. Usa Respaldo general para conservarla de forma segura.",
+            "RECORDATORIO",
+        )
 
 
 def render_descriptive_module(name: str) -> None:
@@ -118,9 +174,9 @@ def run_app() -> None:
     st.markdown(
         """
         <style>
-        .cm-home-note{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1.1rem;margin:.2rem 0 1.4rem;border-radius:14px;background:linear-gradient(135deg,rgba(34,166,161,.11),rgba(109,74,255,.08));border:1px solid rgba(34,166,161,.18);color:#334155}.cm-home-note strong{color:#0f766e}.cm-home-note span{color:#64748b;font-size:.92rem}
+        .cm-home-note{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem 1.15rem;margin:1.15rem 0 1.55rem;border-radius:16px;background:linear-gradient(135deg,rgba(34,166,161,.12),rgba(109,74,255,.08));border:1px solid rgba(34,166,161,.18);color:#334155}.cm-home-note>div:first-child{display:flex;flex-direction:column;gap:.2rem}.cm-home-note strong{color:#0f766e}.cm-home-note span{color:#64748b;font-size:.92rem}.cm-home-note__badge{padding:.42rem .7rem;border-radius:999px;background:white;color:#6D4AFF;font-size:.78rem;font-weight:800;box-shadow:0 5px 14px rgba(31,41,55,.07)}
         .cm-sidebrand{display:flex;align-items:center;gap:.8rem;padding:.45rem 0 1rem}.cm-sidebrand__mark{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#6D4AFF,#22A6A1);color:white;font-weight:900;box-shadow:0 10px 22px rgba(109,74,255,.25)}.cm-sidebrand__name{font-weight:850;font-size:1.08rem;letter-spacing:-.02em;color:#1f2937}.cm-sidebrand__tag{font-size:.75rem;color:#7c8494;margin-top:.08rem}
-        @media(max-width:768px){.cm-home-note{align-items:flex-start;flex-direction:column;gap:.25rem}}
+        @media(max-width:768px){.cm-home-note{align-items:flex-start;flex-direction:column;gap:.6rem}.cm-home-note__badge{align-self:flex-start}}
         </style>
         """,
         unsafe_allow_html=True,
