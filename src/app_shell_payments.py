@@ -7,6 +7,7 @@ from src.deletion_protection import activate_deletion_protection
 from src.financial_reconciliation import render_financial_reconciliation
 from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
+from src.quotes_manager import render_quotes_manager
 from src.restore_rollback import activate_restore_rollback, render_backup_with_rollback
 
 activate_payment_consistency()
@@ -19,6 +20,7 @@ app_shell.FUNCTIONAL_MODULES['Conciliación financiera'] = render_financial_reco
 app_shell.FUNCTIONAL_MODULES['Reabrir cierre de caja'] = render_cash_closing_reopen
 app_shell.FUNCTIONAL_MODULES['Historial de comisiones'] = render_commission_history
 app_shell.FUNCTIONAL_MODULES['Respaldo general'] = render_backup_with_rollback
+app_shell.FUNCTIONAL_MODULES['Cotizaciones'] = render_quotes_manager
 app_shell.NAVIGATION_GROUPS['Administración'] = (
     'Caja', 'Conciliación financiera', 'Reabrir cierre de caja',
     'Gastos y presupuesto', 'Equipo y comisiones', 'Historial de comisiones',
