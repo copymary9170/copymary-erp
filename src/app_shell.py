@@ -78,13 +78,22 @@ def _rows(key: str) -> list[dict]:
 
 
 def _navigate(area: str, page: str) -> None:
-    """Cambia los widgets del menú lateral y abre la sección elegida."""
+    """Solicita un cambio de navegación para aplicarlo antes de crear los widgets."""
     if area not in NAVIGATION_GROUPS or page not in NAVIGATION_GROUPS[area]:
         st.error("El acceso rápido solicitado no está disponible.")
         return
-    st.session_state["navigation_area"] = area
-    st.session_state["navigation_page"] = page
+    st.session_state["pending_navigation_area"] = area
+    st.session_state["pending_navigation_page"] = page
     st.rerun()
+
+
+def _apply_pending_navigation() -> None:
+    """Aplica cambios pendientes antes de instanciar selectbox y radio."""
+    area = st.session_state.pop("pending_navigation_area", None)
+    page = st.session_state.pop("pending_navigation_page", None)
+    if area in NAVIGATION_GROUPS and page in NAVIGATION_GROUPS[area]:
+        st.session_state["navigation_area"] = area
+        st.session_state["navigation_page"] = page
 
 
 def _home_metrics() -> tuple[int, int, int, int]:
@@ -199,6 +208,7 @@ def run_app() -> None:
         unsafe_allow_html=True,
     )
 
+    _apply_pending_navigation()
     st.session_state.setdefault("navigation_area", "Inicio")
     if st.session_state["navigation_area"] not in NAVIGATION_GROUPS:
         st.session_state["navigation_area"] = "Inicio"
