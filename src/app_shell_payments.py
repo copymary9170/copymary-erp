@@ -5,7 +5,7 @@ from src.commission_history import render_commission_history
 from src.commission_snapshots import activate_commission_snapshots
 from src.deletion_protection import activate_deletion_protection
 from src.financial_reconciliation import render_financial_reconciliation
-from src.order_planning_plus import render_order_planning_plus
+from src.order_planning_capacity import render_order_planning_capacity
 from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
 from src.quotes_followup import render_quotes_followup
@@ -24,7 +24,7 @@ app_shell.FUNCTIONAL_MODULES['Historial de comisiones'] = render_commission_hist
 app_shell.FUNCTIONAL_MODULES['Respaldo general'] = render_backup_with_rollback
 app_shell.FUNCTIONAL_MODULES['Cotizaciones'] = render_quotes_followup
 app_shell.FUNCTIONAL_MODULES['Ventas y pedidos'] = render_sales_orders_tracking
-app_shell.FUNCTIONAL_MODULES['Agenda de producción y entregas'] = render_order_planning_plus
+app_shell.FUNCTIONAL_MODULES['Agenda de producción y entregas'] = render_order_planning_capacity
 app_shell.NAVIGATION_GROUPS['Administración'] = (
     'Caja', 'Conciliación financiera', 'Reabrir cierre de caja',
     'Gastos y presupuesto', 'Equipo y comisiones', 'Historial de comisiones',
