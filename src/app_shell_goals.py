@@ -1,7 +1,7 @@
 """Extensión de navegación para metas y controles operativos."""
 
 from src import app_shell, session_backup
-from src.business_goals import render_business_goals
+from src.business_goals_plus import render_business_goals_plus
 from src.catalog_maintenance import render_catalog_maintenance
 from src.catalog_safe import render_safe_catalog
 from src.financial_control import render_financial_control
@@ -11,12 +11,16 @@ from src.team_commission_control import render_team_commission_control
 
 
 activate_purchase_trace()
-if "commission_assignments" not in session_backup.LIST_SECTIONS:
-    session_backup.LIST_SECTIONS = (*session_backup.LIST_SECTIONS, "commission_assignments")
-    session_backup.SESSION_KEYS = ("general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS)
-    session_backup.SECTION_LABELS["commission_assignments"] = "Asignaciones de comisión"
+for section, label in (
+    ("commission_assignments", "Asignaciones de comisión"),
+    ("business_goal_actions", "Acciones de metas"),
+):
+    if section not in session_backup.LIST_SECTIONS:
+        session_backup.LIST_SECTIONS = (*session_backup.LIST_SECTIONS, section)
+        session_backup.SECTION_LABELS[section] = label
+session_backup.SESSION_KEYS = ("general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS)
 
-app_shell.FUNCTIONAL_MODULES["Metas del negocio"] = render_business_goals
+app_shell.FUNCTIONAL_MODULES["Metas del negocio"] = render_business_goals_plus
 app_shell.FUNCTIONAL_MODULES["Panel financiero y cierres"] = render_financial_control
 app_shell.FUNCTIONAL_MODULES["Compras"] = render_purchases_with_trace
 app_shell.FUNCTIONAL_MODULES["Equipo y comisiones"] = render_team_commission_control
