@@ -12,6 +12,7 @@ from src.financial_reconciliation import render_financial_reconciliation
 from src.order_planning_capacity import render_order_planning_capacity
 from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
+from src.production_reversals import render_production_reversals
 from src.purchases_control import render_purchases_control
 from src.quotes_followup import render_quotes_followup
 from src.restore_rollback import activate_restore_rollback, render_backup_with_rollback
@@ -37,9 +38,10 @@ app_shell.FUNCTIONAL_MODULES['Compras'] = render_purchases_control
 app_shell.FUNCTIONAL_MODULES['Cuentas por pagar'] = render_accounts_payable_control
 app_shell.FUNCTIONAL_MODULES['Catálogo y producción'] = render_catalog_production_quality
 app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance_bulk
+app_shell.FUNCTIONAL_MODULES['Reversos de producción'] = render_production_reversals
 app_shell.NAVIGATION_GROUPS['Productos e inventario'] = (
-    'Catálogo y producción', 'Mantenimiento del catálogo', 'Inventario',
-    'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
+    'Catálogo y producción', 'Mantenimiento del catálogo', 'Reversos de producción',
+    'Inventario', 'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
     'Ajustar precios', 'Exportar precios',
 )
 app_shell.NAVIGATION_GROUPS['Administración'] = (
