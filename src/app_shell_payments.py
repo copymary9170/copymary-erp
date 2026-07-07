@@ -2,7 +2,7 @@ from src import app_shell
 from src.app_shell_goals import run_app as _run_base_app
 from src.accounts_payable_control import render_accounts_payable_control
 from src.cash_closing_reopen import activate_closing_reopen_support, render_cash_closing_reopen
-from src.catalog_maintenance import render_catalog_maintenance
+from src.catalog_maintenance_bulk import render_catalog_maintenance_bulk
 from src.catalog_production_quality import render_catalog_production_quality
 from src.commercial_reports_intelligence import render_commercial_reports_intelligence
 from src.commission_history import render_commission_history
@@ -36,7 +36,7 @@ app_shell.FUNCTIONAL_MODULES['Proveedores'] = render_suppliers_plus
 app_shell.FUNCTIONAL_MODULES['Compras'] = render_purchases_control
 app_shell.FUNCTIONAL_MODULES['Cuentas por pagar'] = render_accounts_payable_control
 app_shell.FUNCTIONAL_MODULES['Catálogo y producción'] = render_catalog_production_quality
-app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance
+app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance_bulk
 app_shell.NAVIGATION_GROUPS['Productos e inventario'] = (
     'Catálogo y producción', 'Mantenimiento del catálogo', 'Inventario',
     'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
