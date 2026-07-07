@@ -11,6 +11,7 @@ from src import accounts_receivable_plus_loader
 from src import suppliers_intelligence_loader
 from src import production_reversals_visible
 from src.inventory_planning import render_inventory_planning
+from src.inventory_movements_plus import render_inventory_movements_plus
 
 app_shell.FUNCTIONAL_MODULES["Centro de control"] = render_control_center_today
 app_shell.FUNCTIONAL_MODULES["Auditoría de datos"] = render_data_audit_insights
@@ -19,4 +20,5 @@ app_shell.FUNCTIONAL_MODULES["Panel financiero y cierres"] = render_financial_da
 app_shell.FUNCTIONAL_MODULES["Clientes"] = render_clients_followup
 app_shell.FUNCTIONAL_MODULES["Comprobantes"] = render_receipts_control
 app_shell.FUNCTIONAL_MODULES["Inventario"] = render_inventory_planning
+app_shell.FUNCTIONAL_MODULES["Movimientos de inventario"] = render_inventory_movements_plus
 run_app()
