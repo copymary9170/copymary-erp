@@ -9,6 +9,7 @@ from src.financial_dashboard_plus import render_financial_dashboard_plus
 from src.receipts_control import render_receipts_control
 from src import accounts_receivable_plus_loader
 from src import suppliers_intelligence_loader
+from src import production_reversals_visible
 
 app_shell.FUNCTIONAL_MODULES["Centro de control"] = render_control_center_today
 app_shell.FUNCTIONAL_MODULES["Auditoría de datos"] = render_data_audit_insights
