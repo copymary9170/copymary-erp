@@ -13,7 +13,7 @@ from src import production_reversals_visible
 from src.inventory_planning import render_inventory_planning
 from src.inventory_movements_enterprise import render_inventory_movements_enterprise
 from src.stock_alerts_intelligence import render_stock_alerts_intelligence
-from src.costing_plus import render_costing_plus
+from src.costing_control import render_costing_control
 
 app_shell.FUNCTIONAL_MODULES["Centro de control"] = render_control_center_today
 app_shell.FUNCTIONAL_MODULES["Auditoría de datos"] = render_data_audit_insights
@@ -24,5 +24,5 @@ app_shell.FUNCTIONAL_MODULES["Comprobantes"] = render_receipts_control
 app_shell.FUNCTIONAL_MODULES["Inventario"] = render_inventory_planning
 app_shell.FUNCTIONAL_MODULES["Movimientos de inventario"] = render_inventory_movements_enterprise
 app_shell.FUNCTIONAL_MODULES["Alertas de inventario"] = render_stock_alerts_intelligence
-app_shell.FUNCTIONAL_MODULES["Costeo"] = render_costing_plus
+app_shell.FUNCTIONAL_MODULES["Costeo"] = render_costing_control
 run_app()
