@@ -9,6 +9,7 @@ from src.commission_history import render_commission_history
 from src.commission_snapshots import activate_commission_snapshots
 from src.deletion_protection import activate_deletion_protection
 from src.financial_reconciliation import render_financial_reconciliation
+from src.inventory_plus import render_inventory_plus
 from src.order_planning_capacity import render_order_planning_capacity
 from src.payment_consistency import activate_payment_consistency
 from src.payment_reversals import render_payment_reversals
@@ -39,6 +40,7 @@ app_shell.FUNCTIONAL_MODULES['Cuentas por pagar'] = render_accounts_payable_cont
 app_shell.FUNCTIONAL_MODULES['Catálogo y producción'] = render_catalog_production_quality
 app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance_bulk
 app_shell.FUNCTIONAL_MODULES['Reversos de producción'] = render_production_reversals
+app_shell.FUNCTIONAL_MODULES['Inventario'] = render_inventory_plus
 app_shell.NAVIGATION_GROUPS['Productos e inventario'] = (
     'Catálogo y producción', 'Mantenimiento del catálogo', 'Reversos de producción',
     'Inventario', 'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
