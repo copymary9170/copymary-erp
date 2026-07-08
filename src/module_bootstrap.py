@@ -29,7 +29,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Caja", "src.cash_governance", "render_cash_governance"),
     ("Conciliación financiera", "src.financial_reconciliation_control", "render_financial_reconciliation_control"),
     ("Reabrir cierre de caja", "src.cash_reopen_governance", "render_cash_reopen_governance"),
-    ("Gastos y presupuesto", "src.expenses_budget_plus", "render_expenses_budget_plus"),
+    ("Gastos y presupuesto", "src.expenses_budget_control", "render_expenses_budget_control"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
