@@ -28,7 +28,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Exportar precios", "src.price_io_governance", "render_price_io_governance"),
     ("Caja", "src.cash_governance", "render_cash_governance"),
     ("Conciliación financiera", "src.financial_reconciliation_control", "render_financial_reconciliation_control"),
-    ("Reabrir cierre de caja", "src.cash_closing_reopen_control", "render_cash_closing_reopen_control"),
+    ("Reabrir cierre de caja", "src.cash_reopen_governance", "render_cash_reopen_governance"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
