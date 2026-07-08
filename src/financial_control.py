@@ -7,7 +7,6 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.financial import _build_financial_csv, _cash_totals, _filter_by_period, _sales_totals
-from src.financial_reconciliation import _cash_by_reference, _check_record, _expected_records
 from src.money import format_money
 
 METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro")
@@ -19,6 +18,72 @@ def _rows(key: str) -> list[dict]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _amount(value) -> float:
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _cash_by_reference(cash: list[dict]) -> dict[str, dict]:
+    """Devuelve movimientos de caja por referencia para validar cierres.
+
+    Antes este helper vivía en `financial_reconciliation`; se mantiene aquí para que
+    el panel financiero no dependa de helpers internos que pueden cambiar.
+    """
+    result: dict[str, dict] = {}
+    for item in cash:
+        for key in ("reference", "payment_id", "sale_id", "source_payment_id"):
+            value = str(item.get(key, "")).strip()
+            if value:
+                result[value] = item
+    return result
+
+
+def _expected_records() -> list[dict]:
+    records: list[dict] = []
+    for payment in _rows("payment_records"):
+        records.append({
+            "kind": "Cobro",
+            "payment_id": str(payment.get("payment_id", "")),
+            "amount": _amount(payment.get("amount")),
+            "payment_method": str(payment.get("payment_method", "Otro")),
+        })
+    for payment in _rows("supplier_payment_records"):
+        records.append({
+            "kind": "Pago proveedor",
+            "payment_id": str(payment.get("payment_id", "")),
+            "amount": _amount(payment.get("amount")),
+            "payment_method": str(payment.get("payment_method", "Otro")),
+            "expected_type": "Egreso",
+        })
+    return records
+
+
+def _check_record(record: dict, cash_map: dict[str, dict]) -> list[str]:
+    issues: list[str] = []
+    payment_id = str(record.get("payment_id", "")).strip()
+    if not payment_id:
+        return issues
+    cash = cash_map.get(payment_id)
+    if cash is None:
+        issues.append("no tiene movimiento de caja relacionado")
+        return issues
+    expected_amount = _amount(record.get("amount"))
+    cash_amount = _amount(cash.get("amount"))
+    if abs(expected_amount - cash_amount) > 0.01:
+        issues.append("el monto no coincide con caja")
+    expected_method = str(record.get("payment_method", "Otro"))
+    cash_method = str(cash.get("payment_method", "Otro"))
+    if expected_method and cash_method and expected_method != cash_method:
+        issues.append("el método de pago no coincide")
+    expected_type = str(record.get("expected_type", "Ingreso"))
+    cash_type = str(cash.get("movement_type", "Ingreso"))
+    if expected_type and cash_type and expected_type != cash_type:
+        issues.append("el tipo de movimiento no coincide")
+    return issues
 
 
 def _method(item: dict) -> str:
