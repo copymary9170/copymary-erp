@@ -17,6 +17,7 @@ from src.costing_control import render_costing_control
 from src.price_adjustment_governance import render_price_adjustment_governance
 from src.price_io_governance import render_price_io_governance
 from src.cash_plus import render_cash_plus
+from src.financial_reconciliation import render_financial_reconciliation
 
 app_shell.FUNCTIONAL_MODULES["Centro de control"] = render_control_center_today
 app_shell.FUNCTIONAL_MODULES["Auditoría de datos"] = render_data_audit_insights
@@ -31,4 +32,6 @@ app_shell.FUNCTIONAL_MODULES["Costeo"] = render_costing_control
 app_shell.FUNCTIONAL_MODULES["Ajustar precios"] = render_price_adjustment_governance
 app_shell.FUNCTIONAL_MODULES["Exportar precios"] = render_price_io_governance
 app_shell.FUNCTIONAL_MODULES["Caja"] = render_cash_plus
+app_shell.FUNCTIONAL_MODULES["Conciliación financiera"] = render_financial_reconciliation
+app_shell.NAVIGATION_GROUPS["Administración"] = (*app_shell.NAVIGATION_GROUPS["Administración"], "Conciliación financiera")
 run_app()
