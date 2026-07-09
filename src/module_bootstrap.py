@@ -11,6 +11,7 @@ from src import app_shell
 MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Centro de control", "src.control_center_today", "render_control_center_today"),
     ("Auditoría de datos", "src.data_audit_insights", "render_data_audit_insights"),
+    ("Fundación técnica", "src.foundation_status", "render_foundation_status"),
     ("Panel comercial", "src.commercial_dashboard_intelligence", "render_commercial_dashboard_intelligence"),
     ("Panel financiero y cierres", "src.financial_dashboard_plus", "render_financial_dashboard_plus"),
     ("Clientes", "src.clients_followup", "render_clients_followup"),
@@ -73,5 +74,6 @@ def activate_module_bootstrap() -> None:
         renderer = _load_renderer(module_path, renderer_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
+    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres")
     app_shell.NAVIGATION_GROUPS["Productos e inventario"] = PRODUCTS_NAVIGATION
     app_shell.NAVIGATION_GROUPS["Administración"] = ADMIN_NAVIGATION
