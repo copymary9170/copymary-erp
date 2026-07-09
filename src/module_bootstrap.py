@@ -29,6 +29,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Historial de comisiones", "src.commission_history_governance", "render_commission_history_governance"),
     ("Reversos de pagos", "src.payment_reversals_governance", "render_payment_reversals_governance"),
     ("Anulaciones y ajustes", "src.adjustments_postcontrol", "render_adjustments_postcontrol"),
+    ("Activos", "src.assets_governance", "render_assets_governance"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
