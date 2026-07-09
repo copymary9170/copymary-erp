@@ -27,7 +27,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Gastos y presupuesto", "src.expenses_budget_control", "render_expenses_budget_control"),
     ("Equipo y comisiones", "src.team_commission_governance", "render_team_commission_governance"),
     ("Historial de comisiones", "src.commission_history_governance", "render_commission_history_governance"),
-    ("Reversos de pagos", "src.payment_reversals_plus", "render_payment_reversals_plus"),
+    ("Reversos de pagos", "src.payment_reversals_governance", "render_payment_reversals_governance"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
