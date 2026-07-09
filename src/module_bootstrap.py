@@ -1,9 +1,4 @@
-"""Registro central de módulos mejorados de CopyMary ERP.
-
-Mantiene `app.py` estable para reducir conflictos entre PRs.
-Cada mejora se registra aquí de forma defensiva: si un módulo todavía no existe,
-la aplicación continúa usando la versión base ya registrada por `app_shell_payments`.
-"""
+"""Registro central de módulos mejorados de CopyMary ERP."""
 
 from __future__ import annotations
 
@@ -32,6 +27,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Gastos y presupuesto", "src.expenses_budget_control", "render_expenses_budget_control"),
     ("Equipo y comisiones", "src.team_commission_governance", "render_team_commission_governance"),
     ("Historial de comisiones", "src.commission_history_governance", "render_commission_history_governance"),
+    ("Reversos de pagos", "src.payment_reversals_plus", "render_payment_reversals_plus"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -40,32 +36,16 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
     "src.production_reversals_visible",
 )
 
-
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
-    "Catálogo y producción",
-    "Mantenimiento del catálogo",
-    "Reversos de producción",
-    "Inventario",
-    "Movimientos de inventario",
-    "Alertas de inventario",
-    "Costeo",
-    "Ajustar precios",
-    "Exportar precios",
+    "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
+    "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
+    "Ajustar precios", "Exportar precios",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
-    "Caja",
-    "Conciliación financiera",
-    "Reabrir cierre de caja",
-    "Gastos y presupuesto",
-    "Equipo y comisiones",
-    "Historial de comisiones",
-    "Reversos de pagos",
-    "Anulaciones y ajustes",
-    "Activos",
-    "Respaldar activos",
-    "Configuración General",
-    "Respaldo general",
+    "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto",
+    "Equipo y comisiones", "Historial de comisiones", "Reversos de pagos",
+    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general",
 )
 
 
@@ -85,14 +65,11 @@ def _load_renderer(module_path: str, attr_name: str) -> Callable | None:
 
 
 def activate_module_bootstrap() -> None:
-    """Registra módulos mejorados sin tocar `app.py` en cada PR."""
     for module_path in SIDE_EFFECT_MODULES:
         _try_import(module_path)
-
     for module_name, module_path, renderer_name in MODULE_RENDERERS:
         renderer = _load_renderer(module_path, renderer_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-
     app_shell.NAVIGATION_GROUPS["Productos e inventario"] = PRODUCTS_NAVIGATION
     app_shell.NAVIGATION_GROUPS["Administración"] = ADMIN_NAVIGATION
