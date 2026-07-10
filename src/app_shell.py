@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from src import auth
 from src.accounts_payable import render_accounts_payable
 from src.accounts_receivable import render_accounts_receivable
 from src.adjustments import render_adjustments
@@ -209,10 +210,28 @@ def run_app() -> None:
     )
 
     _apply_pending_navigation()
+
+    if not auth.require_login():
+        return
+
+    user = auth.current_user()
+    allowed_modules = auth.allowed_modules_for_role(user.role_id, user.role_name)
+
+    if allowed_modules is None:
+        effective_groups = NAVIGATION_GROUPS
+    else:
+        effective_groups = {}
+        for area, pages in NAVIGATION_GROUPS.items():
+            kept = tuple(page for page in pages if page == "Inicio" or page in allowed_modules)
+            if kept:
+                effective_groups[area] = kept
+        if not effective_groups:
+            effective_groups = {"Inicio": ("Inicio",)}
+
     st.session_state.setdefault("navigation_area", "Inicio")
-    if st.session_state["navigation_area"] not in NAVIGATION_GROUPS:
-        st.session_state["navigation_area"] = "Inicio"
-    valid_pages = NAVIGATION_GROUPS[st.session_state["navigation_area"]]
+    if st.session_state["navigation_area"] not in effective_groups:
+        st.session_state["navigation_area"] = next(iter(effective_groups))
+    valid_pages = effective_groups[st.session_state["navigation_area"]]
     if st.session_state.get("navigation_page") not in valid_pages:
         st.session_state["navigation_page"] = valid_pages[0]
 
@@ -221,12 +240,16 @@ def run_app() -> None:
             '<div class="cm-sidebrand"><div class="cm-sidebrand__mark">CM</div><div><div class="cm-sidebrand__name">CopyMary ERP</div><div class="cm-sidebrand__tag">Tu negocio, claro y organizado</div></div></div>',
             unsafe_allow_html=True,
         )
+        st.caption(f"Sesión: {user.display_name} · {user.role_name}")
+        if st.button("Cerrar sesión", use_container_width=True, key="logout_button"):
+            auth.logout()
+            st.rerun()
         selected_area = st.selectbox(
             "Área de trabajo",
-            tuple(NAVIGATION_GROUPS.keys()),
+            tuple(effective_groups.keys()),
             key="navigation_area",
         )
-        available_pages = NAVIGATION_GROUPS[selected_area]
+        available_pages = effective_groups[selected_area]
         if st.session_state.get("navigation_page") not in available_pages:
             st.session_state["navigation_page"] = available_pages[0]
         selected_page = st.radio(
@@ -237,6 +260,10 @@ def run_app() -> None:
         st.divider()
         st.caption(f"Versión {APP_VERSION} · {PROJECT_STATUS}")
         st.info("Guarda un respaldo general antes de cerrar la sesión.")
+
+    if allowed_modules is not None and selected_page != "Inicio" and selected_page not in allowed_modules:
+        st.error("No tienes permiso para ver esta sección. Pide acceso a un administrador.")
+        return
 
     if selected_page == "Inicio":
         render_home()
