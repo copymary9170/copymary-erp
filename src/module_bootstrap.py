@@ -22,6 +22,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Costeo", "src.costing_control", "render_costing_control"),
     ("Costeo por procesos", "src.bom_costing", "render_bom_costing"),
     ("Órdenes de producción", "src.production_orders", "render_production_orders"),
+    ("BOM multinivel", "src.bom_multilevel", "render_bom_multilevel"),
     ("Ajustar precios", "src.price_adjustment_governance", "render_price_adjustment_governance"),
     ("Exportar precios", "src.price_io_governance", "render_price_io_governance"),
     ("Caja", "src.cash_governance", "render_cash_governance"),
@@ -44,7 +45,7 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
     "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
     "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
-    "Costeo por procesos", "Órdenes de producción", "Ajustar precios", "Exportar precios",
+    "Costeo por procesos", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
