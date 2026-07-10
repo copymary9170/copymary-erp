@@ -21,6 +21,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Alertas de inventario", "src.stock_alerts_intelligence", "render_stock_alerts_intelligence"),
     ("Costeo", "src.costing_control", "render_costing_control"),
     ("Costeo por procesos", "src.bom_costing", "render_bom_costing"),
+    ("Tasas de cambio", "src.exchange_rates", "render_exchange_rates"),
     ("Órdenes de producción", "src.production_orders", "render_production_orders"),
     ("BOM multinivel", "src.bom_multilevel", "render_bom_multilevel"),
     ("Ajustar precios", "src.price_adjustment_governance", "render_price_adjustment_governance"),
@@ -34,6 +35,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Reversos de pagos", "src.payment_reversals_governance", "render_payment_reversals_governance"),
     ("Anulaciones y ajustes", "src.adjustments_postcontrol", "render_adjustments_postcontrol"),
     ("Activos", "src.assets_governance", "render_assets_governance"),
+    ("Usuarios y roles", "src.users_roles", "render_users_roles"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -45,13 +47,13 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
     "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
     "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
-    "Costeo por procesos", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios",
+    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
     "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto",
     "Equipo y comisiones", "Historial de comisiones", "Reversos de pagos",
-    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general",
+    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles",
 )
 
 

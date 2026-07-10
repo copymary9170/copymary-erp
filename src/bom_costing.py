@@ -1,4 +1,4 @@
-"""Costeo inicial por recetas BOM."""
+"""Costeo por recetas BOM (materiales, máquinas, consumibles, sublimación, área/anidado)."""
 
 from datetime import date
 from uuid import uuid4
@@ -8,7 +8,7 @@ import streamlit as st
 
 from src import app_shell
 from src.components import render_info_card, render_page_header
-from src.erp_database import connect, initialize_database
+from src.erp_database import connect, initialize_database, latest_exchange_rate
 from src.money import format_money, get_currency
 
 
@@ -20,6 +20,10 @@ TABLES = {
     "steps": "recipe_steps",
     "jobs": "costed_jobs",
 }
+
+RECOMMENDED_MATERIAL_TYPES = ("vinil_fino", "vinil_grueso", "cartulina", "carton", "otro")
+SUBSTRATES = ("tela_poliester", "taza_ceramica", "gorra", "metal", "otro")
+PRESSURE_LEVELS = ("baja", "media", "alta")
 
 
 def _rows(table_name: str) -> list[dict]:
@@ -42,13 +46,32 @@ def _money(value) -> str:
     return format_money(float(value or 0), get_currency())
 
 
+def _material_unit_cost(material: dict, print_mode: str) -> float:
+    """Devuelve el costo unitario del material según el modo de impresión.
+
+    Si las columnas nuevas (unit_cost_color / unit_cost_bw) todavía no tienen
+    valor para una fila antigua, se cae al `unit_cost` original para no romper
+    materiales ya cargados antes de esta migración.
+    """
+    legacy_cost = float(material.get("unit_cost") or 0)
+    color_cost = material.get("unit_cost_color")
+    bw_cost = material.get("unit_cost_bw")
+    if print_mode == "bn":
+        return float(bw_cost) if bw_cost not in (None, "") else legacy_cost
+    return float(color_cost) if color_cost not in (None, "") else legacy_cost
+
+
 def _step_total(step: dict, materials: dict, machines: dict, consumables: list[dict]) -> dict:
     material_cost = 0.0
     material_id = str(step.get("material_id") or "")
     if material_id in materials:
         material = materials[material_id]
         waste = float(material.get("waste_percent") or 0) / 100.0
-        material_cost = float(step.get("material_quantity") or 0) * float(material.get("unit_cost") or 0) * (1 + waste)
+        print_mode = str(step.get("print_mode") or "color")
+        unit_cost = _material_unit_cost(material, print_mode)
+        raw_cost = float(step.get("material_quantity") or 0) * unit_cost * (1 + waste)
+        pieces_per_sheet = max(float(step.get("pieces_per_sheet") or 1), 1)
+        material_cost = raw_cost / pieces_per_sheet
 
     machine_cost = 0.0
     energy_cost = 0.0
@@ -81,8 +104,59 @@ def _recipe_total(recipe_id: str) -> tuple[float, list[dict]]:
     for step in sorted(steps, key=lambda row: int(row.get("step_order") or 0)):
         cost = _step_total(step, materials, machines, consumables)
         total += cost["total"]
-        details.append({"process": step.get("process_type"), **cost})
+        detail = {"process": step.get("process_type"), **cost}
+        if step.get("process_type") == "Sublimación":
+            detail["substrate"] = step.get("substrate")
+            detail["temperature_c"] = step.get("temperature_c")
+            detail["time_seconds"] = step.get("time_seconds")
+            detail["pressure_level"] = step.get("pressure_level")
+        details.append(detail)
     return total, details
+
+
+def _duplicate_recipe_as_new_version(recipe: dict) -> None:
+    new_recipe_id = f"REC-{uuid4().hex[:8].upper()}"
+    _insert(
+        TABLES["recipes"],
+        {
+            "recipe_id": new_recipe_id,
+            "name": recipe.get("name"),
+            "category": recipe.get("category"),
+            "target_margin_percent": float(recipe.get("target_margin_percent") or 0),
+            "version": int(recipe.get("version") or 1) + 1,
+            "parent_recipe_id": recipe.get("recipe_id"),
+            "active": 1,
+            "created_at_utc": date.today().isoformat(),
+        },
+    )
+    steps = [row for row in _rows(TABLES["steps"]) if row.get("recipe_id") == recipe.get("recipe_id")]
+    for step in steps:
+        _insert(
+            TABLES["steps"],
+            {
+                "step_id": f"STP-{uuid4().hex[:8].upper()}",
+                "recipe_id": new_recipe_id,
+                "step_order": step.get("step_order"),
+                "process_type": step.get("process_type"),
+                "material_id": step.get("material_id"),
+                "material_quantity": step.get("material_quantity"),
+                "machine_id": step.get("machine_id"),
+                "machine_minutes": step.get("machine_minutes"),
+                "labor_minutes": step.get("labor_minutes"),
+                "labor_rate_per_hour": step.get("labor_rate_per_hour"),
+                "electricity_rate_per_kwh": step.get("electricity_rate_per_kwh"),
+                "notes": step.get("notes"),
+                "print_mode": step.get("print_mode") or "color",
+                "substrate": step.get("substrate") or "",
+                "temperature_c": step.get("temperature_c"),
+                "time_seconds": step.get("time_seconds"),
+                "pressure_level": step.get("pressure_level") or "",
+                "design_area_cm2": step.get("design_area_cm2"),
+                "sheet_area_cm2": step.get("sheet_area_cm2"),
+                "pieces_per_sheet": step.get("pieces_per_sheet") or 1,
+                "created_at_utc": date.today().isoformat(),
+            },
+        )
 
 
 def render_bom_costing() -> None:
@@ -109,18 +183,25 @@ def render_bom_costing() -> None:
             name = st.text_input("Material")
             category = st.text_input("Categoría", value="Papel")
             unit = st.selectbox("Unidad", ("hoja", "unidad", "cm2", "m2", "metro", "ml", "gramo"))
-            unit_cost = st.number_input("Costo unitario", min_value=0.0, value=0.0, step=0.1)
+            cost_cols = st.columns(2)
+            with cost_cols[0]:
+                unit_cost_color = st.number_input("Costo unitario a color", min_value=0.0, value=0.0, step=0.1)
+            with cost_cols[1]:
+                unit_cost_bw = st.number_input("Costo unitario blanco y negro", min_value=0.0, value=0.0, step=0.1)
             waste = st.number_input("Merma %", min_value=0.0, value=0.0, step=0.5)
             use_type = st.selectbox("Uso", ("insumo", "reventa", "mixto"))
             submitted = st.form_submit_button("Guardar material", type="primary", use_container_width=True)
         if submitted:
-            if not name.strip() or unit_cost <= 0:
-                st.error("Material y costo son obligatorios.")
+            if not name.strip() or unit_cost_color <= 0:
+                st.error("Material y costo a color son obligatorios.")
             else:
-                _insert(TABLES["materials"], {"material_id": f"MAT-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "unit": unit, "unit_cost": float(unit_cost), "currency": get_currency(), "waste_percent": float(waste), "use_type": use_type, "active": 1, "created_at_utc": date.today().isoformat()})
+                effective_bw = unit_cost_bw if unit_cost_bw > 0 else unit_cost_color
+                _insert(TABLES["materials"], {"material_id": f"MAT-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "unit": unit, "unit_cost": float(unit_cost_color), "unit_cost_color": float(unit_cost_color), "unit_cost_bw": float(effective_bw), "currency": get_currency(), "waste_percent": float(waste), "use_type": use_type, "active": 1, "created_at_utc": date.today().isoformat()})
                 st.rerun()
         for row in materials[:60]:
-            st.write(f"**{row.get('name')}** · {_money(row.get('unit_cost'))}/{row.get('unit')} · merma {row.get('waste_percent')}%")
+            color_cost = row.get("unit_cost_color") or row.get("unit_cost")
+            bw_cost = row.get("unit_cost_bw") or row.get("unit_cost")
+            st.write(f"**{row.get('name')}** · color {_money(color_cost)}/{row.get('unit')} · B/N {_money(bw_cost)}/{row.get('unit')} · merma {row.get('waste_percent')}%")
 
     with mac_tab:
         with st.form("bom_machine_form", clear_on_submit=True):
@@ -152,14 +233,16 @@ def render_bom_costing() -> None:
                 unit = st.selectbox("Unidad de vida", ("corte", "metro", "hora", "unidad"))
                 cost = st.number_input("Costo reposición", min_value=0.0, value=0.0, step=1.0)
                 life = st.number_input("Vida útil", min_value=1.0, value=100.0, step=1.0)
+                recommended_type = st.selectbox("Tipo de material recomendado", RECOMMENDED_MATERIAL_TYPES)
                 submitted = st.form_submit_button("Guardar consumible", type="primary", use_container_width=True)
             if submitted:
                 machine = machine_options[selected]
-                _insert(TABLES["consumables"], {"consumable_id": f"CON-{uuid4().hex[:8].upper()}", "machine_id": machine.get("machine_id"), "name": name.strip(), "unit": unit, "replacement_cost": float(cost), "useful_life_units": float(life), "active": 1, "created_at_utc": date.today().isoformat()})
+                _insert(TABLES["consumables"], {"consumable_id": f"CON-{uuid4().hex[:8].upper()}", "machine_id": machine.get("machine_id"), "name": name.strip(), "unit": unit, "replacement_cost": float(cost), "useful_life_units": float(life), "recommended_material_type": recommended_type, "active": 1, "created_at_utc": date.today().isoformat()})
                 st.rerun()
         for row in consumables[:60]:
             per_use = float(row.get("replacement_cost") or 0) / max(float(row.get("useful_life_units") or 1), 1)
-            st.write(f"**{row.get('name')}** · costo por uso {_money(per_use)}")
+            recommended = row.get("recommended_material_type") or "sin especificar"
+            st.write(f"**{row.get('name')}** · costo por uso {_money(per_use)} · recomendado para {recommended}")
 
     with rec_tab:
         with st.form("bom_recipe_form", clear_on_submit=True):
@@ -171,38 +254,53 @@ def render_bom_costing() -> None:
             if not name.strip():
                 st.error("Nombre obligatorio.")
             else:
-                _insert(TABLES["recipes"], {"recipe_id": f"REC-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "target_margin_percent": float(margin), "active": 1, "created_at_utc": date.today().isoformat()})
+                _insert(TABLES["recipes"], {"recipe_id": f"REC-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "target_margin_percent": float(margin), "version": 1, "parent_recipe_id": None, "active": 1, "created_at_utc": date.today().isoformat()})
                 st.rerun()
         for row in recipes[:60]:
             total, _details = _recipe_total(row.get("recipe_id"))
             price = total * (1 + float(row.get("target_margin_percent") or 0) / 100.0)
-            st.write(f"**{row.get('name')}** · costo {_money(total)} · precio {_money(price)}")
+            info_col, action_col = st.columns([4, 1])
+            with info_col:
+                st.write(f"**{row.get('name')}** (v{row.get('version') or 1}) · costo {_money(total)} · precio {_money(price)}")
+            with action_col:
+                if st.button("Nueva versión", key=f"dup_{row.get('recipe_id')}", use_container_width=True):
+                    _duplicate_recipe_as_new_version(row)
+                    st.rerun()
 
     with step_tab:
         if not recipes:
             st.info("Primero registra una receta.")
         else:
-            recipe_options = {f"{row.get('name')} · {row.get('recipe_id')}": row for row in recipes}
+            recipe_options = {f"{row.get('name')} (v{row.get('version') or 1}) · {row.get('recipe_id')}": row for row in recipes}
             material_options = {"Sin material": {"material_id": ""}, **{f"{row.get('name')} · {row.get('material_id')}": row for row in materials}}
             machine_options = {"Sin máquina": {"machine_id": ""}, **{f"{row.get('name')} · {row.get('machine_id')}": row for row in machines}}
+            process_choice = st.selectbox("Proceso", ("Impresión", "Corte", "Foil", "Sublimación", "Encuadernado", "Armado", "Empaque", "Otro"), key="bom_step_process_preview")
             with st.form("bom_step_form", clear_on_submit=True):
                 rec = st.selectbox("Receta", tuple(recipe_options.keys()))
                 order = st.number_input("Orden", min_value=1, value=1, step=1)
-                process = st.selectbox("Proceso", ("Impresión", "Corte", "Foil", "Sublimación", "Encuadernado", "Armado", "Empaque", "Otro"))
                 mat = st.selectbox("Material", tuple(material_options.keys()))
+                print_mode_label = st.selectbox("Modo de impresión del material", ("Color", "Blanco y negro"))
                 mat_qty = st.number_input("Cantidad material", min_value=0.0, value=0.0, step=0.1)
+                design_area = st.number_input("Área diseño (cm²)", min_value=0.0, value=0.0, step=1.0)
+                sheet_area = st.number_input("Área hoja/rollo (cm²)", min_value=0.0, value=0.0, step=1.0)
+                pieces_per_sheet = st.number_input("Piezas por hoja", min_value=1.0, value=1.0, step=1.0)
                 mac = st.selectbox("Máquina", tuple(machine_options.keys()))
                 mac_minutes = st.number_input("Minutos máquina", min_value=0.0, value=0.0, step=0.5)
                 labor_minutes = st.number_input("Minutos mano de obra", min_value=0.0, value=0.0, step=0.5)
                 labor_rate = st.number_input("Tarifa hora mano de obra", min_value=0.0, value=0.0, step=1.0)
                 energy_rate = st.number_input("Tarifa kWh", min_value=0.0, value=0.0, step=0.01)
+                substrate = st.selectbox("Sustrato", SUBSTRATES)
+                temperature_c = st.number_input("Temperatura (°C)", min_value=0.0, value=0.0, step=1.0)
+                time_seconds = st.number_input("Tiempo (segundos)", min_value=0.0, value=0.0, step=5.0)
+                pressure_level = st.selectbox("Presión", PRESSURE_LEVELS)
                 notes = st.text_input("Notas")
                 submitted = st.form_submit_button("Guardar paso", type="primary", use_container_width=True)
             if submitted:
                 recipe = recipe_options[rec]
                 material = material_options[mat]
                 machine = machine_options[mac]
-                _insert(TABLES["steps"], {"step_id": f"STP-{uuid4().hex[:8].upper()}", "recipe_id": recipe.get("recipe_id"), "step_order": int(order), "process_type": process, "material_id": material.get("material_id"), "material_quantity": float(mat_qty), "machine_id": machine.get("machine_id"), "machine_minutes": float(mac_minutes), "labor_minutes": float(labor_minutes), "labor_rate_per_hour": float(labor_rate), "electricity_rate_per_kwh": float(energy_rate), "notes": notes.strip(), "created_at_utc": date.today().isoformat()})
+                is_sublimation = process_choice == "Sublimación"
+                _insert(TABLES["steps"], {"step_id": f"STP-{uuid4().hex[:8].upper()}", "recipe_id": recipe.get("recipe_id"), "step_order": int(order), "process_type": process_choice, "material_id": material.get("material_id"), "material_quantity": float(mat_qty), "machine_id": machine.get("machine_id"), "machine_minutes": float(mac_minutes), "labor_minutes": float(labor_minutes), "labor_rate_per_hour": float(labor_rate), "electricity_rate_per_kwh": float(energy_rate), "notes": notes.strip(), "print_mode": "bn" if print_mode_label == "Blanco y negro" else "color", "substrate": substrate if is_sublimation else "", "temperature_c": float(temperature_c) if is_sublimation and temperature_c > 0 else None, "time_seconds": float(time_seconds) if is_sublimation and time_seconds > 0 else None, "pressure_level": pressure_level if is_sublimation else "", "design_area_cm2": float(design_area) if design_area > 0 else None, "sheet_area_cm2": float(sheet_area) if sheet_area > 0 else None, "pieces_per_sheet": float(pieces_per_sheet), "created_at_utc": date.today().isoformat()})
                 st.rerun()
         for row in steps[:100]:
             st.write(f"**{row.get('process_type')}** · receta {row.get('recipe_id')} · orden {row.get('step_order')}")
@@ -211,13 +309,15 @@ def render_bom_costing() -> None:
         if not recipes:
             st.info("No hay recetas.")
         else:
-            recipe_options = {f"{row.get('name')} · {row.get('recipe_id')}": row for row in recipes}
+            recipe_options = {f"{row.get('name')} (v{row.get('version') or 1}) · {row.get('recipe_id')}": row for row in recipes}
             selected = st.selectbox("Receta", tuple(recipe_options.keys()))
             qty = st.number_input("Cantidad", min_value=1.0, value=1.0, step=1.0)
             recipe = recipe_options[selected]
             unit_cost, details = _recipe_total(recipe.get("recipe_id"))
             total_cost = unit_cost * float(qty)
             price = total_cost * (1 + float(recipe.get("target_margin_percent") or 0) / 100.0)
+            currency = get_currency()
+            rate = latest_exchange_rate(currency) if currency != "USD" else None
             m = st.columns(3)
             m[0].metric("Costo unidad", _money(unit_cost))
             m[1].metric("Costo total", _money(total_cost))
@@ -225,7 +325,7 @@ def render_bom_costing() -> None:
             for item in details:
                 st.write(f"**{item['process']}** · total {_money(item['total'])} · material {_money(item['material'])} · máquina {_money(item['machine'])} · consumible {_money(item['consumable'])} · mano de obra {_money(item['labor'])} · luz {_money(item['energy'])}")
             if st.button("Guardar trabajo costeado", type="primary", use_container_width=True, disabled=unit_cost <= 0):
-                _insert(TABLES["jobs"], {"job_id": f"JOB-{uuid4().hex[:8].upper()}", "recipe_id": recipe.get("recipe_id"), "job_date": date.today().isoformat(), "quantity": float(qty), "currency": get_currency(), "cost_total": float(total_cost), "price_total": float(price), "details_json": json.dumps(details, ensure_ascii=False), "created_at_utc": date.today().isoformat()})
+                _insert(TABLES["jobs"], {"job_id": f"JOB-{uuid4().hex[:8].upper()}", "recipe_id": recipe.get("recipe_id"), "job_date": date.today().isoformat(), "quantity": float(qty), "currency": currency, "cost_total": float(total_cost), "price_total": float(price), "details_json": json.dumps(details, ensure_ascii=False), "exchange_rate_id": rate.get("rate_id") if rate else None, "created_at_utc": date.today().isoformat()})
                 st.success("Trabajo costeado guardado.")
 
     render_info_card("Costeo por receta", "El costo final sale de pasos acumulados: material, máquina, consumible, mano de obra y electricidad.", "BOM")

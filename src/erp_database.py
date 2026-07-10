@@ -25,7 +25,7 @@ from uuid import uuid4
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -77,6 +77,46 @@ def connect() -> Iterator[sqlite3.Connection]:
         connection.commit()
     finally:
         connection.close()
+
+
+def _existing_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {row["name"] for row in rows}
+
+
+def _ensure_columns(connection: sqlite3.Connection, table_name: str, columns: dict[str, str]) -> None:
+    """Agrega columnas nuevas a una tabla existente sin perder datos (migración idempotente)."""
+    present = _existing_columns(connection, table_name)
+    for column_name, column_definition in columns.items():
+        if column_name not in present:
+            connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+
+
+def _migrate_costing_v2(connection: sqlite3.Connection) -> None:
+    """Migración v2: color/BN, consumibles, sublimación, anidado, versiones y tasas."""
+    _ensure_columns(connection, "production_materials", {"unit_cost_color": "REAL", "unit_cost_bw": "REAL"})
+    _ensure_columns(connection, "machine_consumables", {"recommended_material_type": "TEXT NOT NULL DEFAULT ''"})
+    _ensure_columns(connection, "product_recipes", {"version": "INTEGER NOT NULL DEFAULT 1", "parent_recipe_id": "TEXT"})
+    _ensure_columns(
+        connection,
+        "recipe_steps",
+        {
+            "print_mode": "TEXT NOT NULL DEFAULT 'color'",
+            "substrate": "TEXT NOT NULL DEFAULT ''",
+            "temperature_c": "REAL",
+            "time_seconds": "REAL",
+            "pressure_level": "TEXT NOT NULL DEFAULT ''",
+            "design_area_cm2": "REAL",
+            "sheet_area_cm2": "REAL",
+            "pieces_per_sheet": "REAL NOT NULL DEFAULT 1",
+        },
+    )
+    _ensure_columns(connection, "costed_jobs", {"exchange_rate_id": "TEXT"})
+
+
+def _migrate_auth_v3(connection: sqlite3.Connection) -> None:
+    """Migración v3: enlaza cada usuario con un rol."""
+    _ensure_columns(connection, "app_users", {"role_id": "TEXT"})
 
 
 def initialize_database() -> DatabaseStatus:
@@ -217,7 +257,17 @@ def initialize_database() -> DatabaseStatus:
         )
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (SCHEMA_VERSION, "foundation_schema", _now()),
+            (1, "foundation_schema", _now()),
+        )
+        _migrate_costing_v2(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (2, "costing_process_detail", _now()),
+        )
+        _migrate_auth_v3(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (3, "auth_roles", _now()),
         )
     return get_database_status()
 
@@ -237,6 +287,22 @@ def get_database_status() -> DatabaseStatus:
         except sqlite3.Error:
             return DatabaseStatus("sqlite", str(path), 0, False, "Existe archivo SQLite, pero el esquema no está inicializado.")
     return DatabaseStatus("sqlite", str(path), version, ready and version >= SCHEMA_VERSION, "Base inicial lista." if ready and version >= SCHEMA_VERSION else "Pendiente por inicializar.")
+
+
+def latest_exchange_rate(target_currency: str, source_currency: str = "USD") -> dict[str, Any] | None:
+    """Devuelve la tasa de cambio más reciente para source_currency -> target_currency."""
+    initialize_database()
+    with connect() as connection:
+        row = connection.execute(
+            """
+            SELECT * FROM exchange_rates
+            WHERE source_currency = ? AND target_currency = ?
+            ORDER BY rate_date DESC, created_at_utc DESC
+            LIMIT 1
+            """,
+            (source_currency, target_currency),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def record_audit_event(module_name: str, entity_name: str, entity_id: str, action_name: str, before: dict[str, Any] | None = None, after: dict[str, Any] | None = None, reason: str = "", actor_user_id: str = "") -> str:
