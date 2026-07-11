@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 120 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 144 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -39,6 +39,9 @@ pytest tests/ -v
 | `test_financial_reconciliation.py` | Emparejamiento automático de movimientos con líneas bancarias (tolerancia de monto/fecha, puntaje, referencia) |
 | `test_module_registration.py` | Protege la convención de capas `base → plus → control/governance`: falla si el menú no apunta a la capa más completa, o si un módulo registrado no importa |
 | `test_lint.py` | Corre `pyflakes` sobre `src/` y falla si hay nombres indefinidos (atrapa bugs tipo `NameError` antes de producción) |
+| `test_assets.py` | Depreciación de activos (por unidad, acumulada, tope al 100%), valor restante, actualización de unidades acumuladas |
+| `test_expenses_budget.py` | Extracción de mes/año, búsqueda de presupuesto por categoría y mes |
+| `test_catalog.py` | Catálogo de producción con receta simple: costo de receta, máximo producible según el material más escaso, validación de disponibilidad, consumo de inventario al producir |
 
 ## Soporte de PostgreSQL
 
@@ -79,9 +82,11 @@ pendiente — se eliminó.
 
 ## Qué falta (pendiente, no cubierto todavía)
 
-Catálogo/producción, activos, y gastos/presupuesto todavía no tienen pruebas
-propias. La lógica de negocio principal de cada dominio (costeo, inventario,
-producción, comisiones, caja, conciliación) ya está cubierta, igual que la
+Los módulos `_plus`/`_control`/`_governance` que extienden a los de arriba
+(la capa de negocio "extra": historiales, exportaciones, reversos, etc.)
+todavía no tienen pruebas propias. La lógica de negocio central de cada
+dominio — costeo, inventario, producción/catálogo, comisiones, caja,
+conciliación, activos, gastos/presupuesto — ya está cubierta, igual que la
 base de datos (SQLite y PostgreSQL) y la convención de capas de módulos.
 
 ## Regla del proyecto
