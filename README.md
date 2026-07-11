@@ -101,6 +101,16 @@ export COPYMARY_TEST_POSTGRES_URL="postgresql://usuario:clave@host:5432/copymary
 pytest tests/ -v
 ```
 
+## Despliegue en producción (self-hosted, sin depender de ningún proveedor)
+
+Para uso real con datos del negocio, la ruta recomendada es un VPS propio con
+Docker: app + PostgreSQL + HTTPS automático + respaldos automáticos diarios,
+todo administrado con 2-3 comandos. Es independiente de cualquier proveedor
+específico — funciona igual en DigitalOcean, Hetzner, AWS, o un servidor
+propio.
+
+**Ver [`DEPLOY.md`](./DEPLOY.md) para la guía completa paso a paso.**
+
 ## Probar desde Streamlit Community Cloud
 
 La aplicación puede probarse completamente desde el navegador, sin Visual Studio Code y sin instalar programas localmente.
@@ -129,6 +139,7 @@ Pasos:
 
 ## Documentación adicional
 
+- `DEPLOY.md`: guía completa de despliegue self-hosted (Docker + PostgreSQL + HTTPS + respaldos).
 - `docs/COPYMARY_ENTERPRISE_CONTEXTO_MAESTRO.md`: visión, filosofía y dominios del negocio.
 - `docs/ROADMAP_ARQUITECTURA.md`: fases de desarrollo planeadas.
 - `docs/auditoria-copymary-1.md` y `docs/error-real-copymary-1.md`: por qué se reinició el proyecto.
@@ -136,8 +147,7 @@ Pasos:
 
 ## Próximo paso recomendado
 
-La lógica de negocio principal, la autenticación, y ahora la base de datos
-(SQLite y PostgreSQL) tienen pruebas automáticas. El siguiente paso es el
-despliegue en un servidor propio o proveedor cloud con PostgreSQL gestionado
-(en vez de Streamlit Community Cloud), para pasar de "probar" a "usar en el
-negocio real".
+Las bases están completas: pruebas automáticas, autenticación, PostgreSQL, y
+ahora una guía de despliegue self-hosted completa (`DEPLOY.md`). El siguiente
+paso es genuinamente operativo: contratar el servidor, seguir `DEPLOY.md`, y
+empezar a cargar datos reales del negocio.
