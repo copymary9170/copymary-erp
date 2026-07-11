@@ -32,6 +32,30 @@ def test_material_unit_cost_falls_back_to_legacy_cost_when_color_missing():
 
 
 # ---------------------------------------------------------------------------
+# suggested_pieces_per_sheet (estimación de anidado por área)
+# ---------------------------------------------------------------------------
+
+def test_suggested_pieces_per_sheet_divides_areas():
+    # Hoja de 900 cm², diseño de 100 cm² -> caben 9 piezas.
+    assert bom_costing.suggested_pieces_per_sheet(design_area_cm2=100.0, sheet_area_cm2=900.0) == 9
+
+
+def test_suggested_pieces_per_sheet_rounds_down():
+    # 900 / 400 = 2.25 -> se redondea hacia abajo, no se asume que cabe una pieza parcial.
+    assert bom_costing.suggested_pieces_per_sheet(design_area_cm2=400.0, sheet_area_cm2=900.0) == 2
+
+
+def test_suggested_pieces_per_sheet_has_floor_of_one():
+    # Un diseño más grande que la hoja no debe dar 0 (evita división en costo por cero piezas).
+    assert bom_costing.suggested_pieces_per_sheet(design_area_cm2=1000.0, sheet_area_cm2=100.0) == 1
+
+
+def test_suggested_pieces_per_sheet_defaults_to_one_without_area_data():
+    assert bom_costing.suggested_pieces_per_sheet(design_area_cm2=0.0, sheet_area_cm2=0.0) == 1
+    assert bom_costing.suggested_pieces_per_sheet(design_area_cm2=100.0, sheet_area_cm2=0.0) == 1
+
+
+# ---------------------------------------------------------------------------
 # _step_total
 # ---------------------------------------------------------------------------
 

@@ -61,6 +61,19 @@ def _material_unit_cost(material: dict, print_mode: str) -> float:
     return float(color_cost) if color_cost not in (None, "") else legacy_cost
 
 
+def suggested_pieces_per_sheet(design_area_cm2: float, sheet_area_cm2: float) -> int:
+    """Estima cuántas piezas caben en una hoja/rollo a partir del área.
+
+    Es una estimación simple por área (hoja // diseño), no un anidado real
+    con rotación de piezas: para diseños muy irregulares el anidado real
+    puede caber un poco más. Sirve como sugerencia inicial, no como valor
+    definitivo — el usuario puede ajustarlo manualmente en el formulario.
+    """
+    if design_area_cm2 <= 0 or sheet_area_cm2 <= 0:
+        return 1
+    return max(int(sheet_area_cm2 // design_area_cm2), 1)
+
+
 def _step_total(step: dict, materials: dict, machines: dict, consumables: list[dict]) -> dict:
     material_cost = 0.0
     material_id = str(step.get("material_id") or "")
@@ -275,15 +288,21 @@ def render_bom_costing() -> None:
             material_options = {"Sin material": {"material_id": ""}, **{f"{row.get('name')} · {row.get('material_id')}": row for row in materials}}
             machine_options = {"Sin máquina": {"machine_id": ""}, **{f"{row.get('name')} · {row.get('machine_id')}": row for row in machines}}
             process_choice = st.selectbox("Proceso", ("Impresión", "Corte", "Foil", "Sublimación", "Encuadernado", "Armado", "Empaque", "Otro"), key="bom_step_process_preview")
+            area_cols = st.columns(2)
+            design_area_preview = area_cols[0].number_input("Área diseño (cm²)", min_value=0.0, value=0.0, step=1.0, key="bom_step_design_area_preview")
+            sheet_area_preview = area_cols[1].number_input("Área hoja/rollo (cm²)", min_value=0.0, value=0.0, step=1.0, key="bom_step_sheet_area_preview")
+            suggested_pieces = suggested_pieces_per_sheet(design_area_preview, sheet_area_preview)
+            if design_area_preview > 0 and sheet_area_preview > 0:
+                st.caption(f"Sugerencia por área: ~{suggested_pieces} pieza(s) por hoja (estimación simple, no anidado real — ajústalo abajo si tu diseño encaja distinto).")
             with st.form("bom_step_form", clear_on_submit=True):
                 rec = st.selectbox("Receta", tuple(recipe_options.keys()))
                 order = st.number_input("Orden", min_value=1, value=1, step=1)
                 mat = st.selectbox("Material", tuple(material_options.keys()))
                 print_mode_label = st.selectbox("Modo de impresión del material", ("Color", "Blanco y negro"))
                 mat_qty = st.number_input("Cantidad material", min_value=0.0, value=0.0, step=0.1)
-                design_area = st.number_input("Área diseño (cm²)", min_value=0.0, value=0.0, step=1.0)
-                sheet_area = st.number_input("Área hoja/rollo (cm²)", min_value=0.0, value=0.0, step=1.0)
-                pieces_per_sheet = st.number_input("Piezas por hoja", min_value=1.0, value=1.0, step=1.0)
+                design_area = st.number_input("Área diseño (cm²)", min_value=0.0, value=design_area_preview, step=1.0)
+                sheet_area = st.number_input("Área hoja/rollo (cm²)", min_value=0.0, value=sheet_area_preview, step=1.0)
+                pieces_per_sheet = st.number_input("Piezas por hoja", min_value=1.0, value=float(suggested_pieces), step=1.0)
                 mac = st.selectbox("Máquina", tuple(machine_options.keys()))
                 mac_minutes = st.number_input("Minutos máquina", min_value=0.0, value=0.0, step=0.5)
                 labor_minutes = st.number_input("Minutos mano de obra", min_value=0.0, value=0.0, step=0.5)
