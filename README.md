@@ -42,8 +42,9 @@ Incluye:
   - Reversos de pago, anulaciones y ajustes
   - Activos con depreciación
   - Usuarios y roles
-- **Pruebas automáticas** con `pytest` para autenticación, permisos, base de datos y
-  utilidades compartidas (ver `tests/README.md`).
+- **Pruebas automáticas** con `pytest` (100 tests) cubriendo autenticación, base
+  de datos, costeo, inventario, producción, comisiones, caja y conciliación
+  financiera (ver `tests/README.md`).
 
 Lo que **todavía no existe**:
 
@@ -100,5 +101,8 @@ Pasos:
 
 ## Próximo paso recomendado
 
-Agregar pruebas automáticas a producción, comisiones y caja/conciliación
-financiera, que son los módulos de negocio que todavía no tienen cobertura.
+La lógica de negocio principal (costeo, inventario, producción, comisiones,
+caja, conciliación) ya tiene pruebas automáticas. El siguiente paso es
+extender la cobertura a los módulos `_plus`/`_control`/`_governance` que
+extienden a los de base, y considerar la migración a PostgreSQL documentada
+en `src/erp_database.py`.

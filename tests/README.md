@@ -22,11 +22,17 @@ pytest tests/ -v
 | `test_costing.py` | Depreciación de activos, costo unitario de inventario, cálculo de precio/ganancia (costeo simple) |
 | `test_bom_costing.py` | Costeo por procesos: costo de material según modo de impresión, costo de máquina/consumibles/mano de obra por paso, total de receta multi-paso |
 | `test_inventory.py` | Valuación de stock, alertas de stock mínimo, ajuste de entradas/salidas, costo unitario de movimientos |
+| `test_production_orders.py` | Costo/precio de órdenes, filtrado de órdenes abiertas y atrasadas, flujo de estados válidos |
+| `test_team_commissions.py` | Cálculo de comisión por porcentaje y por monto fijo, pagos acumulados por colaborador |
+| `test_cash_closing_reopen.py` | Cierres activos vs. reabiertos, montos de apertura por método de pago |
+| `test_financial_reconciliation.py` | Emparejamiento automático de movimientos con líneas bancarias (tolerancia de monto/fecha, puntaje, referencia) |
 
 ## Qué falta (pendiente, no cubierto todavía)
 
-Producción, comisiones, caja y conciliación financiera todavía no tienen
-pruebas propias. Son la siguiente prioridad.
+Los módulos restantes (`_plus`/`_control`/`_governance` que extienden a los de
+arriba, catálogo/producción, activos, gastos y presupuesto) todavía no tienen
+pruebas propias. La lógica de negocio principal de cada dominio (costeo,
+inventario, producción, comisiones, caja, conciliación) ya está cubierta.
 
 ## Regla del proyecto
 
