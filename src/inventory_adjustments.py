@@ -1,19 +1,12 @@
 """Ajustes manuales y conteos físicos de inventario."""
 
-from datetime import datetime, timezone
+
 from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now, read_list as _rows
 
 
 def render_inventory_adjustments() -> None:

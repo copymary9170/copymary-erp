@@ -1,15 +1,12 @@
 """Recepción y reversión de compras con inventario trazable."""
 
-from datetime import datetime, timezone
+
 from uuid import uuid4
 
 import streamlit as st
 
 from src import adjustments, purchasing
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now
 
 
 def _movements() -> list[dict]:

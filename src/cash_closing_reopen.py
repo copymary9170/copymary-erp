@@ -1,20 +1,12 @@
 """Reapertura segura del último cierre de caja."""
 
-from datetime import datetime, timezone
 
 import streamlit as st
 
 from src import financial_control
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now, read_list as _rows
 
 
 def _active_closings(closings: list[dict]) -> list[dict]:

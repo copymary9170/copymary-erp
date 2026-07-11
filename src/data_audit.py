@@ -5,10 +5,7 @@ from collections import Counter
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
+from src.session_utils import read_list as _rows
 
 
 def _duplicates(items: list[dict], key: str) -> list[str]:

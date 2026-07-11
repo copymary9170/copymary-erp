@@ -1,22 +1,19 @@
 """Punto de restauración automático y reversión de respaldos."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+
 
 import streamlit as st
 
 from src import session_backup
 from src.components import render_info_card
 from src.safe_session_backup import render_safe_session_backup
+from src.session_utils import now_iso as _now
 
 
 _ORIGINAL_RESTORE = session_backup._restore
 SNAPSHOT_KEY = "_restore_rollback_snapshot"
 META_KEY = "_restore_rollback_meta"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _snapshot(selected: list[str]) -> dict:

@@ -9,10 +9,7 @@ import streamlit as st
 
 from src import data_audit as base
 from src.components import render_page_header
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
+from src.session_utils import read_list as _rows
 
 
 def _number(value) -> float:

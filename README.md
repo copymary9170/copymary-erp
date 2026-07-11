@@ -6,20 +6,6 @@ Sistema ERP empresarial para CopyMary, creado desde una base limpia y modular.
 
 Centralizar y organizar las áreas principales del negocio sin repetir los problemas estructurales del repositorio anterior.
 
-## Módulos previstos
-
-- Inicio y panel general
-- Usuarios, roles y permisos
-- Recursos Humanos
-- Área Legal
-- Ventas y clientes
-- Compras y proveedores
-- Inventario
-- Finanzas
-- Producción y servicios
-- Reportes
-- Configuración
-
 ## Principios del proyecto
 
 - Arquitectura modular
@@ -31,18 +17,59 @@ Centralizar y organizar las áreas principales del negocio sin repetir los probl
 
 ## Estado actual
 
-La rama `main` contiene una primera interfaz funcional y descriptiva construida con Streamlit.
+La rama `main` ya no es un demo estático: es una aplicación Streamlit funcional con
+persistencia real en SQLite, autenticación por usuario/contraseña y más de 25 módulos
+activos.
 
-Actualmente incluye:
+Incluye:
 
-- página de Inicio;
-- navegación lateral;
-- cinco módulos fundacionales;
-- métricas generales del proyecto;
-- actividad reciente identificada como demostración;
-- avisos claros de que todavía no existen operaciones empresariales reales.
+- **Autenticación y control de acceso**: login con hash PBKDF2-HMAC-SHA256 (200,000
+  iteraciones) y permisos por rol con modelo *deny-by-default* (sin fila explícita de
+  permiso = sin acceso). El rol Administrador siempre tiene acceso total.
+- **Base de datos SQLite** con esquema versionado y migraciones idempotentes
+  (`src/erp_database.py`), incluyendo tabla de auditoría (`audit_events`) con registro
+  de antes/después por cada cambio relevante.
+- **Módulos operativos activos**, entre ellos:
+  - Centro de control, panel comercial y panel financiero
+  - Clientes y seguimiento comercial, comprobantes
+  - Inventario, movimientos de inventario, alertas de stock
+  - Costeo (simple y por procesos/BOM multinivel), tasas de cambio
+  - Órdenes de producción
+  - Ajuste y exportación de precios
+  - Caja, conciliación financiera, reapertura de cierres
+  - Gastos y presupuesto
+  - Comisiones de equipo e historial de comisiones
+  - Reversos de pago, anulaciones y ajustes
+  - Activos con depreciación
+  - Usuarios y roles
+- **Pruebas automáticas** con `pytest` para autenticación, permisos, base de datos y
+  utilidades compartidas (ver `tests/README.md`).
 
-Esta etapa no incluye base de datos, autenticación real, formularios operativos ni almacenamiento de información.
+Lo que **todavía no existe**:
+
+- Migración a PostgreSQL (SQLite es el motor real hoy; Postgres está documentado como
+  objetivo futuro en `src/erp_database.py`, pero bloqueado hasta agregar el driver).
+- Pruebas automáticas para los módulos de negocio (costeo, inventario, producción,
+  comisiones, caja) — ver la sección "Qué falta" en `tests/README.md`.
+- CI/CD: deliberadamente no se ha configurado GitHub Actions todavía (ver
+  `docs/error-real-copymary-1.md` para el porqué).
+
+## Instalar y correr localmente
+
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+La primera vez que se abre la app, si no existe ningún usuario, se muestra un
+formulario para crear el administrador inicial.
+
+## Correr las pruebas
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
 
 ## Probar desde Streamlit Community Cloud
 
@@ -64,16 +91,14 @@ Pasos:
 6. Indicar `app.py` como archivo principal.
 7. Confirmar el despliegue.
 
-La aplicación debe mostrar la página de Inicio, las métricas y los cinco módulos descriptivos.
+## Documentación adicional
 
-## Limitaciones actuales
-
-- No guarda datos.
-- No utiliza base de datos.
-- No implementa autenticación.
-- No contiene módulos empresariales terminados.
-- No debe usarse todavía como sistema de producción.
+- `docs/COPYMARY_ENTERPRISE_CONTEXTO_MAESTRO.md`: visión, filosofía y dominios del negocio.
+- `docs/ROADMAP_ARQUITECTURA.md`: fases de desarrollo planeadas.
+- `docs/auditoria-copymary-1.md` y `docs/error-real-copymary-1.md`: por qué se reinició el proyecto.
+- `src/README.md`: convenciones del código fuente.
 
 ## Próximo paso recomendado
 
-Verificar la aplicación en Streamlit Community Cloud y corregir únicamente el primer error que aparezca antes de continuar con nuevas funciones.
+Agregar pruebas automáticas a los módulos de costeo e inventario, por ser los de
+mayor impacto directo en las decisiones de precio y stock del negocio.

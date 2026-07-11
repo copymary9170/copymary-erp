@@ -15,13 +15,15 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+
 import json
 import os
 from pathlib import Path
 import sqlite3
 from typing import Any, Iterator
 from uuid import uuid4
+
+from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
@@ -35,10 +37,6 @@ class DatabaseStatus:
     schema_version: int
     ready: bool
     message: str
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def database_url() -> str:

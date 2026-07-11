@@ -1,6 +1,6 @@
 """Reversión controlada de producciones registradas."""
 
-from datetime import datetime, timezone
+
 from uuid import uuid4
 
 import streamlit as st
@@ -8,14 +8,7 @@ import streamlit as st
 from src.catalog_safe import aggregate_recipe
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now, read_list as _rows
 
 
 def render_production_reversal() -> None:

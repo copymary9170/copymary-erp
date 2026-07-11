@@ -1,6 +1,6 @@
 """Cotizaciones y comprobantes comerciales temporales para CopyMary ERP."""
 
-from datetime import datetime, timezone
+
 from html import escape
 from uuid import uuid4
 
@@ -8,6 +8,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money, get_currency
+from src.session_utils import now_iso as _now
 
 
 def _get_list(key: str) -> list[dict]:
@@ -16,10 +17,6 @@ def _get_list(key: str) -> list[dict]:
 
 def _save_list(key: str, items: list[dict]) -> None:
     st.session_state[key] = items
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _client_options(clients: list[dict]) -> dict[str, str]:

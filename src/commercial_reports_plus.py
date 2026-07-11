@@ -9,10 +9,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money, get_currency
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
+from src.session_utils import read_list as _rows
 
 
 def _num(value, default: float = 0.0) -> float:

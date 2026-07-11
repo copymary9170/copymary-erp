@@ -31,6 +31,7 @@ from src.purchasing import render_purchases, render_suppliers
 from src.session_backup import render_session_backup
 from src.stock_alerts import render_stock_alerts
 from src.team_commissions import render_team_commissions
+from src.session_utils import read_list as _rows
 
 FUNCTIONAL_MODULES = {
     "Centro de control": render_control_center,
@@ -72,10 +73,6 @@ NAVIGATION_GROUPS = {
     "Administración": ("Caja", "Gastos y presupuesto", "Equipo y comisiones", "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general"),
     "Planificación futura": tuple(name for name in MODULES if name not in FUNCTIONAL_MODULES),
 }
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
 
 
 def _navigate(area: str, page: str) -> None:
