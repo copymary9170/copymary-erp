@@ -144,7 +144,6 @@ def render_catalog_production_plus() -> None:
     movements = _rows("inventory_movements")
     production_log = _rows("production_log")
     plans = _rows("production_plans")
-    events = _rows("production_events")
 
     duplicates = []
     incomplete = []

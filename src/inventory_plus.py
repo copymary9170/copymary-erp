@@ -164,7 +164,6 @@ def render_inventory_plus() -> None:
     counts = _rows("inventory_counts")
     lots = _rows("inventory_lots")
     audit = _rows("inventory_audit_log")
-    movements = _rows("inventory_movements")
     today = date.today()
 
     total_value = sum(_available(item) * _unit_cost(item) for item in items)
@@ -187,6 +186,8 @@ def render_inventory_plus() -> None:
 
     if low_items:
         st.warning(f"Hay {len(low_items)} material(es) con existencia libre en mínimo o por debajo.")
+    if expiring_lots:
+        st.warning(f"Hay {len(expiring_lots)} lote(s) por vencer en los próximos 30 días.")
     if expired_lots:
         st.error(f"Hay {len(expired_lots)} lote(s) vencido(s).")
 

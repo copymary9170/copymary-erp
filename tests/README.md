@@ -37,6 +37,23 @@ Alertas de inventario. Se corrigió centralizando `item_name` en
 otros módulos) y se agregó `test_lint.py` para que este tipo de error se
 detecte automáticamente en el futuro.
 
+## Métricas de dashboard restauradas
+
+`pyflakes` señaló 5 variables calculadas pero nunca usadas
+("assigned but never used"). Al revisar cada una, 4 eran tarjetas de métrica
+que quedaron calculadas pero jamás mostradas en el panel (probablemente un
+diseño de columnas que no se actualizó al agregar el cálculo):
+
+- `clients_crm.py`: "Clientes inactivos" no se mostraba.
+- `inventory_plus.py`: los lotes por vencer en 30 días se calculaban pero
+  nunca generaban aviso al usuario.
+- `order_planning.py`: "Listos para entregar" no se mostraba.
+- `suppliers_plus.py`: "Inactivos" no se mostraba.
+
+La quinta (`events` en `catalog_production_plus.py`, `movements` en
+`inventory_plus.py`) era una carga de datos realmente muerta, sin ningún uso
+pendiente — se eliminó.
+
 ## Qué falta (pendiente, no cubierto todavía)
 
 Los módulos restantes (`_plus`/`_control`/`_governance` que extienden a los de

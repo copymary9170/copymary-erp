@@ -95,11 +95,12 @@ def render_suppliers_plus() -> None:
     rated = [item for item in suppliers if _num(item.get("rating")) > 0]
     average_rating = sum(_num(item.get("rating")) for item in rated) / len(rated) if rated else 0.0
 
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("Proveedores", str(len(suppliers)))
     metrics[1].metric("Activos", str(active))
-    metrics[2].metric("Total comprado", format_money(total_purchased))
-    metrics[3].metric("Calificación promedio", f"{average_rating:,.1f}/5")
+    metrics[2].metric("Inactivos", str(inactive))
+    metrics[3].metric("Total comprado", format_money(total_purchased))
+    metrics[4].metric("Calificación promedio", f"{average_rating:,.1f}/5")
 
     with st.expander("Registrar proveedor", expanded=not bool(suppliers)):
         with st.form("supplier_plus_form", clear_on_submit=True):
