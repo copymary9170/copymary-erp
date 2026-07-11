@@ -39,6 +39,7 @@ def test_migrations_add_expected_columns(isolated_database):
         columns = db._existing_columns(conn, "app_users")
         recipe_columns = db._existing_columns(conn, "recipe_steps")
         material_columns = db._existing_columns(conn, "production_materials")
+        tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
 
     # Migración v3 (auth): cada usuario debe poder enlazarse a un rol.
     assert "role_id" in columns
@@ -50,6 +51,8 @@ def test_migrations_add_expected_columns(isolated_database):
     assert "pieces_per_sheet" in recipe_columns
     # Migración v4 (reventa): materiales con margen propio para venta directa.
     assert "resale_margin_percent" in material_columns
+    # Migración v6 (RRHH y nómina): tablas nuevas.
+    assert {"employees", "payroll_periods", "payroll_entries"}.issubset(tables)
 
 
 def test_record_audit_event_persists_before_and_after(isolated_database):

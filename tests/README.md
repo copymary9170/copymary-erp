@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 156 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 171 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -102,14 +102,38 @@ cuenta se bloquea `LOCKOUT_MINUTES` (15) minutos, incluso si luego se prueba
 la contraseña correcta. Un login exitoso resetea el contador. Verificado
 extremo a extremo contra SQLite y PostgreSQL reales.
 
+## RRHH y nómina (módulo nuevo)
+
+Revisión de negocio (dueña + finanzas + producción): el sistema no tenía
+ninguna forma de registrar empleados ni pagarles — `team_commissions.py`
+incluso lo admitía explícitamente ("las comisiones no sustituyen una nómina
+legal"). Se agregó `src/payroll.py` (migración v6): empleados, períodos de
+nómina, recibos de pago con salario + bonos − deducciones = neto. Alcance
+deliberadamente honesto: no calcula prestaciones sociales, utilidades ni
+retenciones de ley (varían por país y deben validarse con un contador) — lo
+que resuelve es dejar de pagarle a la gente fuera del sistema, con historial
+y auditoría de cada pago. Ver `test_payroll.py`.
+
 ## Qué falta (pendiente, no cubierto todavía)
 
 Los módulos `_plus`/`_control`/`_governance` que extienden a los de arriba
 (la capa de negocio "extra": historiales, exportaciones, reversos, etc.)
 todavía no tienen pruebas propias. La lógica de negocio central de cada
 dominio — costeo, inventario, producción/catálogo, comisiones, caja,
-conciliación, activos, gastos/presupuesto — ya está cubierta, igual que la
-base de datos (SQLite y PostgreSQL) y la convención de capas de módulos.
+conciliación, activos, gastos/presupuesto, RRHH/nómina — ya está cubierta,
+igual que la base de datos (SQLite y PostgreSQL) y la convención de capas de
+módulos.
+
+De la revisión de negocio (dueña + finanzas + producción), quedan pendientes
+de construir:
+- **Estado de Resultados (P&L)**: hay costeo, ventas y gastos, pero ningún
+  reporte que consolide "cuánto ganó el negocio" por período.
+- **Flujo de caja proyectado unificado**: existen proyecciones sueltas
+  (cartera por cobrar, presupuesto de gastos) pero ninguna vista
+  consolidada de la posición de efectivo a 30/60/90 días.
+- **Mantenimiento preventivo de máquinas**: solo existe depreciación
+  (costo). No hay calendario de mantenimiento ni alerta de máquina
+  atrasada — relevante para sublimadora/plotter/impresoras.
 
 ## Regla del proyecto
 

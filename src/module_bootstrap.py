@@ -39,6 +39,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Anulaciones y ajustes", "src.adjustments_postcontrol", "render_adjustments_postcontrol"),
     ("Activos", "src.assets_governance", "render_assets_governance"),
     ("Usuarios y roles", "src.users_roles", "render_users_roles"),
+    ("RRHH y nómina", "src.payroll", "render_payroll"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -56,7 +57,7 @@ PRODUCTS_NAVIGATION: tuple[str, ...] = (
 ADMIN_NAVIGATION: tuple[str, ...] = (
     "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto",
     "Equipo y comisiones", "Historial de comisiones", "Reversos de pagos",
-    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles",
+    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles", "RRHH y nómina",
 )
 
 

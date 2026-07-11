@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -213,6 +213,67 @@ def _migrate_login_lockout_v5(connection: Any) -> None:
     _ensure_columns(connection, "app_users", {"failed_login_count": "INTEGER NOT NULL DEFAULT 0", "locked_until": "TEXT"})
 
 
+def _migrate_hr_payroll_v6(connection: Any) -> None:
+    """Migración v6: RRHH y nómina.
+
+    Bloqueante real detectado en la revisión de negocio: el sistema no tenía
+    ninguna forma de registrar empleados ni pagarles. `team_commissions.py`
+    incluso lo admite explícitamente ("no sustituye una nómina legal").
+
+    Alcance deliberadamente pragmático: registro de empleados, períodos de
+    nómina, y recibos de pago con salario + bonos + deducciones = neto. No
+    calcula prestaciones sociales, utilidades, IVSS/FAOV ni retenciones de
+    ley — esas reglas varían por país y cambian con el tiempo; deben
+    validarse con un contador antes de usarse para pagos reales.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS employees (
+            employee_id TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            national_id TEXT NOT NULL DEFAULT '',
+            position TEXT NOT NULL DEFAULT '',
+            department TEXT NOT NULL DEFAULT '',
+            hire_date TEXT NOT NULL,
+            termination_date TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            base_salary REAL NOT NULL DEFAULT 0,
+            salary_currency TEXT NOT NULL DEFAULT 'USD',
+            payment_frequency TEXT NOT NULL DEFAULT 'Mensual',
+            bank_name TEXT NOT NULL DEFAULT '',
+            bank_account TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS payroll_periods (
+            period_id TEXT PRIMARY KEY,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            closed_at_utc TEXT,
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS payroll_entries (
+            entry_id TEXT PRIMARY KEY,
+            period_id TEXT NOT NULL,
+            employee_id TEXT NOT NULL,
+            base_salary REAL NOT NULL DEFAULT 0,
+            bonuses_total REAL NOT NULL DEFAULT 0,
+            bonuses_detail TEXT NOT NULL DEFAULT '',
+            deductions_total REAL NOT NULL DEFAULT 0,
+            deductions_detail TEXT NOT NULL DEFAULT '',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            payment_status TEXT NOT NULL DEFAULT 'pending',
+            paid_at_utc TEXT,
+            created_at_utc TEXT NOT NULL,
+            UNIQUE(period_id, employee_id)
+        );
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -372,6 +433,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (5, "login_lockout", _now()),
+        )
+        _migrate_hr_payroll_v6(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (6, "hr_payroll", _now()),
         )
     return get_database_status()
 
