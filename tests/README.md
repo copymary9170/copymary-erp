@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 148 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 156 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -92,6 +92,15 @@ de módulo completo). Ahora cada fallo de carga:
 - se guarda en `module_bootstrap.FAILED_MODULES`, que `foundation_status.py`
   muestra como una alerta visible en el panel "Fundación técnica" para
   cualquier administrador que lo abra.
+
+## Login sin límite de intentos (corregido)
+
+`auth.authenticate()` no tenía ningún límite: se podía probar contraseñas
+contra un mismo correo indefinidamente. Se agregó bloqueo temporal (migración
+v5): tras `MAX_FAILED_LOGIN_ATTEMPTS` (5) intentos fallidos consecutivos, la
+cuenta se bloquea `LOCKOUT_MINUTES` (15) minutos, incluso si luego se prueba
+la contraseña correcta. Un login exitoso resetea el contador. Verificado
+extremo a extremo contra SQLite y PostgreSQL reales.
 
 ## Qué falta (pendiente, no cubierto todavía)
 

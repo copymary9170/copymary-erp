@@ -18,6 +18,7 @@ Diseño deliberadamente simple:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 import hashlib
 import os
@@ -31,6 +32,8 @@ from src.session_utils import now_iso as _now
 ADMIN_ROLE_NAME = "Administrador"
 SESSION_KEY = "auth_user"
 PBKDF2_ITERATIONS = 200_000
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
 
 
 # ---------------------------------------------------------------------------
@@ -194,12 +197,54 @@ def _login_with_row(row: dict) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Bloqueo temporal por intentos fallidos
+# ---------------------------------------------------------------------------
+
+def _is_locked(row: dict) -> bool:
+    locked_until = row.get("locked_until")
+    if not locked_until:
+        return False
+    try:
+        return datetime.fromisoformat(locked_until) > datetime.now(timezone.utc)
+    except ValueError:
+        return False
+
+
+def _register_failed_attempt(user_id: str, current_count: int) -> None:
+    new_count = current_count + 1
+    locked_until = None
+    if new_count >= MAX_FAILED_LOGIN_ATTEMPTS:
+        locked_until = (datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+    initialize_database()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE app_users SET failed_login_count = ?, locked_until = ? WHERE user_id = ?",
+            (new_count, locked_until, user_id),
+        )
+    if locked_until:
+        record_audit_event("auth", "app_users", user_id, "lockout", reason=f"{new_count} intentos fallidos consecutivos")
+
+
+def _reset_failed_attempts(user_id: str) -> None:
+    initialize_database()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE app_users SET failed_login_count = 0, locked_until = NULL WHERE user_id = ?",
+            (user_id,),
+        )
+
+
 def authenticate(email: str, password: str) -> bool:
     row = get_user_by_email(email)
     if not row or row.get("status") != "active":
         return False
-    if not row.get("password_hash") or not _verify_password(password, row["password_hash"]):
+    if _is_locked(row):
         return False
+    if not row.get("password_hash") or not _verify_password(password, row["password_hash"]):
+        _register_failed_attempt(row["user_id"], int(row.get("failed_login_count") or 0))
+        return False
+    _reset_failed_attempts(row["user_id"])
     _login_with_row(row)
     record_audit_event("auth", "app_users", row["user_id"], "login")
     return True
@@ -270,5 +315,9 @@ def require_login() -> bool:
             if authenticate(email, password):
                 st.rerun()
             else:
-                st.error("Correo o contraseña incorrectos, o usuario inactivo.")
+                row = get_user_by_email(email)
+                if row and _is_locked(row):
+                    st.error(f"Cuenta bloqueada temporalmente por varios intentos fallidos. Intenta de nuevo en {LOCKOUT_MINUTES} minutos.")
+                else:
+                    st.error("Correo o contraseña incorrectos, o usuario inactivo.")
     return False

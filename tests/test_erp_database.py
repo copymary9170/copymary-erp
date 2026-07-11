@@ -42,6 +42,9 @@ def test_migrations_add_expected_columns(isolated_database):
 
     # Migración v3 (auth): cada usuario debe poder enlazarse a un rol.
     assert "role_id" in columns
+    # Migración v5 (bloqueo de login): cuenta de intentos fallidos y bloqueo temporal.
+    assert "failed_login_count" in columns
+    assert "locked_until" in columns
     # Migración v2 (costeo): pasos de receta con datos de proceso de impresión.
     assert "print_mode" in recipe_columns
     assert "pieces_per_sheet" in recipe_columns

@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -202,6 +202,17 @@ def _migrate_resale_pricing_v4(connection: Any) -> None:
     _ensure_columns(connection, "production_materials", {"resale_margin_percent": "REAL NOT NULL DEFAULT 0"})
 
 
+def _migrate_login_lockout_v5(connection: Any) -> None:
+    """Migración v5: bloqueo temporal tras varios intentos de login fallidos.
+
+    Antes, authenticate() no tenía ningún límite de intentos: se podía probar
+    contraseñas indefinidamente contra un mismo correo. Estas columnas
+    permiten contar intentos fallidos y bloquear la cuenta temporalmente
+    (ver auth.py).
+    """
+    _ensure_columns(connection, "app_users", {"failed_login_count": "INTEGER NOT NULL DEFAULT 0", "locked_until": "TEXT"})
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -356,6 +367,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (4, "resale_pricing", _now()),
+        )
+        _migrate_login_lockout_v5(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (5, "login_lockout", _now()),
         )
     return get_database_status()
 
