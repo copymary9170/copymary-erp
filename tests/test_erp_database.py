@@ -38,12 +38,15 @@ def test_migrations_add_expected_columns(isolated_database):
     with db.connect() as conn:
         columns = db._existing_columns(conn, "app_users")
         recipe_columns = db._existing_columns(conn, "recipe_steps")
+        material_columns = db._existing_columns(conn, "production_materials")
 
     # Migración v3 (auth): cada usuario debe poder enlazarse a un rol.
     assert "role_id" in columns
     # Migración v2 (costeo): pasos de receta con datos de proceso de impresión.
     assert "print_mode" in recipe_columns
     assert "pieces_per_sheet" in recipe_columns
+    # Migración v4 (reventa): materiales con margen propio para venta directa.
+    assert "resale_margin_percent" in material_columns
 
 
 def test_record_audit_event_persists_before_and_after(isolated_database):

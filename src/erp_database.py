@@ -27,7 +27,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -115,6 +115,17 @@ def _migrate_costing_v2(connection: sqlite3.Connection) -> None:
 def _migrate_auth_v3(connection: sqlite3.Connection) -> None:
     """Migración v3: enlaza cada usuario con un rol."""
     _ensure_columns(connection, "app_users", {"role_id": "TEXT"})
+
+
+def _migrate_resale_pricing_v4(connection: sqlite3.Connection) -> None:
+    """Migración v4: margen de reventa para materiales con use_type reventa/mixto.
+
+    Antes, un material marcado como "reventa" (se vende tal cual, sin pasar por
+    una receta de producción) no tenía forma de calcular su precio de venta:
+    solo existían campos de costo. Este campo permite definir un margen propio
+    para esos materiales, independiente del margen de las recetas.
+    """
+    _ensure_columns(connection, "production_materials", {"resale_margin_percent": "REAL NOT NULL DEFAULT 0"})
 
 
 def initialize_database() -> DatabaseStatus:
@@ -266,6 +277,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (3, "auth_roles", _now()),
+        )
+        _migrate_resale_pricing_v4(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (4, "resale_pricing", _now()),
         )
     return get_database_status()
 

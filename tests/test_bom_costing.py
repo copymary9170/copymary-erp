@@ -32,6 +32,31 @@ def test_material_unit_cost_falls_back_to_legacy_cost_when_color_missing():
 
 
 # ---------------------------------------------------------------------------
+# resale_price
+# ---------------------------------------------------------------------------
+
+def test_resale_price_applies_margin_to_base_cost():
+    material = {"use_type": "reventa", "unit_cost": 10.0, "resale_margin_percent": 25.0}
+    assert bom_costing.resale_price(material) == 12.5
+
+
+def test_resale_price_zero_for_insumo_materials():
+    """Un material puramente insumo no se vende directo, no tiene precio de reventa."""
+    material = {"use_type": "insumo", "unit_cost": 10.0, "resale_margin_percent": 25.0}
+    assert bom_costing.resale_price(material) == 0.0
+
+
+def test_resale_price_applies_to_mixto_use_type_too():
+    material = {"use_type": "mixto", "unit_cost": 20.0, "resale_margin_percent": 10.0}
+    assert bom_costing.resale_price(material) == 22.0
+
+
+def test_resale_price_zero_margin_equals_base_cost():
+    material = {"use_type": "reventa", "unit_cost": 10.0, "resale_margin_percent": 0.0}
+    assert bom_costing.resale_price(material) == 10.0
+
+
+# ---------------------------------------------------------------------------
 # suggested_pieces_per_sheet (estimación de anidado por área)
 # ---------------------------------------------------------------------------
 

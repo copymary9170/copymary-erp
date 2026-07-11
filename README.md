@@ -33,7 +33,8 @@ Incluye:
   - Centro de control, panel comercial y panel financiero
   - Clientes y seguimiento comercial, comprobantes
   - Inventario, movimientos de inventario, alertas de stock
-  - Costeo (simple y por procesos/BOM multinivel), tasas de cambio
+  - Costeo (simple y por procesos/BOM multinivel, con margen de reventa
+    propio para materiales que se venden tal cual), tasas de cambio
   - Órdenes de producción
   - Ajuste y exportación de precios
   - Caja, conciliación financiera, reapertura de cierres
