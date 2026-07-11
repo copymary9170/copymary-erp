@@ -11,7 +11,7 @@ import streamlit as st
 from src import inventory as base, session_backup
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save, item_name as _item_name
 
 
 def _activate_backup() -> None:
@@ -46,13 +46,6 @@ def _as_date(value) -> date | None:
         return date.fromisoformat(str(value))
     except ValueError:
         return None
-
-
-def _item_name(item_id: str, items: list[dict]) -> str:
-    for item in items:
-        if str(item.get("item_id", "")) == item_id:
-            return str(item.get("name", "Material"))
-    return "Material no disponible"
 
 
 def _unit_cost(item: dict) -> float:

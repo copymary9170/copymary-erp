@@ -9,7 +9,7 @@ import streamlit as st
 from src import session_backup
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save, item_name as _item_name
 
 
 def _activate_backup() -> None:
@@ -57,13 +57,6 @@ def _consolidate(recipe: list[dict]) -> list[dict]:
         if item_id and qty > 0:
             totals[item_id] += qty
     return [{"item_id": item_id, "quantity": qty} for item_id, qty in totals.items()]
-
-
-def _item_name(item_id: str, inventory: list[dict]) -> str:
-    for item in inventory:
-        if str(item.get("item_id", "")) == item_id:
-            return str(item.get("name", "Material"))
-    return "Material no disponible"
 
 
 def _request_for(request_id: str, requests: list[dict]) -> dict:

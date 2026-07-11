@@ -26,6 +26,16 @@ pytest tests/ -v
 | `test_team_commissions.py` | Cálculo de comisión por porcentaje y por monto fijo, pagos acumulados por colaborador |
 | `test_cash_closing_reopen.py` | Cierres activos vs. reabiertos, montos de apertura por método de pago |
 | `test_financial_reconciliation.py` | Emparejamiento automático de movimientos con líneas bancarias (tolerancia de monto/fecha, puntaje, referencia) |
+| `test_lint.py` | Corre `pyflakes` sobre `src/` y falla si hay nombres indefinidos (atrapa bugs tipo `NameError` antes de producción) |
+
+## Bug real encontrado y corregido
+
+`stock_alerts_plus.py` llamaba a `_item_name(...)` sin definirla ni
+importarla — un `NameError` que solo se disparaba al abrir esa pestaña de
+Alertas de inventario. Se corrigió centralizando `item_name` en
+`session_utils.py` (también deduplicó 3 copias idénticas que existían en
+otros módulos) y se agregó `test_lint.py` para que este tipo de error se
+detecte automáticamente en el futuro.
 
 ## Qué falta (pendiente, no cubierto todavía)
 

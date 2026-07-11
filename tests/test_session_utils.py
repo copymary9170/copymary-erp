@@ -48,3 +48,12 @@ def test_save_then_read_round_trip():
     rows = [{"id": "1", "name": "Cliente A"}, {"id": "2", "name": "Cliente B"}]
     session_utils.save_list("clients", rows)
     assert session_utils.read_list("clients") == rows
+
+
+def test_item_name_found():
+    items = [{"item_id": "MAT-1", "name": "Vinil blanco"}]
+    assert session_utils.item_name("MAT-1", items) == "Vinil blanco"
+
+
+def test_item_name_not_found_returns_placeholder():
+    assert session_utils.item_name("NO-EXISTE", items=[]) == "Material no disponible"
