@@ -26,9 +26,11 @@ Incluye:
 - **Autenticación y control de acceso**: login con hash PBKDF2-HMAC-SHA256 (200,000
   iteraciones) y permisos por rol con modelo *deny-by-default* (sin fila explícita de
   permiso = sin acceso). El rol Administrador siempre tiene acceso total.
-- **Base de datos SQLite** con esquema versionado y migraciones idempotentes
-  (`src/erp_database.py`), incluyendo tabla de auditoría (`audit_events`) con registro
-  de antes/después por cada cambio relevante.
+- **Base de datos**: SQLite por defecto (sin dependencias externas) con esquema
+  versionado y migraciones idempotentes, incluyendo tabla de auditoría
+  (`audit_events`) con registro de antes/después por cada cambio relevante.
+  **PostgreSQL también soportado** para producción multiusuario — se activa
+  con `COPYMARY_DATABASE_URL` (ver sección de instalación más abajo).
 - **Módulos operativos activos**, entre ellos:
   - Centro de control, panel comercial y panel financiero
   - Clientes y seguimiento comercial, comprobantes
@@ -43,16 +45,16 @@ Incluye:
   - Reversos de pago, anulaciones y ajustes
   - Activos con depreciación
   - Usuarios y roles
-- **Pruebas automáticas** con `pytest` (100 tests) cubriendo autenticación, base
-  de datos, costeo, inventario, producción, comisiones, caja y conciliación
-  financiera (ver `tests/README.md`).
+- **Pruebas automáticas** con `pytest` (120 tests, 6 de ellos específicos de
+  PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
+  costeo, inventario, producción, comisiones, caja, conciliación financiera y
+  la convención de capas de módulos (ver `tests/README.md`).
 
 Lo que **todavía no existe**:
 
-- Migración a PostgreSQL (SQLite es el motor real hoy; Postgres está documentado como
-  objetivo futuro en `src/erp_database.py`, pero bloqueado hasta agregar el driver).
-- Pruebas automáticas para los módulos de negocio (costeo, inventario, producción,
-  comisiones, caja) — ver la sección "Qué falta" en `tests/README.md`.
+- Despliegue en un servidor propio o nube real: el proyecto sigue
+  documentado para probarse en Streamlit Community Cloud, que no es apto
+  para producción con datos reales (ver sección más abajo).
 - CI/CD: deliberadamente no se ha configurado GitHub Actions todavía (ver
   `docs/error-real-copymary-1.md` para el porqué).
 
@@ -66,6 +68,23 @@ streamlit run app.py
 La primera vez que se abre la app, si no existe ningún usuario, se muestra un
 formulario para crear el administrador inicial.
 
+## Usar PostgreSQL en vez de SQLite (recomendado para producción)
+
+SQLite es perfecto para desarrollo/demo, pero no soporta bien varios usuarios
+escribiendo datos al mismo tiempo. Para producción con más de una persona
+usando el sistema a la vez:
+
+```bash
+pip install -r requirements-postgres.txt
+export COPYMARY_DATABASE_URL="postgresql://usuario:clave@host:5432/copymary_erp"
+streamlit run app.py
+```
+
+Con `COPYMARY_DATABASE_URL` definida, toda la app (autenticación, costeo,
+inventario, etc.) usa PostgreSQL automáticamente — no hace falta tocar
+código. El esquema y las migraciones se crean solos en el primer arranque,
+igual que con SQLite.
+
 ## Correr las pruebas
 
 ```bash
@@ -73,9 +92,24 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
+Esto corre contra SQLite (rápido, sin dependencias externas). Para además
+validar contra PostgreSQL real:
+
+```bash
+pip install -r requirements-postgres.txt
+export COPYMARY_TEST_POSTGRES_URL="postgresql://usuario:clave@host:5432/copymary_erp_test"
+pytest tests/ -v
+```
+
 ## Probar desde Streamlit Community Cloud
 
 La aplicación puede probarse completamente desde el navegador, sin Visual Studio Code y sin instalar programas localmente.
+
+> **Nota:** esto es para probar/demostrar la app, no para producción. Streamlit
+> Community Cloud no garantiza uptime, no está pensado para varios usuarios
+> concurrentes editando datos reales, y puede reiniciarse sin aviso. Para uso
+> real con datos del negocio, usa PostgreSQL (sección de arriba) desplegado en
+> un servidor propio o un proveedor cloud con esas garantías.
 
 Configuración de despliegue:
 
@@ -102,8 +136,8 @@ Pasos:
 
 ## Próximo paso recomendado
 
-La lógica de negocio principal (costeo, inventario, producción, comisiones,
-caja, conciliación) ya tiene pruebas automáticas. El siguiente paso es
-extender la cobertura a los módulos `_plus`/`_control`/`_governance` que
-extienden a los de base, y considerar la migración a PostgreSQL documentada
-en `src/erp_database.py`.
+La lógica de negocio principal, la autenticación, y ahora la base de datos
+(SQLite y PostgreSQL) tienen pruebas automáticas. El siguiente paso es el
+despliegue en un servidor propio o proveedor cloud con PostgreSQL gestionado
+(en vez de Streamlit Community Cloud), para pasar de "probar" a "usar en el
+negocio real".
