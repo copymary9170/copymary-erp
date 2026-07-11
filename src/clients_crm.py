@@ -1,6 +1,6 @@
 """Gestión avanzada de clientes para CopyMary ERP."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from uuid import uuid4
 import csv
 import io
@@ -9,18 +9,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _save(key: str, rows: list[dict]) -> None:
-    st.session_state[key] = rows
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 
 def _number(value, default: float = 0.0) -> float:

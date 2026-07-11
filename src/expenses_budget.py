@@ -1,23 +1,16 @@
 """Gastos y presupuesto mensual para CopyMary ERP."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.session_utils import now_iso as _now, read_list as _records
 
 CATEGORIES = ("Internet", "Electricidad", "Transporte", "Software", "Mantenimiento", "Publicidad", "Materiales", "Servicios", "Retiros", "Otro")
 METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro")
-
-
-def _records(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _month(raw: str) -> str:

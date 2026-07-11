@@ -1,7 +1,7 @@
 """Catálogo temporal de productos, servicios y recetas de producción."""
 
 import csv
-from datetime import datetime, timezone
+
 from io import StringIO
 from uuid import uuid4
 
@@ -9,6 +9,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.session_utils import now_iso as _now
 
 
 def _get_list(key: str) -> list[dict]:
@@ -17,10 +18,6 @@ def _get_list(key: str) -> list[dict]:
 
 def _save_list(key: str, items: list[dict]) -> None:
     st.session_state[key] = items
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _inventory_map(inventory: list[dict]) -> dict[str, dict]:

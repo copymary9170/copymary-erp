@@ -1,6 +1,6 @@
 """Gestión mejorada de cotizaciones para CopyMary ERP."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 import csv
 import io
@@ -10,20 +10,9 @@ import streamlit as st
 from src.commercial_documents import _build_document_html
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 STATUSES = ("Borrador", "Enviada", "En seguimiento", "Aceptada", "Rechazada", "Vencida", "Convertida")
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _save(key: str, rows: list[dict]) -> None:
-    st.session_state[key] = rows
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _num(value) -> float:

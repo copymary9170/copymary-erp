@@ -1,26 +1,19 @@
 """Seguimiento operativo de ventas y pedidos."""
 
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date
 
 import streamlit as st
 
 from src import commercial as base
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 ORDER_STATUSES = ("Pendiente", "En proceso", "Listo", "Entregado", "Cancelado")
 PAYMENT_STATUSES = ("Pendiente", "Abono", "Pagado")
 PRIORITIES = ("Baja", "Normal", "Alta", "Urgente")
 DELIVERY_METHODS = ("Retiro", "Delivery", "Envío", "Digital", "Otro")
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _save(key: str, rows: list[dict]) -> None:
-    st.session_state[key] = rows
 
 
 def _num(value) -> float:
@@ -35,10 +28,6 @@ def _as_date(value) -> date | None:
         return date.fromisoformat(str(value))
     except ValueError:
         return None
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _client_name(client_id: str, clients: list[dict]) -> str:

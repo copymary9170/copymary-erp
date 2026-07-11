@@ -1,6 +1,6 @@
 """Control presupuestario, conciliación y reposición de compras."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from uuid import uuid4
 
 import streamlit as st
@@ -8,6 +8,7 @@ import streamlit as st
 from src import purchases_plus as base, session_backup
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 
 def _activate_backup() -> None:
@@ -23,18 +24,6 @@ def _activate_backup() -> None:
 
 
 _activate_backup()
-
-
-def _rows(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _save(key: str, rows: list[dict]) -> None:
-    st.session_state[key] = rows
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _num(value, default: float = 0.0) -> float:

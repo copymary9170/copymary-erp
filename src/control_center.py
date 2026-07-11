@@ -6,10 +6,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-
-
-def _records(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
+from src.session_utils import read_list as _records
 
 
 def _client_name(client_id: str, clients: list[dict]) -> str:

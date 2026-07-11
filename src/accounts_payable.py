@@ -1,24 +1,13 @@
 """Cuentas por pagar y pagos a proveedores para CopyMary ERP."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-
-
-def _records(key: str) -> list[dict]:
-    return [dict(item) for item in st.session_state.get(key, []) if isinstance(item, dict)]
-
-
-def _save(key: str, items: list[dict]) -> None:
-    st.session_state[key] = items
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from src.session_utils import now_iso as _now, read_list as _records, save_list as _save
 
 
 def _supplier_name(supplier_id: str, suppliers: list[dict]) -> str:

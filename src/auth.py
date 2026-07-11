@@ -18,7 +18,7 @@ Diseño deliberadamente simple:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+
 import hashlib
 import os
 from uuid import uuid4
@@ -26,6 +26,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src.erp_database import connect, initialize_database, record_audit_event
+from src.session_utils import now_iso as _now
 
 ADMIN_ROLE_NAME = "Administrador"
 SESSION_KEY = "auth_user"
@@ -55,9 +56,6 @@ def _verify_password(password: str, stored: str) -> bool:
 # ---------------------------------------------------------------------------
 # Acceso a datos
 # ---------------------------------------------------------------------------
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _fetch_one(query: str, params: tuple = ()) -> dict | None:
