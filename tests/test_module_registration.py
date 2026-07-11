@@ -61,7 +61,52 @@ def test_all_registered_renderers_import_successfully():
     """Cada módulo registrado debe poder importarse y exponer su función renderer."""
     missing = []
     for display_name, module_path, renderer_name in module_bootstrap.MODULE_RENDERERS:
-        renderer = module_bootstrap._load_renderer(module_path, renderer_name)
+        renderer = module_bootstrap._load_renderer(module_path, renderer_name, display_name)
         if renderer is None:
             missing.append(f"'{display_name}' ({module_path}.{renderer_name})")
     assert missing == [], "Módulos registrados que no cargan (quedarían invisibles en el menú):\n" + "\n".join(missing)
+
+
+def test_failed_module_import_is_recorded_not_silently_swallowed():
+    """Antes, un módulo roto desaparecía del menú sin dejar rastro. Ahora debe
+    quedar registrado en FAILED_MODULES para que se vea en 'Fundación técnica'."""
+    module_bootstrap.FAILED_MODULES.clear()
+    result = module_bootstrap._try_import("src.este_modulo_no_existe_de_verdad", "Módulo de prueba")
+
+    assert result is None
+    assert len(module_bootstrap.FAILED_MODULES) == 1
+    display_name, module_path, error_message = module_bootstrap.FAILED_MODULES[0]
+    assert display_name == "Módulo de prueba"
+    assert module_path == "src.este_modulo_no_existe_de_verdad"
+    assert error_message != ""
+
+
+def test_failed_module_without_display_name_falls_back_to_module_path():
+    """Los SIDE_EFFECT_MODULES no tienen nombre visible; deben seguir apareciendo
+    en FAILED_MODULES con el module_path como identificador."""
+    module_bootstrap.FAILED_MODULES.clear()
+    module_bootstrap._try_import("src.este_modulo_no_existe_de_verdad")
+
+    assert module_bootstrap.FAILED_MODULES[0][0] == "src.este_modulo_no_existe_de_verdad"
+
+
+def test_load_renderer_records_failure_when_renderer_missing():
+    """Si el módulo importa bien pero no tiene la función renderer esperada,
+    también debe quedar registrado (no solo cuando falla el import)."""
+    module_bootstrap.FAILED_MODULES.clear()
+    renderer = module_bootstrap._load_renderer("src.money", "funcion_que_no_existe", "Módulo de prueba")
+
+    assert renderer is None
+    assert len(module_bootstrap.FAILED_MODULES) == 1
+    display_name, module_path, error_message = module_bootstrap.FAILED_MODULES[0]
+    assert display_name == "Módulo de prueba"
+    assert "funcion_que_no_existe" in error_message
+
+
+def test_activate_module_bootstrap_clears_previous_failures():
+    """Cada llamada a activate_module_bootstrap() debe empezar con la lista
+    limpia, para no acumular fallos de una recarga anterior."""
+    module_bootstrap.FAILED_MODULES.append(("viejo", "src.viejo", "error viejo"))
+    module_bootstrap.activate_module_bootstrap()
+
+    assert ("viejo", "src.viejo", "error viejo") not in module_bootstrap.FAILED_MODULES

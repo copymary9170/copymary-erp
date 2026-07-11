@@ -4,7 +4,7 @@ from datetime import date
 
 import streamlit as st
 
-from src import app_shell
+from src import app_shell, module_bootstrap
 from src.components import render_info_card, render_page_header
 from src.erp_database import get_database_status, initialize_database
 
@@ -25,6 +25,13 @@ def render_foundation_status() -> None:
     if st.button("Inicializar base fundacional", type="primary", use_container_width=True):
         initialize_database()
         st.rerun()
+
+    if module_bootstrap.FAILED_MODULES:
+        st.error(f"{len(module_bootstrap.FAILED_MODULES)} módulo(s) no cargaron al iniciar la app. Esas opciones no aparecen en el menú hasta corregirse.")
+        for display_name, module_path, error_message in module_bootstrap.FAILED_MODULES:
+            st.write(f"**{display_name}** (`{module_path}`): {error_message}")
+    else:
+        st.success("Todos los módulos registrados cargaron correctamente.")
 
     render_info_card("Alcance", "Esta fase agrega la capa inicial de persistencia sin romper los módulos actuales.", "FASE 1")
 

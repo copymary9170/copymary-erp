@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 144 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 148 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -79,6 +79,19 @@ diseño de columnas que no se actualizó al agregar el cálculo):
 La quinta (`events` en `catalog_production_plus.py`, `movements` en
 `inventory_plus.py`) era una carga de datos realmente muerta, sin ningún uso
 pendiente — se eliminó.
+
+## Módulos rotos ya no desaparecen en silencio
+
+`module_bootstrap.py` cargaba cada módulo del menú con un `except Exception:
+return None` sin registrar nada — si un módulo tenía un error de sintaxis o
+una dependencia rota, simplemente desaparecía del menú sin que nadie se
+enterara (la misma familia de riesgo que el bug de `_item_name`, pero a nivel
+de módulo completo). Ahora cada fallo de carga:
+
+- se registra con `logging.error(...)` (queda en los logs del servidor), y
+- se guarda en `module_bootstrap.FAILED_MODULES`, que `foundation_status.py`
+  muestra como una alerta visible en el panel "Fundación técnica" para
+  cualquier administrador que lo abra.
 
 ## Qué falta (pendiente, no cubierto todavía)
 

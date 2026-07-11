@@ -45,7 +45,7 @@ Incluye:
   - Reversos de pago, anulaciones y ajustes
   - Activos con depreciación
   - Usuarios y roles
-- **Pruebas automáticas** con `pytest` (144 tests, 6 de ellos específicos de
+- **Pruebas automáticas** con `pytest` (148 tests, 6 de ellos específicos de
   PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
   costeo, inventario, producción, comisiones, caja, conciliación financiera y
   la convención de capas de módulos (ver `tests/README.md`).
