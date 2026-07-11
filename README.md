@@ -100,5 +100,5 @@ Pasos:
 
 ## Próximo paso recomendado
 
-Agregar pruebas automáticas a los módulos de costeo e inventario, por ser los de
-mayor impacto directo en las decisiones de precio y stock del negocio.
+Agregar pruebas automáticas a producción, comisiones y caja/conciliación
+financiera, que son los módulos de negocio que todavía no tienen cobertura.
