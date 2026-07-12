@@ -25,30 +25,30 @@ SPECIALTY_AREAS = {
 }
 
 DESCRIPTIONS = {
-    "Inicio": "Panel general del negocio y accesos prioritarios.", "Novedades": "Cambios recientes y nuevas capacidades del ERP.",
-    "Centro de control": "Alertas, pendientes y decisiones del día.", "Metas del negocio": "Objetivos, avances y acciones estratégicas.",
-    "Panel comercial": "Indicadores de ventas, clientes y pedidos.", "Auditoría de datos": "Integridad, cambios y trazabilidad de la información.",
-    "Fundación técnica": "Estado de los componentes esenciales del sistema.", "Clientes": "Registro y seguimiento de clientes.",
-    "Cotizaciones": "Presupuestos y seguimiento comercial.", "Ventas y pedidos": "Pedidos desde el registro hasta la entrega.",
-    "Venta rápida de mostrador": "Venta directa y cobro inmediato.", "Agenda de producción y entregas": "Planificación de fechas, trabajos y capacidad.",
-    "Cuentas por cobrar": "Cobros pendientes, saldos y vencimientos.", "Comprobantes": "Soportes de operaciones comerciales.",
-    "Reportes comerciales": "Rendimiento de ventas y clientes.", "Proveedores": "Directorio y evaluación de proveedores.",
-    "Compras": "Abastecimiento, recepción y control de compras.", "Cuentas por pagar": "Vencimientos y obligaciones pendientes.",
-    "Catálogo y producción": "Productos, servicios, recetas y procesos.", "Órdenes de producción": "Ejecución y seguimiento de trabajos.",
-    "Mantenimiento del catálogo": "Actualización y depuración del catálogo.", "Reversos de producción": "Corrección controlada de operaciones productivas.",
-    "Inventario": "Existencias y disponibilidad de materiales.", "Movimientos de inventario": "Entradas, salidas y trazabilidad.",
-    "Ajustes de inventario": "Correcciones autorizadas de existencias.", "Alertas de inventario": "Mínimos y necesidades de reposición.",
-    "Costeo": "Costos, consumos y márgenes.", "Costeo por procesos": "Costos detallados por etapa.", "BOM multinivel": "Materiales y componentes anidados.",
-    "Tasas de cambio": "Tasas monetarias aplicables.", "Ajustar precios": "Actualización controlada de precios.", "Exportar precios": "Listados y archivos de precios.",
-    "Panel financiero y cierres": "Indicadores y cierres financieros.", "Caja": "Ingresos, egresos y movimientos diarios.",
-    "Conciliación financiera": "Validación de movimientos financieros.", "Reabrir cierre de caja": "Reapertura autorizada de cierres.",
-    "Gastos y presupuesto": "Gastos, límites y planificación.", "Reversos de pagos": "Correcciones seguras de pagos registrados.",
-    "Anulaciones y ajustes": "Rectificaciones con trazabilidad.", "Estado de Resultados": "Ingresos, costos, gastos y rentabilidad.",
-    "Flujo de caja proyectado": "Proyección de efectivo a futuro.", "RRHH y nómina": "Empleados, períodos y recibos de pago.",
-    "Equipo y comisiones": "Asignación y cálculo de comisiones.", "Historial de comisiones": "Consulta histórica de comisiones.",
-    "Activos": "Equipos, depreciación y patrimonio.", "Mantenimiento preventivo": "Calendario y bitácora de máquinas.",
-    "Usuarios y roles": "Accesos, roles y permisos.", "Configuración General": "Parámetros del sistema y del negocio.",
-    "Respaldo general": "Copia y restauración integral del ERP.", "Respaldar activos": "Respaldo específico de activos.",
+    "Inicio": "Panel general del negocio y accesos prioritarios.", "Novedades": "Cambios recientes del ERP.",
+    "Centro de control": "Alertas y pendientes del día.", "Metas del negocio": "Objetivos y avances.",
+    "Panel comercial": "Indicadores de ventas y clientes.", "Auditoría de datos": "Integridad y trazabilidad.",
+    "Fundación técnica": "Estado técnico del sistema.", "Clientes": "Registro y seguimiento de clientes.",
+    "Cotizaciones": "Presupuestos comerciales.", "Ventas y pedidos": "Pedidos hasta la entrega.",
+    "Venta rápida de mostrador": "Venta directa y cobro inmediato.", "Agenda de producción y entregas": "Fechas y capacidad.",
+    "Cuentas por cobrar": "Saldos y vencimientos.", "Comprobantes": "Soportes comerciales.",
+    "Reportes comerciales": "Rendimiento de ventas.", "Proveedores": "Directorio de proveedores.",
+    "Compras": "Abastecimiento y recepción.", "Cuentas por pagar": "Obligaciones pendientes.",
+    "Catálogo y producción": "Productos, recetas y procesos.", "Órdenes de producción": "Seguimiento de trabajos.",
+    "Mantenimiento del catálogo": "Actualización del catálogo.", "Reversos de producción": "Correcciones productivas.",
+    "Inventario": "Existencias disponibles.", "Movimientos de inventario": "Entradas y salidas.",
+    "Ajustes de inventario": "Correcciones autorizadas.", "Alertas de inventario": "Mínimos y reposición.",
+    "Costeo": "Costos y márgenes.", "Costeo por procesos": "Costos por etapa.", "BOM multinivel": "Materiales anidados.",
+    "Tasas de cambio": "Tasas monetarias.", "Ajustar precios": "Actualización de precios.", "Exportar precios": "Listados de precios.",
+    "Panel financiero y cierres": "Indicadores y cierres.", "Caja": "Ingresos y egresos.",
+    "Conciliación financiera": "Validación financiera.", "Reabrir cierre de caja": "Reapertura autorizada.",
+    "Gastos y presupuesto": "Gastos y planificación.", "Reversos de pagos": "Correcciones de pagos.",
+    "Anulaciones y ajustes": "Rectificaciones auditadas.", "Estado de Resultados": "Rentabilidad del negocio.",
+    "Flujo de caja proyectado": "Proyección de efectivo.", "RRHH y nómina": "Empleados y pagos.",
+    "Equipo y comisiones": "Cálculo de comisiones.", "Historial de comisiones": "Consulta histórica.",
+    "Activos": "Equipos y depreciación.", "Mantenimiento preventivo": "Calendario de máquinas.",
+    "Usuarios y roles": "Accesos y permisos.", "Configuración General": "Parámetros del sistema.",
+    "Respaldo general": "Copia integral del ERP.", "Respaldar activos": "Copia de activos.",
 }
 
 
@@ -66,7 +66,7 @@ def _effective_areas(user):
     return areas or {"Inicio": SPECIALTY_AREAS["Inicio"]}, allowed
 
 
-def _render_module_cards(area: str, pages: tuple[str, ...]) -> str:
+def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
     current = st.session_state.get("navigation_page")
     if current not in pages:
         current = pages[0]
@@ -74,22 +74,23 @@ def _render_module_cards(area: str, pages: tuple[str, ...]) -> str:
     if len(pages) == 1:
         return pages[0]
 
-    st.markdown(f'<div class="cm-section-head"><div class="cm-section-title">Herramientas del área</div><div class="cm-section-meta">{len(pages)} módulos disponibles</div></div>', unsafe_allow_html=True)
-    columns = st.columns(3)
-    for index, page in enumerate(pages):
-        active = page == current
-        with columns[index % 3]:
-            with st.container(border=True):
-                badge = "cm-card-badge cm-card-active" if active else "cm-card-badge"
-                st.markdown(
-                    f'<div class="cm-card-top"><span class="{badge}">{"En uso" if active else "Módulo"}</span><span class="cm-card-arrow">↗</span></div>'
-                    f'<div class="cm-card-title">{page}</div><div class="cm-card-copy">{DESCRIPTIONS.get(page, "Herramientas y operaciones de esta especialidad.")}</div>',
-                    unsafe_allow_html=True,
-                )
-                if st.button("Módulo abierto" if active else "Abrir módulo", key=f"specialty_{area}_{page}", use_container_width=True, type="primary" if active else "secondary", disabled=active):
-                    st.session_state["navigation_page"] = page
-                    st.rerun()
-    return st.session_state["navigation_page"]
+    selected = st.radio(
+        "Módulos del área",
+        pages,
+        index=pages.index(current),
+        key=f"module_strip_{area}",
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    if selected != current:
+        st.session_state["navigation_page"] = selected
+        st.rerun()
+
+    st.markdown(
+        f'<div class="cm-selected-module"><strong>{selected}</strong><span>{DESCRIPTIONS.get(selected, "Herramientas de esta especialidad.")}</span></div>',
+        unsafe_allow_html=True,
+    )
+    return selected
 
 
 def _render_current_page(selected_page: str, allowed) -> None:
@@ -136,6 +137,6 @@ def run_app() -> None:
 
     icon, eyebrow, description, pages = areas[selected_area]
     st.markdown(f'<div class="cm-workspace"><div><div class="cm-eyebrow">{eyebrow}</div><div class="cm-workspace-title">{selected_area}</div><div class="cm-workspace-copy">{description}</div></div><div class="cm-workspace-icon">{icon}</div></div>', unsafe_allow_html=True)
-    selected_page = _render_module_cards(selected_area, tuple(pages))
+    selected_page = _render_module_selector(selected_area, tuple(pages))
     _render_current_page(selected_page, allowed)
     st.markdown(f'<div class="cm-footer">Versión {APP_VERSION} · {PROJECT_STATUS} · Mantén respaldos periódicos de la información.</div>', unsafe_allow_html=True)
