@@ -15,6 +15,37 @@ def _num(value, default=0.0):
         return default
 
 
+def _consumable_profile(spec: dict) -> dict:
+    """Normaliza fichas nuevas y antiguas a un modelo común de consumibles."""
+    technology = str(spec.get("technology") or "Inyección con tanque")
+    old_color_yield = int(_num(spec.get("color_yield"), 6000))
+    old_black_yield = int(_num(spec.get("black_yield"), 12000))
+    old_c = _num(spec.get("ink_c"), 19.0)
+    old_m = _num(spec.get("ink_m"), 19.0)
+    old_y = _num(spec.get("ink_y"), 19.0)
+    old_k = _num(spec.get("ink_k"), 19.0)
+    return {
+        "technology": technology,
+        "cartridge_layout": str(spec.get("cartridge_layout") or "tricolor"),
+        "black_cost": _num(spec.get("black_cost"), old_k),
+        "black_yield": int(_num(spec.get("black_yield"), old_black_yield)),
+        "color_cost": _num(spec.get("color_cost"), old_c + old_m + old_y),
+        "color_yield": int(_num(spec.get("color_yield"), old_color_yield)),
+        "c_cost": _num(spec.get("c_cost"), old_c),
+        "c_yield": int(_num(spec.get("c_yield"), old_color_yield)),
+        "m_cost": _num(spec.get("m_cost"), old_m),
+        "m_yield": int(_num(spec.get("m_yield"), old_color_yield)),
+        "y_cost": _num(spec.get("y_cost"), old_y),
+        "y_yield": int(_num(spec.get("y_yield"), old_color_yield)),
+        "head_cost": _num(spec.get("head_cost"), 0.0),
+        "head_life": int(_num(spec.get("head_life"), 1)),
+        "drum_cost": _num(spec.get("drum_cost"), 0.0),
+        "drum_life": int(_num(spec.get("drum_life"), 1)),
+        "fuser_cost": _num(spec.get("fuser_cost"), 0.0),
+        "fuser_life": int(_num(spec.get("fuser_life"), 1)),
+    }
+
+
 def printer_assets() -> list[dict]:
     specs = read_list("printer_asset_specs")
     spec_by_asset = {str(row.get("asset_id")): row for row in specs if row.get("active", True)}
@@ -24,6 +55,7 @@ def printer_assets() -> list[dict]:
         if "impres" not in asset.category.casefold() and "impres" not in asset.name.casefold():
             continue
         spec = spec_by_asset.get(str(asset.asset_id), {})
+        consumables = _consumable_profile(spec)
         maintenance_costs = [_num(row.get("cost")) for row in logs if str(row.get("asset_id")) == str(asset.asset_id) and _num(row.get("cost")) > 0]
         result.append({
             "asset_id": asset.asset_id,
@@ -33,18 +65,11 @@ def printer_assets() -> list[dict]:
             "current_pages": asset.current_units,
             "remaining_pages": max(asset.lifetime_units - asset.current_units, 0),
             "depreciation_per_page": asset.depreciation_per_unit,
-            "head_cost": _num(spec.get("head_cost"), 100.0),
-            "head_life": int(_num(spec.get("head_life"), 30000)),
-            "color_yield": int(_num(spec.get("color_yield"), 6000)),
-            "black_yield": int(_num(spec.get("black_yield"), 12000)),
-            "ink_c": _num(spec.get("ink_c"), 19.0),
-            "ink_m": _num(spec.get("ink_m"), 19.0),
-            "ink_y": _num(spec.get("ink_y"), 19.0),
-            "ink_k": _num(spec.get("ink_k"), 19.0),
             "ppm": _num(spec.get("ppm"), 8.0),
             "watts": _num(spec.get("watts"), 18.0),
             "maintenance_page": _num(spec.get("maintenance_page"), (mean(maintenance_costs) / max(asset.current_units, 1)) if maintenance_costs else 0.003),
             "complete": bool(spec),
+            **consumables,
         })
     return result
 
@@ -59,12 +84,7 @@ def _inventory_rows() -> list[dict]:
 
 
 def paper_inventory() -> list[dict]:
-    """Devuelve únicamente papeles válidos registrados en Inventario.
-
-    Cada elemento conserva su identificador, nombre, costo unitario y stock. No se
-    crean valores predeterminados: si el artículo no existe en Inventario, no puede
-    seleccionarse en el costeo.
-    """
+    """Devuelve únicamente papeles válidos registrados en Inventario."""
     paper_tokens = (
         "papel", "bond", "oficio", "carta", "fotograf", "opalina", "adhesivo",
         "sticker", "cartulina", "acetato", "imantado", "lustrillo", "construccion",
@@ -85,20 +105,15 @@ def paper_inventory() -> list[dict]:
             continue
         seen.add(dedupe_key)
         result.append({
-            "item_id": item_id,
-            "name": name,
-            "category": category or "Papel",
-            "unit_cost": cost,
-            "stock": stock,
+            "item_id": item_id, "name": name, "category": category or "Papel",
+            "unit_cost": cost, "stock": stock,
             "unit": str(row.get("unit") or row.get("measurement_unit") or "hoja"),
-            "valid_cost": cost > 0,
-            "available": stock > 0,
+            "valid_cost": cost > 0, "available": stock > 0,
         })
     return sorted(result, key=lambda item: item["name"].casefold())
 
 
 def paper_costs() -> dict[str, float]:
-    """Compatibilidad para otros módulos; deriva costos solo de Inventario."""
     return {item["name"]: item["unit_cost"] for item in paper_inventory() if item["valid_cost"]}
 
 
