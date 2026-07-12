@@ -1,4 +1,4 @@
-"""Registro de los módulos de acabado (Plastificado, Corte en Cameo, Sublimado).
+"""Registro de los módulos de acabado (Plastificado, Corte en Cameo, Sublimación).
 
 Sigue el mismo patrón que `print_cost_loader.py`: registra el renderer en
 `app_shell.FUNCTIONAL_MODULES`, agrega la página a la navegación de
@@ -14,7 +14,7 @@ from src.finishing_sublimation import render_finishing_sublimation
 MODULES = (
     ("Plastificado", render_finishing_laminating, "Descuenta laminado/bolsa de Inventario y suma uso de la plastificadora."),
     ("Corte en Cameo", render_finishing_cutting_cameo, "Descuenta vinil/sticker de Inventario y suma uso de la Silhouette Cameo."),
-    ("Sublimado", render_finishing_sublimation, "Descuenta blancos/papel de sublimación de Inventario y suma uso de la prensa."),
+    ("Sublimado", render_finishing_sublimation, "Cotiza sublimación, valida blancos y consumibles de Inventario, controla parámetros, prensa y calidad."),
 )
 
 
