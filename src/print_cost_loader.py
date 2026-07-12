@@ -1,11 +1,11 @@
 """Registro del módulo de análisis y costeo de impresión."""
 from src import app_shell
-from src.print_cost_analyzer_v2 import render_print_cost_analyzer_v2
+from src.print_cost_analyzer_v3 import render_print_cost_analyzer_v3
 
 
 def activate_print_cost_module() -> None:
     name = "Análisis y costeo de impresión"
-    app_shell.FUNCTIONAL_MODULES[name] = render_print_cost_analyzer_v2
+    app_shell.FUNCTIONAL_MODULES[name] = render_print_cost_analyzer_v3
 
     pages = list(app_shell.NAVIGATION_GROUPS.get("Productos e inventario", ()))
     if name not in pages:
@@ -20,9 +20,9 @@ def activate_print_cost_module() -> None:
             top_navigation_app.SPECIALTY_AREAS["Producción"] = (
                 icon,
                 eyebrow,
-                "Preprensa, análisis de archivos, producción y control de trabajos.",
+                "Preprensa integrada con Activos, Inventario, Configuración y mantenimiento.",
                 (name, *production_pages),
             )
-        top_navigation_app.DESCRIPTIONS[name] = "Cobertura CMYK, desgaste, tiempo y precio recomendado."
+        top_navigation_app.DESCRIPTIONS[name] = "Usa automáticamente impresoras, papel, desgaste y políticas del ERP."
     except (ImportError, KeyError):
         pass
