@@ -160,11 +160,12 @@ def render_clients_crm() -> None:
     active_count = sum(1 for _, _, segment in client_data if segment in {"Activo", "Cliente valioso", "Con saldo"})
     inactive_count = sum(1 for _, _, segment in client_data if segment == "Inactivo")
 
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("Clientes registrados", str(len(clients)))
     metrics[1].metric("Clientes activos", str(active_count))
-    metrics[2].metric("Facturación acumulada", format_money(total_billed))
-    metrics[3].metric("Saldo pendiente", format_money(total_balance))
+    metrics[2].metric("Clientes inactivos", str(inactive_count))
+    metrics[3].metric("Facturación acumulada", format_money(total_billed))
+    metrics[4].metric("Saldo pendiente", format_money(total_balance))
 
     with st.expander("Registrar nuevo cliente", expanded=not bool(clients)):
         with st.form("customer_crm_form", clear_on_submit=True):

@@ -1,0 +1,72 @@
+# Stack completo de producción para CopyMary ERP: la app, PostgreSQL, HTTPS
+# automático (Caddy) y respaldos automáticos diarios de la base de datos.
+#
+# Uso:
+#   cp .env.example .env   # y editar con tus propios valores
+#   docker compose up -d --build
+#
+# Ver DEPLOY.md para la guía completa paso a paso.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - copymary_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No se publica el puerto 5432 al host: solo la app y el backup, dentro
+    # de la red interna de docker-compose, pueden hablarle a la base.
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      COPYMARY_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    # Sin "ports:" aquí a propósito: Caddy es el único punto de entrada
+    # público (ver más abajo). Streamlit solo es alcanzable dentro de la red
+    # interna de docker-compose, en el puerto 8501.
+    expose:
+      - "8501"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./backups:/backups
+      - ./scripts:/scripts:ro
+    entrypoint: ["/scripts/backup-loop.sh"]
+
+volumes:
+  copymary_db_data:
+  caddy_data:
+  caddy_config:

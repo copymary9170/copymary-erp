@@ -11,7 +11,7 @@ import streamlit as st
 from src import app_shell, session_backup
 from src.components import render_info_card, render_page_header
 from src.money import format_money, get_currency
-from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save, item_name as _item_name
 
 
 def _activate_backup() -> None:

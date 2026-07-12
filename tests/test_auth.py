@@ -123,3 +123,92 @@ def test_any_users_exist_reflects_database_state(isolated_database):
     role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
     auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
     assert auth.any_users_exist() is True
+
+
+# ---------------------------------------------------------------------------
+# Bloqueo temporal por intentos fallidos
+# ---------------------------------------------------------------------------
+
+def test_failed_attempts_below_threshold_do_not_lock_account(isolated_database):
+    role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
+    auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
+
+    for _ in range(auth.MAX_FAILED_LOGIN_ATTEMPTS - 1):
+        assert auth.authenticate("admin@copymary.test", "clave-incorrecta") is False
+
+    row = auth.get_user_by_email("admin@copymary.test")
+    assert row["locked_until"] is None
+    # La contraseña correcta debe seguir funcionando (todavía no está bloqueada).
+    assert auth.authenticate("admin@copymary.test", "clave-larga-123") is True
+
+
+def test_reaching_max_failed_attempts_locks_the_account(isolated_database):
+    role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
+    auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
+
+    for _ in range(auth.MAX_FAILED_LOGIN_ATTEMPTS):
+        auth.authenticate("admin@copymary.test", "clave-incorrecta")
+
+    row = auth.get_user_by_email("admin@copymary.test")
+    assert row["locked_until"] is not None
+
+
+def test_locked_account_rejects_even_the_correct_password(isolated_database):
+    role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
+    auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
+
+    for _ in range(auth.MAX_FAILED_LOGIN_ATTEMPTS):
+        auth.authenticate("admin@copymary.test", "clave-incorrecta")
+
+    assert auth.authenticate("admin@copymary.test", "clave-larga-123") is False
+
+
+def test_successful_login_resets_failed_attempt_counter(isolated_database):
+    role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
+    auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
+
+    auth.authenticate("admin@copymary.test", "clave-incorrecta")
+    auth.authenticate("admin@copymary.test", "clave-incorrecta")
+    assert auth.authenticate("admin@copymary.test", "clave-larga-123") is True
+
+    row = auth.get_user_by_email("admin@copymary.test")
+    assert row["failed_login_count"] == 0
+    assert row["locked_until"] is None
+
+
+def test_is_locked_false_when_no_locked_until():
+    assert auth._is_locked({"locked_until": None}) is False
+
+
+def test_is_locked_true_for_future_timestamp():
+    from datetime import datetime, timedelta, timezone
+
+    future = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    assert auth._is_locked({"locked_until": future}) is True
+
+
+def test_is_locked_false_for_past_timestamp():
+    """Pasado el tiempo de bloqueo, debe volver a permitir intentos."""
+    from datetime import datetime, timedelta, timezone
+
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    assert auth._is_locked({"locked_until": past}) is False
+
+
+def test_account_unlocks_automatically_after_lockout_expires(isolated_database):
+    """Simula que el tiempo de bloqueo ya pasó, escribiendo locked_until en el pasado
+    directamente en la base (sin esperar minutos reales en la prueba)."""
+    from datetime import datetime, timedelta, timezone
+    from src.erp_database import connect
+
+    role_id = auth.create_role(auth.ADMIN_ROLE_NAME)
+    user_id = auth.create_user("admin@copymary.test", "Admin", "clave-larga-123", role_id)
+
+    past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    with connect() as conn:
+        conn.execute(
+            "UPDATE app_users SET failed_login_count = ?, locked_until = ? WHERE user_id = ?",
+            (auth.MAX_FAILED_LOGIN_ATTEMPTS, past, user_id),
+        )
+
+    assert auth.authenticate("admin@copymary.test", "clave-larga-123") is True

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from importlib import import_module
 from typing import Callable
 
 from src import app_shell
 
+
+logger = logging.getLogger(__name__)
 
 MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Centro de control", "src.control_center_today", "render_control_center_today"),
@@ -36,6 +39,10 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Anulaciones y ajustes", "src.adjustments_postcontrol", "render_adjustments_postcontrol"),
     ("Activos", "src.assets_governance", "render_assets_governance"),
     ("Usuarios y roles", "src.users_roles", "render_users_roles"),
+    ("RRHH y nómina", "src.payroll", "render_payroll"),
+    ("Estado de Resultados", "src.income_statement", "render_income_statement"),
+    ("Flujo de caja proyectado", "src.cash_flow_forecast", "render_cash_flow_forecast"),
+    ("Mantenimiento preventivo", "src.machine_maintenance", "render_machine_maintenance"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -47,38 +54,54 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
     "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
     "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
-    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios",
+    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios", "Mantenimiento preventivo",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
     "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto",
     "Equipo y comisiones", "Historial de comisiones", "Reversos de pagos",
-    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles",
+    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles", "RRHH y nómina",
 )
 
 
-def _try_import(module_path: str):
+# Se llena en activate_module_bootstrap() con (nombre_visible, module_path,
+# mensaje_de_error) por cada módulo que falló al cargar. Antes, un módulo
+# roto simplemente desaparecía del menú sin que nadie se enterara — ver
+# render_foundation_status() en foundation_status.py, que muestra esta lista
+# a cualquier administrador que abra "Fundación técnica".
+FAILED_MODULES: list[tuple[str, str, str]] = []
+
+
+def _try_import(module_path: str, display_name: str = ""):
     try:
         return import_module(module_path)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - se registra, no se oculta
+        logger.error("No se pudo cargar el módulo %s (%s): %s", module_path, display_name or "sin nombre visible", exc)
+        FAILED_MODULES.append((display_name or module_path, module_path, str(exc)))
         return None
 
 
-def _load_renderer(module_path: str, attr_name: str) -> Callable | None:
-    module = _try_import(module_path)
+def _load_renderer(module_path: str, attr_name: str, display_name: str) -> Callable | None:
+    module = _try_import(module_path, display_name)
     if module is None:
         return None
     renderer = getattr(module, attr_name, None)
-    return renderer if callable(renderer) else None
+    if renderer is None or not callable(renderer):
+        message = f"El módulo cargó pero no tiene un renderer llamable '{attr_name}'."
+        logger.error("%s (%s)", message, module_path)
+        FAILED_MODULES.append((display_name, module_path, message))
+        return None
+    return renderer
 
 
 def activate_module_bootstrap() -> None:
+    FAILED_MODULES.clear()
     for module_path in SIDE_EFFECT_MODULES:
         _try_import(module_path)
     for module_name, module_path, renderer_name in MODULE_RENDERERS:
-        renderer = _load_renderer(module_path, renderer_name)
+        renderer = _load_renderer(module_path, renderer_name, module_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres")
+    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados", "Flujo de caja proyectado")
     app_shell.NAVIGATION_GROUPS["Productos e inventario"] = PRODUCTS_NAVIGATION
     app_shell.NAVIGATION_GROUPS["Administración"] = ADMIN_NAVIGATION

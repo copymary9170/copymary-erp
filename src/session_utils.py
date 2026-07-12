@@ -32,3 +32,17 @@ def read_list(key: str) -> list[dict]:
 def save_list(key: str, rows: list[dict]) -> None:
     """Guarda una lista de dicts en `st.session_state`."""
     st.session_state[key] = rows
+
+
+def item_name(item_id: str, items: list[dict]) -> str:
+    """Busca el nombre de un ítem de inventario por su id.
+
+    Existía duplicada de forma idéntica en `inventory_movements_enterprise.py`,
+    `inventory_plus.py` y `production_reversals.py`. `stock_alerts_plus.py` la
+    llamaba sin tenerla definida ni importada (bug real, corregido junto con
+    esta deduplicación).
+    """
+    for item in items:
+        if str(item.get("item_id", "")) == item_id:
+            return str(item.get("name", "Material"))
+    return "Material no disponible"

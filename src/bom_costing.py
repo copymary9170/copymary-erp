@@ -25,6 +25,14 @@ RECOMMENDED_MATERIAL_TYPES = ("vinil_fino", "vinil_grueso", "cartulina", "carton
 SUBSTRATES = ("tela_poliester", "taza_ceramica", "gorra", "metal", "otro")
 PRESSURE_LEVELS = ("baja", "media", "alta")
 
+# Márgenes sugeridos por defecto al crear un material, según su uso. Son solo
+# un punto de partida editable por material (campo `resale_margin_percent`),
+# no una regla fija: cada negocio puede ajustar el margen real que le
+# convenga. La idea de partida es que un material de reventa (se vende tal
+# cual) suele manejar un margen menor que un producto terminado con trabajo
+# agregado, que es lo que ya cubre `target_margin_percent` de cada receta.
+DEFAULT_RESALE_MARGIN_PERCENT = {"reventa": 25.0, "mixto": 30.0, "insumo": 0.0}
+
 
 def _rows(table_name: str) -> list[dict]:
     initialize_database()
@@ -59,6 +67,36 @@ def _material_unit_cost(material: dict, print_mode: str) -> float:
     if print_mode == "bn":
         return float(bw_cost) if bw_cost not in (None, "") else legacy_cost
     return float(color_cost) if color_cost not in (None, "") else legacy_cost
+
+
+def resale_price(material: dict) -> float:
+    """Precio de venta sugerido para un material marcado como reventa/mixto.
+
+    Solo tiene sentido para materiales que se venden tal cual (`use_type` en
+    "reventa" o "mixto"): usa el costo base (`unit_cost`) y el margen propio
+    del material (`resale_margin_percent`), independiente del margen de
+    cualquier receta. Para materiales de uso puramente "insumo" devuelve 0.0,
+    ya que esos no se venden directamente — su costo se diluye dentro del
+    producto final vía la receta que los use.
+    """
+    if material.get("use_type") not in ("reventa", "mixto"):
+        return 0.0
+    cost = float(material.get("unit_cost") or 0)
+    margin = float(material.get("resale_margin_percent") or 0)
+    return cost * (1 + margin / 100.0)
+
+
+def suggested_pieces_per_sheet(design_area_cm2: float, sheet_area_cm2: float) -> int:
+    """Estima cuántas piezas caben en una hoja/rollo a partir del área.
+
+    Es una estimación simple por área (hoja // diseño), no un anidado real
+    con rotación de piezas: para diseños muy irregulares el anidado real
+    puede caber un poco más. Sirve como sugerencia inicial, no como valor
+    definitivo — el usuario puede ajustarlo manualmente en el formulario.
+    """
+    if design_area_cm2 <= 0 or sheet_area_cm2 <= 0:
+        return 1
+    return max(int(sheet_area_cm2 // design_area_cm2), 1)
 
 
 def _step_total(step: dict, materials: dict, machines: dict, consumables: list[dict]) -> dict:
@@ -179,6 +217,7 @@ def render_bom_costing() -> None:
     mat_tab, mac_tab, con_tab, rec_tab, step_tab, quote_tab = st.tabs(("Materiales", "Máquinas", "Consumibles", "Recetas", "Pasos", "Cotizar"))
 
     with mat_tab:
+        use_type_preview = st.selectbox("Uso", ("insumo", "reventa", "mixto"), key="bom_material_use_type_preview")
         with st.form("bom_material_form", clear_on_submit=True):
             name = st.text_input("Material")
             category = st.text_input("Categoría", value="Papel")
@@ -189,19 +228,31 @@ def render_bom_costing() -> None:
             with cost_cols[1]:
                 unit_cost_bw = st.number_input("Costo unitario blanco y negro", min_value=0.0, value=0.0, step=0.1)
             waste = st.number_input("Merma %", min_value=0.0, value=0.0, step=0.5)
-            use_type = st.selectbox("Uso", ("insumo", "reventa", "mixto"))
+            resale_margin = 0.0
+            if use_type_preview in ("reventa", "mixto"):
+                resale_margin = st.number_input(
+                    "Margen de reventa %",
+                    min_value=0.0,
+                    max_value=500.0,
+                    value=DEFAULT_RESALE_MARGIN_PERCENT.get(use_type_preview, 25.0),
+                    step=1.0,
+                    help="Margen propio de este material cuando se vende tal cual, independiente del margen de cualquier receta que lo use como insumo.",
+                )
             submitted = st.form_submit_button("Guardar material", type="primary", use_container_width=True)
         if submitted:
             if not name.strip() or unit_cost_color <= 0:
                 st.error("Material y costo a color son obligatorios.")
             else:
                 effective_bw = unit_cost_bw if unit_cost_bw > 0 else unit_cost_color
-                _insert(TABLES["materials"], {"material_id": f"MAT-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "unit": unit, "unit_cost": float(unit_cost_color), "unit_cost_color": float(unit_cost_color), "unit_cost_bw": float(effective_bw), "currency": get_currency(), "waste_percent": float(waste), "use_type": use_type, "active": 1, "created_at_utc": date.today().isoformat()})
+                _insert(TABLES["materials"], {"material_id": f"MAT-{uuid4().hex[:8].upper()}", "name": name.strip(), "category": category.strip(), "unit": unit, "unit_cost": float(unit_cost_color), "unit_cost_color": float(unit_cost_color), "unit_cost_bw": float(effective_bw), "currency": get_currency(), "waste_percent": float(waste), "use_type": use_type_preview, "resale_margin_percent": float(resale_margin), "active": 1, "created_at_utc": date.today().isoformat()})
                 st.rerun()
         for row in materials[:60]:
             color_cost = row.get("unit_cost_color") or row.get("unit_cost")
             bw_cost = row.get("unit_cost_bw") or row.get("unit_cost")
-            st.write(f"**{row.get('name')}** · color {_money(color_cost)}/{row.get('unit')} · B/N {_money(bw_cost)}/{row.get('unit')} · merma {row.get('waste_percent')}%")
+            line = f"**{row.get('name')}** · color {_money(color_cost)}/{row.get('unit')} · B/N {_money(bw_cost)}/{row.get('unit')} · merma {row.get('waste_percent')}%"
+            if row.get("use_type") in ("reventa", "mixto"):
+                line += f" · reventa {_money(resale_price(row))} (margen {float(row.get('resale_margin_percent') or 0):.0f}%)"
+            st.write(line)
 
     with mac_tab:
         with st.form("bom_machine_form", clear_on_submit=True):
@@ -275,15 +326,21 @@ def render_bom_costing() -> None:
             material_options = {"Sin material": {"material_id": ""}, **{f"{row.get('name')} · {row.get('material_id')}": row for row in materials}}
             machine_options = {"Sin máquina": {"machine_id": ""}, **{f"{row.get('name')} · {row.get('machine_id')}": row for row in machines}}
             process_choice = st.selectbox("Proceso", ("Impresión", "Corte", "Foil", "Sublimación", "Encuadernado", "Armado", "Empaque", "Otro"), key="bom_step_process_preview")
+            area_cols = st.columns(2)
+            design_area_preview = area_cols[0].number_input("Área diseño (cm²)", min_value=0.0, value=0.0, step=1.0, key="bom_step_design_area_preview")
+            sheet_area_preview = area_cols[1].number_input("Área hoja/rollo (cm²)", min_value=0.0, value=0.0, step=1.0, key="bom_step_sheet_area_preview")
+            suggested_pieces = suggested_pieces_per_sheet(design_area_preview, sheet_area_preview)
+            if design_area_preview > 0 and sheet_area_preview > 0:
+                st.caption(f"Sugerencia por área: ~{suggested_pieces} pieza(s) por hoja (estimación simple, no anidado real — ajústalo abajo si tu diseño encaja distinto).")
             with st.form("bom_step_form", clear_on_submit=True):
                 rec = st.selectbox("Receta", tuple(recipe_options.keys()))
                 order = st.number_input("Orden", min_value=1, value=1, step=1)
                 mat = st.selectbox("Material", tuple(material_options.keys()))
                 print_mode_label = st.selectbox("Modo de impresión del material", ("Color", "Blanco y negro"))
                 mat_qty = st.number_input("Cantidad material", min_value=0.0, value=0.0, step=0.1)
-                design_area = st.number_input("Área diseño (cm²)", min_value=0.0, value=0.0, step=1.0)
-                sheet_area = st.number_input("Área hoja/rollo (cm²)", min_value=0.0, value=0.0, step=1.0)
-                pieces_per_sheet = st.number_input("Piezas por hoja", min_value=1.0, value=1.0, step=1.0)
+                design_area = st.number_input("Área diseño (cm²)", min_value=0.0, value=design_area_preview, step=1.0)
+                sheet_area = st.number_input("Área hoja/rollo (cm²)", min_value=0.0, value=sheet_area_preview, step=1.0)
+                pieces_per_sheet = st.number_input("Piezas por hoja", min_value=1.0, value=float(suggested_pieces), step=1.0)
                 mac = st.selectbox("Máquina", tuple(machine_options.keys()))
                 mac_minutes = st.number_input("Minutos máquina", min_value=0.0, value=0.0, step=0.5)
                 labor_minutes = st.number_input("Minutos mano de obra", min_value=0.0, value=0.0, step=0.5)

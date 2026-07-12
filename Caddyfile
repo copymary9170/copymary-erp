@@ -1,0 +1,22 @@
+# Configuración de Caddy: HTTPS automático y gratuito (Let's Encrypt) si
+# tienes un dominio apuntando al servidor. Caddy renueva el certificado solo,
+# para siempre, sin que tengas que hacer nada.
+#
+# --- CON DOMINIO (recomendado) ---
+# Reemplaza la línea de abajo con tu dominio real, por ejemplo:
+#   erp.copymary.com {
+#
+tu-dominio.com {
+    reverse_proxy app:8501
+}
+
+# --- SIN DOMINIO (acceso directo por IP, sin HTTPS) ---
+# Si todavía no tienes un dominio, comenta el bloque de arriba y descomenta
+# este. Verás una advertencia de "sitio no seguro" en el navegador porque no
+# hay HTTPS sin dominio — es normal, y de todas formas los datos viajan
+# dentro de tu propio servidor. Cuando consigas un dominio, vuelve al bloque
+# de arriba.
+#
+# :80 {
+#     reverse_proxy app:8501
+# }

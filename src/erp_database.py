@@ -1,14 +1,17 @@
 """Fundación de base de datos para CopyMary ERP.
 
-Este módulo no reemplaza todavía `st.session_state`; crea una capa inicial
-segura para empezar la migración a datos persistentes sin romper la app actual.
+Motor SQLite (por defecto, sin dependencias externas):
+- Usa `COPYMARY_DB_PATH` o `copymary_erp.sqlite3`.
 
-Modo actual soportado sin dependencias externas:
-- SQLite local/demo usando `COPYMARY_DB_PATH` o `copymary_erp.sqlite3`.
-
-Modo objetivo documentado:
-- PostgreSQL en producción mediante `COPYMARY_DATABASE_URL` cuando se agregue
-  el driver correspondiente en una fase posterior.
+Motor PostgreSQL (producción, multiusuario):
+- Se activa poniendo `COPYMARY_DATABASE_URL` con una URL `postgres://` o
+  `postgresql://`. Requiere el driver `psycopg` (ver `requirements-postgres.txt`,
+  no incluido en `requirements.txt` para mantener la instalación por defecto
+  liviana).
+- Todo el resto del código (`auth.py`, `bom_costing.py`, `bom_multilevel.py`,
+  `exchange_rates.py`) sigue escribiendo SQL con placeholders `?` como si
+  fuera SQLite: `_PostgresConnection` (más abajo) traduce automáticamente al
+  dialecto de PostgreSQL, así que no hace falta tocar esos módulos.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -55,34 +58,105 @@ def sqlite_path(url: str | None = None) -> Path:
     return Path(raw)
 
 
-@contextmanager
-def connect() -> Iterator[sqlite3.Connection]:
-    """Abre conexión SQLite local/demo.
+def _translate_sql_for_postgres(sql: str) -> str:
+    """Traduce sintaxis específica de SQLite al dialecto de PostgreSQL.
 
-    PostgreSQL se deja explícitamente bloqueado hasta agregar driver, migraciones
-    y variables de entorno en una fase posterior.
+    Cubre exactamente lo que usa este código base hoy (verificado por
+    búsqueda en todo `src/`): placeholders `?` y `INSERT OR IGNORE`. Si en el
+    futuro se agrega otra sintaxis específica de SQLite en algún módulo,
+    debe traducirse aquí también.
     """
+    translated = sql.replace("?", "%s")
+    if "INSERT OR IGNORE INTO" in translated:
+        translated = translated.replace("INSERT OR IGNORE INTO", "INSERT INTO").rstrip()
+        if "ON CONFLICT" not in translated.upper():
+            translated += " ON CONFLICT DO NOTHING"
+    return translated
+
+
+class _PostgresConnection:
+    """Adapta una conexión `psycopg` a la interfaz de `sqlite3.Connection`
+    que ya usa el resto del código (`execute`, `executescript`, `commit`,
+    `close`, placeholders `?`), para no tener que reescribir cada módulo que
+    hace SQL directo.
+    """
+
+    def __init__(self, raw_connection: Any) -> None:
+        self._raw = raw_connection
+
+    def execute(self, sql: str, params: tuple = ()) -> Any:
+        return self._raw.execute(_translate_sql_for_postgres(sql), params)
+
+    def executescript(self, script: str) -> None:
+        # Suficiente para el esquema de este proyecto: sentencias CREATE TABLE
+        # simples, sin ';' dentro de literales de texto.
+        for statement in script.split(";"):
+            statement = statement.strip()
+            if statement:
+                self._raw.execute(statement)
+
+    def commit(self) -> None:
+        self._raw.commit()
+
+    def rollback(self) -> None:
+        self._raw.rollback()
+
+    def close(self) -> None:
+        self._raw.close()
+
+
+@contextmanager
+def connect() -> Iterator[Any]:
+    """Abre conexión a la base configurada (SQLite por defecto, o PostgreSQL
+    si `COPYMARY_DATABASE_URL` apunta a uno)."""
     url = database_url()
-    if not is_sqlite_url(url):
-        raise RuntimeError("PostgreSQL está definido como objetivo, pero esta fase solo inicializa SQLite local/demo.")
-    path = sqlite_path(url)
-    if path.parent and str(path.parent) not in {"", "."}:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path)
-    connection.row_factory = sqlite3.Row
+
+    if is_sqlite_url(url):
+        path = sqlite_path(url)
+        if path.parent and str(path.parent) not in {"", "."}:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        connection: Any = sqlite3.connect(path)
+        connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+        return
+
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ImportError as exc:  # pragma: no cover - depende del entorno
+        raise RuntimeError(
+            "COPYMARY_DATABASE_URL apunta a PostgreSQL, pero falta el driver "
+            "'psycopg'. Instala con: pip install -r requirements-postgres.txt"
+        ) from exc
+
+    raw_connection = psycopg.connect(url, row_factory=dict_row)
+    connection = _PostgresConnection(raw_connection)
     try:
         yield connection
         connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 
 
-def _existing_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+def _existing_columns(connection: Any, table_name: str) -> set[str]:
+    if isinstance(connection, _PostgresConnection):
+        rows = connection.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            (table_name,),
+        ).fetchall()
+        return {row["column_name"] for row in rows}
     rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return {row["name"] for row in rows}
 
 
-def _ensure_columns(connection: sqlite3.Connection, table_name: str, columns: dict[str, str]) -> None:
+def _ensure_columns(connection: Any, table_name: str, columns: dict[str, str]) -> None:
     """Agrega columnas nuevas a una tabla existente sin perder datos (migración idempotente)."""
     present = _existing_columns(connection, table_name)
     for column_name, column_definition in columns.items():
@@ -90,7 +164,7 @@ def _ensure_columns(connection: sqlite3.Connection, table_name: str, columns: di
             connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
 
 
-def _migrate_costing_v2(connection: sqlite3.Connection) -> None:
+def _migrate_costing_v2(connection: Any) -> None:
     """Migración v2: color/BN, consumibles, sublimación, anidado, versiones y tasas."""
     _ensure_columns(connection, "production_materials", {"unit_cost_color": "REAL", "unit_cost_bw": "REAL"})
     _ensure_columns(connection, "machine_consumables", {"recommended_material_type": "TEXT NOT NULL DEFAULT ''"})
@@ -112,9 +186,131 @@ def _migrate_costing_v2(connection: sqlite3.Connection) -> None:
     _ensure_columns(connection, "costed_jobs", {"exchange_rate_id": "TEXT"})
 
 
-def _migrate_auth_v3(connection: sqlite3.Connection) -> None:
+def _migrate_auth_v3(connection: Any) -> None:
     """Migración v3: enlaza cada usuario con un rol."""
     _ensure_columns(connection, "app_users", {"role_id": "TEXT"})
+
+
+def _migrate_resale_pricing_v4(connection: Any) -> None:
+    """Migración v4: margen de reventa para materiales con use_type reventa/mixto.
+
+    Antes, un material marcado como "reventa" (se vende tal cual, sin pasar por
+    una receta de producción) no tenía forma de calcular su precio de venta:
+    solo existían campos de costo. Este campo permite definir un margen propio
+    para esos materiales, independiente del margen de las recetas.
+    """
+    _ensure_columns(connection, "production_materials", {"resale_margin_percent": "REAL NOT NULL DEFAULT 0"})
+
+
+def _migrate_login_lockout_v5(connection: Any) -> None:
+    """Migración v5: bloqueo temporal tras varios intentos de login fallidos.
+
+    Antes, authenticate() no tenía ningún límite de intentos: se podía probar
+    contraseñas indefinidamente contra un mismo correo. Estas columnas
+    permiten contar intentos fallidos y bloquear la cuenta temporalmente
+    (ver auth.py).
+    """
+    _ensure_columns(connection, "app_users", {"failed_login_count": "INTEGER NOT NULL DEFAULT 0", "locked_until": "TEXT"})
+
+
+def _migrate_hr_payroll_v6(connection: Any) -> None:
+    """Migración v6: RRHH y nómina.
+
+    Bloqueante real detectado en la revisión de negocio: el sistema no tenía
+    ninguna forma de registrar empleados ni pagarles. `team_commissions.py`
+    incluso lo admite explícitamente ("no sustituye una nómina legal").
+
+    Alcance deliberadamente pragmático: registro de empleados, períodos de
+    nómina, y recibos de pago con salario + bonos + deducciones = neto. No
+    calcula prestaciones sociales, utilidades, IVSS/FAOV ni retenciones de
+    ley — esas reglas varían por país y cambian con el tiempo; deben
+    validarse con un contador antes de usarse para pagos reales.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS employees (
+            employee_id TEXT PRIMARY KEY,
+            full_name TEXT NOT NULL,
+            national_id TEXT NOT NULL DEFAULT '',
+            position TEXT NOT NULL DEFAULT '',
+            department TEXT NOT NULL DEFAULT '',
+            hire_date TEXT NOT NULL,
+            termination_date TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            base_salary REAL NOT NULL DEFAULT 0,
+            salary_currency TEXT NOT NULL DEFAULT 'USD',
+            payment_frequency TEXT NOT NULL DEFAULT 'Mensual',
+            bank_name TEXT NOT NULL DEFAULT '',
+            bank_account TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS payroll_periods (
+            period_id TEXT PRIMARY KEY,
+            period_start TEXT NOT NULL,
+            period_end TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            closed_at_utc TEXT,
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS payroll_entries (
+            entry_id TEXT PRIMARY KEY,
+            period_id TEXT NOT NULL,
+            employee_id TEXT NOT NULL,
+            base_salary REAL NOT NULL DEFAULT 0,
+            bonuses_total REAL NOT NULL DEFAULT 0,
+            bonuses_detail TEXT NOT NULL DEFAULT '',
+            deductions_total REAL NOT NULL DEFAULT 0,
+            deductions_detail TEXT NOT NULL DEFAULT '',
+            currency TEXT NOT NULL DEFAULT 'USD',
+            payment_status TEXT NOT NULL DEFAULT 'pending',
+            paid_at_utc TEXT,
+            created_at_utc TEXT NOT NULL,
+            UNIQUE(period_id, employee_id)
+        );
+        """
+    )
+
+
+def _migrate_maintenance_v7(connection: Any) -> None:
+    """Migración v7: mantenimiento preventivo de máquinas.
+
+    Cuarto gap de la revisión de negocio (dueña + finanzas + producción):
+    production_machines ya existe (para costeo), pero solo tiene costo de
+    depreciación por hora — no hay calendario de mantenimiento ni alerta de
+    máquina atrasada. Para un taller con sublimadora/plotter/impresoras,
+    esto es tan importante como el costo: una máquina sin mantenimiento
+    preventivo falla en el peor momento (un pedido grande) y sale más caro
+    que el mantenimiento mismo.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS maintenance_plans (
+            plan_id TEXT PRIMARY KEY,
+            machine_id TEXT NOT NULL,
+            task_name TEXT NOT NULL,
+            frequency_days INTEGER NOT NULL DEFAULT 30,
+            last_done_date TEXT,
+            next_due_date TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS maintenance_logs (
+            log_id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            machine_id TEXT NOT NULL,
+            performed_date TEXT NOT NULL,
+            performed_by TEXT NOT NULL DEFAULT '',
+            cost REAL NOT NULL DEFAULT 0,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+        """
+    )
 
 
 def initialize_database() -> DatabaseStatus:
@@ -267,13 +463,41 @@ def initialize_database() -> DatabaseStatus:
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (3, "auth_roles", _now()),
         )
+        _migrate_resale_pricing_v4(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (4, "resale_pricing", _now()),
+        )
+        _migrate_login_lockout_v5(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (5, "login_lockout", _now()),
+        )
+        _migrate_hr_payroll_v6(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (6, "hr_payroll", _now()),
+        )
+        _migrate_maintenance_v7(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (7, "maintenance", _now()),
+        )
     return get_database_status()
 
 
 def get_database_status() -> DatabaseStatus:
     url = database_url()
     if not is_sqlite_url(url):
-        return DatabaseStatus("postgresql-target", url, 0, False, "PostgreSQL configurado como objetivo; falta activar driver/migraciones.")
+        try:
+            with connect() as connection:
+                row = connection.execute("SELECT MAX(version) AS version FROM schema_migrations").fetchone()
+                version = int(row["version"] or 0) if row and row["version"] is not None else 0
+        except Exception as exc:  # noqa: BLE001 - se reporta como estado, no se relanza
+            return DatabaseStatus("postgresql", url, 0, False, f"No se pudo conectar a PostgreSQL: {exc}")
+        ready = version >= SCHEMA_VERSION
+        message = "Base PostgreSQL lista." if ready else "PostgreSQL conectado; falta inicializar el esquema."
+        return DatabaseStatus("postgresql", url, version, ready, message)
     path = sqlite_path(url)
     ready = path.exists()
     version = 0

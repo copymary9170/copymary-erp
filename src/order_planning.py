@@ -93,11 +93,12 @@ def render_order_planning() -> None:
     ready_count = sum(1 for sale in active_sales if sale.get("order_status") == "Listo")
     unplanned = sum(1 for sale in active_sales if not _plan_for(str(sale.get("sale_id", "")), plans).get("delivery_date"))
 
-    metrics = st.columns(4)
+    metrics = st.columns(5)
     metrics[0].metric("Pedidos activos", str(len(active_sales)))
     metrics[1].metric("Atrasados", str(late_count))
     metrics[2].metric("Entregas hoy", str(due_today))
-    metrics[3].metric("Sin planificar", str(unplanned))
+    metrics[3].metric("Listos para entregar", str(ready_count))
+    metrics[4].metric("Sin planificar", str(unplanned))
 
     st.subheader("Planificar pedido")
     if not active_sales:

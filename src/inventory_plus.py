@@ -11,7 +11,7 @@ import streamlit as st
 from src import inventory as base, session_backup
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save, item_name as _item_name
 
 
 def _activate_backup() -> None:
@@ -46,13 +46,6 @@ def _as_date(value) -> date | None:
         return date.fromisoformat(str(value))
     except ValueError:
         return None
-
-
-def _item_name(item_id: str, items: list[dict]) -> str:
-    for item in items:
-        if str(item.get("item_id", "")) == item_id:
-            return str(item.get("name", "Material"))
-    return "Material no disponible"
 
 
 def _unit_cost(item: dict) -> float:
@@ -171,7 +164,6 @@ def render_inventory_plus() -> None:
     counts = _rows("inventory_counts")
     lots = _rows("inventory_lots")
     audit = _rows("inventory_audit_log")
-    movements = _rows("inventory_movements")
     today = date.today()
 
     total_value = sum(_available(item) * _unit_cost(item) for item in items)
@@ -194,6 +186,8 @@ def render_inventory_plus() -> None:
 
     if low_items:
         st.warning(f"Hay {len(low_items)} material(es) con existencia libre en mínimo o por debajo.")
+    if expiring_lots:
+        st.warning(f"Hay {len(expiring_lots)} lote(s) por vencer en los próximos 30 días.")
     if expired_lots:
         st.error(f"Hay {len(expired_lots)} lote(s) vencido(s).")
 
