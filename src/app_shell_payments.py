@@ -46,12 +46,14 @@ app_shell.NAVIGATION_GROUPS['Productos e inventario'] = (
     'Inventario', 'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
     'Ajustar precios', 'Exportar precios',
 )
-app_shell.NAVIGATION_GROUPS['Administración'] = (
-    'Caja', 'Conciliación financiera', 'Reabrir cierre de caja',
-    'Gastos y presupuesto', 'Equipo y comisiones', 'Historial de comisiones',
-    'Reversos de pagos', 'Anulaciones y ajustes', 'Activos',
-    'Respaldar activos', 'Configuración General', 'Respaldo general',
+app_shell.NAVIGATION_GROUPS['Finanzas'] = (
+    'Panel financiero y cierres', 'Caja', 'Conciliación financiera',
+    'Reabrir cierre de caja', 'Gastos y presupuesto', 'Equipo y comisiones',
+    'Historial de comisiones', 'Reversos de pagos', 'Anulaciones y ajustes', 'Activos',
 )
+app_shell.NAVIGATION_GROUPS['Respaldos'] = ('Respaldo general', 'Respaldar activos')
+app_shell.NAVIGATION_GROUPS['Configuración'] = ('Configuración General',)
+
 
 def run_app():
     activate_commission_snapshots()
