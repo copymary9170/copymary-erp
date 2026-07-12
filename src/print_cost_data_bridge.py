@@ -49,26 +49,57 @@ def printer_assets() -> list[dict]:
     return result
 
 
-def paper_costs() -> dict[str, float]:
-    candidates = []
-    for key in ("inventory_items", "products", "catalog_products", "inventory_registry"):
+def _inventory_rows() -> list[dict]:
+    rows: list[dict] = []
+    for key in ("inventory_items", "inventory_registry", "products", "catalog_products"):
         value = st.session_state.get(key, [])
         if isinstance(value, list):
-            candidates.extend(row for row in value if isinstance(row, dict))
-    result = {}
-    aliases = {
-        "bond": "Bond carta 75 g", "oficio": "Bond oficio 75 g", "fotografico mate": "Fotográfico mate",
-        "fotografico brillante": "Fotográfico brillante", "opalina": "Opalina", "adhesivo": "Adhesivo",
-    }
-    for row in candidates:
-        name = str(row.get("name") or row.get("product_name") or row.get("description") or "").casefold()
-        cost = _num(row.get("unit_cost") or row.get("cost") or row.get("average_cost"))
-        if cost <= 0:
+            rows.extend(row for row in value if isinstance(row, dict))
+    return rows
+
+
+def paper_inventory() -> list[dict]:
+    """Devuelve únicamente papeles válidos registrados en Inventario.
+
+    Cada elemento conserva su identificador, nombre, costo unitario y stock. No se
+    crean valores predeterminados: si el artículo no existe en Inventario, no puede
+    seleccionarse en el costeo.
+    """
+    paper_tokens = (
+        "papel", "bond", "oficio", "carta", "fotograf", "opalina", "adhesivo",
+        "sticker", "cartulina", "acetato", "imantado", "lustrillo", "construccion",
+    )
+    result: list[dict] = []
+    seen: set[str] = set()
+    for row in _inventory_rows():
+        name = str(row.get("name") or row.get("product_name") or row.get("description") or row.get("title") or "").strip()
+        category = str(row.get("category") or row.get("type") or row.get("family") or "").strip()
+        searchable = f"{name} {category}".casefold()
+        if not name or not any(token in searchable for token in paper_tokens):
             continue
-        for token, label in aliases.items():
-            if token in name:
-                result[label] = cost
-    return result
+        cost = _num(row.get("unit_cost") or row.get("cost") or row.get("average_cost") or row.get("purchase_cost"))
+        stock = _num(row.get("stock") if row.get("stock") is not None else row.get("quantity") if row.get("quantity") is not None else row.get("current_stock"), 0.0)
+        item_id = str(row.get("item_id") or row.get("product_id") or row.get("sku") or row.get("id") or name)
+        dedupe_key = item_id.casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        result.append({
+            "item_id": item_id,
+            "name": name,
+            "category": category or "Papel",
+            "unit_cost": cost,
+            "stock": stock,
+            "unit": str(row.get("unit") or row.get("measurement_unit") or "hoja"),
+            "valid_cost": cost > 0,
+            "available": stock > 0,
+        })
+    return sorted(result, key=lambda item: item["name"].casefold())
+
+
+def paper_costs() -> dict[str, float]:
+    """Compatibilidad para otros módulos; deriva costos solo de Inventario."""
+    return {item["name"]: item["unit_cost"] for item in paper_inventory() if item["valid_cost"]}
 
 
 def business_defaults() -> dict:
