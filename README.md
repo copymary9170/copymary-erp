@@ -49,7 +49,8 @@ Incluye:
   - Estado de Resultados (P&L consolidado, tendencia de 6 meses)
   - Flujo de caja proyectado (posición de efectivo a 30/60/90 días)
   - Mantenimiento preventivo (calendario y bitácora por máquina)
-- **Pruebas automáticas** con `pytest` (223 tests, 6 de ellos específicos de
+  - Venta rápida de mostrador (tarifario configurable, sin cliente obligatorio)
+- **Pruebas automáticas** con `pytest` (241 tests, 6 de ellos específicos de
   PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
   costeo, inventario, producción, comisiones, caja, conciliación financiera y
   la convención de capas de módulos (ver `tests/README.md`).

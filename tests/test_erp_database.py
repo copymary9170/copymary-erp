@@ -55,6 +55,8 @@ def test_migrations_add_expected_columns(isolated_database):
     assert {"employees", "payroll_periods", "payroll_entries"}.issubset(tables)
     # Migración v7 (mantenimiento preventivo): tablas nuevas.
     assert {"maintenance_plans", "maintenance_logs"}.issubset(tables)
+    # Migración v8 (venta rápida de mostrador): tarifario configurable.
+    assert "quick_service_prices" in tables
 
 
 def test_record_audit_event_persists_before_and_after(isolated_database):

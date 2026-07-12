@@ -44,6 +44,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Flujo de caja proyectado", "src.cash_flow_forecast", "render_cash_flow_forecast"),
     ("Mantenimiento preventivo", "src.machine_maintenance", "render_machine_maintenance"),
     ("Ajustes de inventario", "src.inventory_adjustments", "render_inventory_adjustments"),
+    ("Venta rápida de mostrador", "src.quick_sale", "render_quick_sale"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -53,15 +54,27 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 )
 
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
-    "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
-    "Inventario", "Ajustes de inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
-    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios", "Mantenimiento preventivo",
+    # Producción del día a día
+    "Catálogo y producción", "Órdenes de producción",
+    # Costeo y precios
+    "Costeo", "Costeo por procesos", "BOM multinivel", "Tasas de cambio",
+    "Ajustar precios", "Exportar precios",
+    # Inventario
+    "Inventario", "Ajustes de inventario", "Movimientos de inventario", "Alertas de inventario",
+    # Mantenimiento del catálogo y de máquinas
+    "Mantenimiento del catálogo", "Mantenimiento preventivo", "Reversos de producción",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
-    "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto",
-    "Equipo y comisiones", "Historial de comisiones", "Reversos de pagos",
-    "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles", "RRHH y nómina",
+    # Caja y bancos (día a día)
+    "Caja", "Conciliación financiera", "Reabrir cierre de caja",
+    # Gastos y personal
+    "Gastos y presupuesto", "RRHH y nómina",
+    "Equipo y comisiones", "Historial de comisiones",
+    # Ajustes y anulaciones
+    "Reversos de pagos", "Anulaciones y ajustes",
+    # Configuración y respaldos
+    "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles",
 )
 
 
@@ -116,7 +129,19 @@ def activate_module_bootstrap() -> None:
         renderer = _load_renderer(module_path, renderer_name, module_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-    _merge_navigation("Inicio", ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados", "Flujo de caja proyectado"))
+    _merge_navigation(
+        "Inicio",
+        (
+            # Lo que se usa todos los días, primero
+            "Inicio", "Novedades", "Venta rápida de mostrador",
+            # Centro de mando
+            "Centro de control", "Panel comercial", "Panel financiero y cierres",
+            # Reportes gerenciales
+            "Estado de Resultados", "Flujo de caja proyectado",
+            # Herramientas técnicas
+            "Auditoría de datos", "Fundación técnica",
+        ),
+    )
     _merge_navigation("Productos e inventario", PRODUCTS_NAVIGATION)
     _merge_navigation("Administración", ADMIN_NAVIGATION)
 

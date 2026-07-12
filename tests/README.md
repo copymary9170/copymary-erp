@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 217 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 235 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -150,6 +150,26 @@ máquina (tarea + frecuencia en días), con próxima fecha calculada
 automáticamente al registrar cada mantenimiento realizado, y bitácora con
 costo acumulado. No reemplaza el manual del fabricante — solo ayuda a no
 perder de vista la frecuencia recomendada. Ver `test_machine_maintenance.py`.
+
+## Venta rápida de mostrador (módulo nuevo)
+
+Pensando específicamente en el negocio de CopyMary (imprime, saca copias,
+sublima, papelería creativa, encuadernación, toppers, insumos escolares y
+de oficina): `commercial.py` exige seleccionar un cliente ya registrado
+antes de vender. Eso funciona para pedidos personalizados con seguimiento,
+pero es fricción real para el volumen más alto del día a día — alguien que
+compra 5 fotocopias no tiene por qué registrarse como cliente.
+
+Se agregó `src/quick_sale.py` (migración v8): tarifario configurable de
+servicios de mostrador (fotocopia B/N, color, impresión, escaneo,
+plastificado, anillado), con precios editables por el usuario y precargados
+la primera vez para no arrancar vacío. Formulario de venta rápida sin
+cliente obligatorio: si no se elige uno, se usa/crea un cliente ocasional
+único que se reutiliza siempre. Escribe en las mismas tablas que
+`commercial.py` (`sales_registry`, `cash_movements`) con los mismos
+campos, así que Estado de Resultados, flujo de caja y comisiones lo ven
+automáticamente sin cambios — probado con dos tests de integración
+explícitos que verifican esta compatibilidad. Ver `test_quick_sale.py`.
 
 ## Qué falta (pendiente, no cubierto todavía)
 
