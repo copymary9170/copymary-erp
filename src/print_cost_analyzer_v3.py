@@ -4,9 +4,11 @@ from __future__ import annotations
 import math
 import streamlit as st
 
+from src.finishing_jobs import STAGES, create_job
 from src.print_cost_analyzer import MAX_FILE_MB, SUPPORTED, analyze_file
 from src.print_cost_analyzer_v2 import QUALITY_FACTORS, _download_report, _money
 from src.print_cost_data_bridge import business_defaults, paper_inventory, printer_assets
+from src.print_jobs import confirm_print_job
 
 
 def _consumable_costs(p: dict, pages: int, coverages: dict[str, float], ink_factor: float) -> tuple[dict[str, float], dict[str, float]]:
@@ -198,3 +200,42 @@ def render_print_cost_analyzer_v3() -> None:
     }
     _download_report(result)
     st.info("Los consumibles se configuran según la tecnología real: botellas, cartuchos o tóner. El papel continúa saliendo exclusivamente de Inventario.")
+
+    st.divider()
+    st.subheader("Confirmar trabajo impreso")
+    st.caption(
+        "Hasta aquí es una cotización: no cambia nada en el ERP. Al confirmar, se descuenta "
+        f"{billed_sheets:,} {selected_paper['unit']} de \"{selected_paper['name']}\" en Inventario "
+        f"y se suman {printed_pages:,} páginas al contador de uso de \"{p['name']}\" en Activos."
+    )
+    confirmed_job = st.session_state.get("_last_confirmed_print_job")
+    if confirmed_job and confirmed_job.get("archivo") == uploaded.name:
+        st.success(f"Trabajo confirmado: {confirmed_job['job_id']}. Inventario y activo ya actualizados.")
+    elif st.button("Confirmar trabajo impreso (descuenta inventario)", type="primary", use_container_width=True):
+        job = confirm_print_job(
+            result,
+            paper_item_id=selected_paper["item_id"],
+            sheets=float(billed_sheets),
+            asset_id=p["asset_id"],
+            printed_pages=printed_pages,
+        )
+        st.session_state["_last_confirmed_print_job"] = job
+        if not job.get("paper_deducted"):
+            st.warning("No se pudo ubicar el ítem de papel en Inventario para descontarlo automáticamente; revísalo manualmente.")
+        if not job.get("asset_updated"):
+            st.warning("No se pudo ubicar la impresora en Activos para sumar el uso automáticamente.")
+        st.rerun()
+
+    if confirmed_job and confirmed_job.get("archivo") == uploaded.name:
+        st.markdown("#### Enviar a acabado")
+        st.caption("Crea una cola de trabajo en el módulo correspondiente, sin retipear nada.")
+        stage_cols = st.columns(len(STAGES))
+        for col, stage in zip(stage_cols, STAGES):
+            if col.button(f"Enviar a {stage}", use_container_width=True, key=f"send_{stage}_{confirmed_job['job_id']}"):
+                create_job(
+                    stage,
+                    source_job_id=confirmed_job["job_id"],
+                    description=f"{confirmed_job.get('archivo', '')} · {confirmed_job.get('impresora', '')}",
+                    quantity=confirmed_job.get("paginas", 1),
+                )
+                st.success(f"Enviado a {stage}. Revisa la cola en el módulo \"{stage}\".")
