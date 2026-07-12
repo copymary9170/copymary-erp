@@ -46,7 +46,8 @@ Incluye:
   - Activos con depreciación
   - Usuarios y roles
   - RRHH y nómina (empleados, períodos, recibos de pago)
-- **Pruebas automáticas** con `pytest` (177 tests, 6 de ellos específicos de
+  - Estado de Resultados (P&L consolidado, tendencia de 6 meses)
+- **Pruebas automáticas** con `pytest` (190 tests, 6 de ellos específicos de
   PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
   costeo, inventario, producción, comisiones, caja, conciliación financiera y
   la convención de capas de módulos (ver `tests/README.md`).

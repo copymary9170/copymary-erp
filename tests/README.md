@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 171 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 184 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -114,20 +114,30 @@ retenciones de ley (varían por país y deben validarse con un contador) — lo
 que resuelve es dejar de pagarle a la gente fuera del sistema, con historial
 y auditoría de cada pago. Ver `test_payroll.py`.
 
+## Estado de Resultados (módulo nuevo)
+
+`financial_dashboard_plus.py` calculaba una "utilidad estimada" (ventas −
+costo estimado), pero no restaba gastos operativos ni nómina — no era un
+estado de resultados real. Se agregó `src/income_statement.py`: ingresos
+(ventas facturadas del mes, sin canceladas) − costo de ventas = utilidad
+bruta; utilidad bruta − gastos operativos − nómina = utilidad neta, con
+tendencia de 6 meses y desglose de gastos por categoría. Reutiliza los
+mismos datos que ya existen (`sales_registry`, `expense_records`) más la
+nómina real (`payroll_entries`) agregada en la ronda anterior — no inventa
+fuentes de datos nuevas. Ver `test_income_statement.py`.
+
 ## Qué falta (pendiente, no cubierto todavía)
 
 Los módulos `_plus`/`_control`/`_governance` que extienden a los de arriba
 (la capa de negocio "extra": historiales, exportaciones, reversos, etc.)
 todavía no tienen pruebas propias. La lógica de negocio central de cada
 dominio — costeo, inventario, producción/catálogo, comisiones, caja,
-conciliación, activos, gastos/presupuesto, RRHH/nómina — ya está cubierta,
-igual que la base de datos (SQLite y PostgreSQL) y la convención de capas de
-módulos.
+conciliación, activos, gastos/presupuesto, RRHH/nómina, estado de
+resultados — ya está cubierta, igual que la base de datos (SQLite y
+PostgreSQL) y la convención de capas de módulos.
 
-De la revisión de negocio (dueña + finanzas + producción), quedan pendientes
-de construir:
-- **Estado de Resultados (P&L)**: hay costeo, ventas y gastos, pero ningún
-  reporte que consolide "cuánto ganó el negocio" por período.
+De la revisión de negocio (dueña + finanzas + producción), quedan
+pendientes de construir:
 - **Flujo de caja proyectado unificado**: existen proyecciones sueltas
   (cartera por cobrar, presupuesto de gastos) pero ninguna vista
   consolidada de la posición de efectivo a 30/60/90 días.
