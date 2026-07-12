@@ -53,6 +53,8 @@ def test_migrations_add_expected_columns(isolated_database):
     assert "resale_margin_percent" in material_columns
     # Migración v6 (RRHH y nómina): tablas nuevas.
     assert {"employees", "payroll_periods", "payroll_entries"}.issubset(tables)
+    # Migración v7 (mantenimiento preventivo): tablas nuevas.
+    assert {"maintenance_plans", "maintenance_logs"}.issubset(tables)
 
 
 def test_record_audit_event_persists_before_and_after(isolated_database):

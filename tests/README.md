@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 203 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 217 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -140,6 +140,17 @@ nómina activa según frecuencia de pago). Reutiliza datos existentes
 tal (asume que las cuentas se liquidan en su vencimiento), no una promesa.
 Ver `test_cash_flow_forecast.py`.
 
+## Mantenimiento preventivo (módulo nuevo)
+
+Cuarto y último gap de la revisión de negocio: `production_machines` ya
+existía (para costeo), pero solo tenía costo de depreciación — no había
+calendario de mantenimiento ni alerta de máquina atrasada. Se agregó
+`src/machine_maintenance.py` (migración v7): planes de mantenimiento por
+máquina (tarea + frecuencia en días), con próxima fecha calculada
+automáticamente al registrar cada mantenimiento realizado, y bitácora con
+costo acumulado. No reemplaza el manual del fabricante — solo ayuda a no
+perder de vista la frecuencia recomendada. Ver `test_machine_maintenance.py`.
+
 ## Qué falta (pendiente, no cubierto todavía)
 
 Los módulos `_plus`/`_control`/`_governance` que extienden a los de arriba
@@ -150,11 +161,11 @@ conciliación, activos, gastos/presupuesto, RRHH/nómina, estado de
 resultados — ya está cubierta, igual que la base de datos (SQLite y
 PostgreSQL) y la convención de capas de módulos.
 
-De la revisión de negocio (dueña + finanzas + producción), queda pendiente
-de construir:
-- **Mantenimiento preventivo de máquinas**: solo existe depreciación
-  (costo). No hay calendario de mantenimiento ni alerta de máquina
-  atrasada — relevante para sublimadora/plotter/impresoras.
+De la revisión de negocio (dueña + finanzas + producción), los 4 gaps
+identificados ya están resueltos: RRHH/nómina, Estado de Resultados, flujo
+de caja proyectado, y mantenimiento preventivo de máquinas. Lo que sigue
+pendiente es extender pruebas a los módulos `_plus`/`_control`/`_governance`
+que extienden a los módulos base (mencionado arriba).
 
 ## Regla del proyecto
 

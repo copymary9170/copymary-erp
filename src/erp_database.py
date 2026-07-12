@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -274,6 +274,45 @@ def _migrate_hr_payroll_v6(connection: Any) -> None:
     )
 
 
+def _migrate_maintenance_v7(connection: Any) -> None:
+    """Migración v7: mantenimiento preventivo de máquinas.
+
+    Cuarto gap de la revisión de negocio (dueña + finanzas + producción):
+    production_machines ya existe (para costeo), pero solo tiene costo de
+    depreciación por hora — no hay calendario de mantenimiento ni alerta de
+    máquina atrasada. Para un taller con sublimadora/plotter/impresoras,
+    esto es tan importante como el costo: una máquina sin mantenimiento
+    preventivo falla en el peor momento (un pedido grande) y sale más caro
+    que el mantenimiento mismo.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS maintenance_plans (
+            plan_id TEXT PRIMARY KEY,
+            machine_id TEXT NOT NULL,
+            task_name TEXT NOT NULL,
+            frequency_days INTEGER NOT NULL DEFAULT 30,
+            last_done_date TEXT,
+            next_due_date TEXT NOT NULL,
+            notes TEXT NOT NULL DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS maintenance_logs (
+            log_id TEXT PRIMARY KEY,
+            plan_id TEXT NOT NULL,
+            machine_id TEXT NOT NULL,
+            performed_date TEXT NOT NULL,
+            performed_by TEXT NOT NULL DEFAULT '',
+            cost REAL NOT NULL DEFAULT 0,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -438,6 +477,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (6, "hr_payroll", _now()),
+        )
+        _migrate_maintenance_v7(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (7, "maintenance", _now()),
         )
     return get_database_status()
 

@@ -42,6 +42,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("RRHH y nómina", "src.payroll", "render_payroll"),
     ("Estado de Resultados", "src.income_statement", "render_income_statement"),
     ("Flujo de caja proyectado", "src.cash_flow_forecast", "render_cash_flow_forecast"),
+    ("Mantenimiento preventivo", "src.machine_maintenance", "render_machine_maintenance"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -53,7 +54,7 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
     "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
     "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
-    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios",
+    "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios", "Mantenimiento preventivo",
 )
 
 ADMIN_NAVIGATION: tuple[str, ...] = (
