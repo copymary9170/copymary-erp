@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 @dataclass(frozen=True)
@@ -313,6 +313,35 @@ def _migrate_maintenance_v7(connection: Any) -> None:
     )
 
 
+def _migrate_quick_sale_v8(connection: Any) -> None:
+    """Migración v8: tarifario de servicios de mostrador (venta rápida).
+
+    Gap detectado pensando específicamente en el negocio de CopyMary
+    (imprime, saca copias, sublima, papelería creativa, encuadernación,
+    toppers, insumos escolares/oficina): render_sales() en commercial.py
+    exige seleccionar un cliente ya registrado antes de vender — fricción
+    real quien compra 5 fotocopias en el mostrador no tiene por qué
+    registrarse como cliente. Esta tabla es el tarifario configurable de
+    servicios rápidos (fotocopia B/N, color, impresión, plastificado,
+    anillado, escaneo, etc.) que alimenta el nuevo módulo de venta de
+    mostrador (src/quick_sale.py), el cual escribe en las mismas tablas de
+    siempre (sales_registry, cash_movements) para no duplicar reportes.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS quick_service_prices (
+            service_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'Otro',
+            unit_price REAL NOT NULL DEFAULT 0,
+            unit_label TEXT NOT NULL DEFAULT 'unidad',
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at_utc TEXT NOT NULL
+        );
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -482,6 +511,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (7, "maintenance", _now()),
+        )
+        _migrate_quick_sale_v8(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (8, "quick_sale_prices", _now()),
         )
     return get_database_status()
 
