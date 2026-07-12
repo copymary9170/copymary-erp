@@ -33,7 +33,10 @@ app_shell.NAVIGATION_GROUPS["Inicio"] = (
     "Auditoría de datos",
     "Metas del negocio",
     "Panel comercial",
+)
+app_shell.NAVIGATION_GROUPS["Finanzas"] = (
     "Panel financiero y cierres",
+    *tuple(page for page in app_shell.NAVIGATION_GROUPS.get("Finanzas", ()) if page != "Panel financiero y cierres"),
 )
 app_shell.NAVIGATION_GROUPS["Productos e inventario"] = (
     "Catálogo y producción",
