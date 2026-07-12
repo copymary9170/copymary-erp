@@ -98,17 +98,30 @@ def paper_inventory() -> list[dict]:
         if not name or not any(token in searchable for token in paper_tokens):
             continue
         cost = _num(row.get("unit_cost") or row.get("cost") or row.get("average_cost") or row.get("purchase_cost"))
-        stock = _num(row.get("stock") if row.get("stock") is not None else row.get("quantity") if row.get("quantity") is not None else row.get("current_stock"), 0.0)
+        stock = _num(
+            row.get("available_quantity")
+            if row.get("available_quantity") is not None
+            else row.get("stock")
+            if row.get("stock") is not None
+            else row.get("quantity")
+            if row.get("quantity") is not None
+            else row.get("current_stock"),
+            0.0,
+        )
         item_id = str(row.get("item_id") or row.get("product_id") or row.get("sku") or row.get("id") or name)
         dedupe_key = item_id.casefold()
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
         result.append({
-            "item_id": item_id, "name": name, "category": category or "Papel",
-            "unit_cost": cost, "stock": stock,
-            "unit": str(row.get("unit") or row.get("measurement_unit") or "hoja"),
-            "valid_cost": cost > 0, "available": stock > 0,
+            "item_id": item_id,
+            "name": name,
+            "category": category or "Papel",
+            "unit_cost": cost,
+            "stock": stock,
+            "unit": str(row.get("unit_name") or row.get("unit") or row.get("measurement_unit") or "hoja"),
+            "valid_cost": cost > 0,
+            "available": stock > 0,
         })
     return sorted(result, key=lambda item: item["name"].casefold())
 
