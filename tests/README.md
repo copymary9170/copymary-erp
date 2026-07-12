@@ -11,7 +11,7 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-Esto corre 184 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
+Esto corre 203 pruebas contra SQLite. 6 de ellas (`test_erp_database_postgres.py`)
 además validan el soporte de PostgreSQL, pero se **saltan automáticamente**
 si no hay un PostgreSQL accesible. Para incluirlas:
 
@@ -126,6 +126,20 @@ mismos datos que ya existen (`sales_registry`, `expense_records`) más la
 nómina real (`payroll_entries`) agregada en la ronda anterior — no inventa
 fuentes de datos nuevas. Ver `test_income_statement.py`.
 
+## Flujo de caja proyectado (módulo nuevo)
+
+Tercer gap de la revisión de negocio: existían proyecciones sueltas (cartera
+por cobrar con vencimientos, presupuesto de gastos) pero ninguna vista
+consolidada de "cuánto efectivo voy a tener en 30/60/90 días". Se agregó
+`src/cash_flow_forecast.py`: posición de caja actual + cobros esperados
+(cuentas por cobrar con vencimiento dentro del horizonte, incluyendo
+vencidas) − pagos esperados (cuentas por pagar + gastos recurrentes +
+nómina activa según frecuencia de pago). Reutiliza datos existentes
+(`cash_movements`, `receivables_registry`, `payables_registry`,
+`recurring_expenses`) más la nómina real. Es una proyección declarada como
+tal (asume que las cuentas se liquidan en su vencimiento), no una promesa.
+Ver `test_cash_flow_forecast.py`.
+
 ## Qué falta (pendiente, no cubierto todavía)
 
 Los módulos `_plus`/`_control`/`_governance` que extienden a los de arriba
@@ -136,11 +150,8 @@ conciliación, activos, gastos/presupuesto, RRHH/nómina, estado de
 resultados — ya está cubierta, igual que la base de datos (SQLite y
 PostgreSQL) y la convención de capas de módulos.
 
-De la revisión de negocio (dueña + finanzas + producción), quedan
-pendientes de construir:
-- **Flujo de caja proyectado unificado**: existen proyecciones sueltas
-  (cartera por cobrar, presupuesto de gastos) pero ninguna vista
-  consolidada de la posición de efectivo a 30/60/90 días.
+De la revisión de negocio (dueña + finanzas + producción), queda pendiente
+de construir:
 - **Mantenimiento preventivo de máquinas**: solo existe depreciación
   (costo). No hay calendario de mantenimiento ni alerta de máquina
   atrasada — relevante para sublimadora/plotter/impresoras.

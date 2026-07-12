@@ -41,6 +41,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Usuarios y roles", "src.users_roles", "render_users_roles"),
     ("RRHH y nómina", "src.payroll", "render_payroll"),
     ("Estado de Resultados", "src.income_statement", "render_income_statement"),
+    ("Flujo de caja proyectado", "src.cash_flow_forecast", "render_cash_flow_forecast"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -100,6 +101,6 @@ def activate_module_bootstrap() -> None:
         renderer = _load_renderer(module_path, renderer_name, module_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados")
+    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados", "Flujo de caja proyectado")
     app_shell.NAVIGATION_GROUPS["Productos e inventario"] = PRODUCTS_NAVIGATION
     app_shell.NAVIGATION_GROUPS["Administración"] = ADMIN_NAVIGATION
