@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Confirmar trabajo impreso y enviarlo a acabado",
+        "target": "Análisis y costeo de impresión",
+        "category": "Nuevo",
+        "description": "\"Análisis y costeo de impresión\" ya no es solo una cotización: al confirmar un trabajo, descuenta el papel real de Inventario y suma el uso en el contador de páginas de la impresora en Activos. Desde ahí puede enviarse directo a las nuevas colas de Plastificado, Corte en Cameo o Sublimado, que también descuentan su material (laminado, vinil, blancos) y registran el uso de la máquina correspondiente, sin retipear nada.",
+    },
+    {
         "title": "Venta rápida de mostrador",
         "target": "Venta rápida de mostrador",
         "category": "Nuevo",

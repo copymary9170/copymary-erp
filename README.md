@@ -50,6 +50,10 @@ Incluye:
   - Flujo de caja proyectado (posición de efectivo a 30/60/90 días)
   - Mantenimiento preventivo (calendario y bitácora por máquina)
   - Venta rápida de mostrador (tarifario configurable, sin cliente obligatorio)
+  - Análisis y costeo de impresión: confirma trabajos reales (descuenta papel
+    de Inventario y suma uso a la impresora en Activos) y los envía a
+    Plastificado, Corte en Cameo o Sublimado, que a su vez descuentan su
+    propio material y registran uso de máquina
 - **Pruebas automáticas** con `pytest` (241 tests, 6 de ellos específicos de
   PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
   costeo, inventario, producción, comisiones, caja, conciliación financiera y
