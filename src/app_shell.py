@@ -85,6 +85,20 @@ def _navigate(area: str, page: str) -> None:
     st.rerun()
 
 
+def go_to(page: str) -> None:
+    """Navega a una página buscando automáticamente en qué área está.
+
+    Pensado para botones de "acceso rápido" desde otras páginas (por ej.
+    la de Novedades), donde el llamador solo conoce el nombre de la página
+    destino, no en qué grupo del menú vive.
+    """
+    for area, pages in NAVIGATION_GROUPS.items():
+        if page in pages:
+            _navigate(area, page)
+            return
+    st.error(f"La sección '{page}' no está disponible en el menú.")
+
+
 def _apply_pending_navigation() -> None:
     """Aplica cambios pendientes antes de instanciar selectbox y radio."""
     area = st.session_state.pop("pending_navigation_area", None)
@@ -128,6 +142,13 @@ def render_home() -> None:
         "Buenos días, Copy Mary",
         "Aquí tienes una vista rápida del negocio y los accesos principales para comenzar tu jornada.",
     )
+
+    with st.container(border=True):
+        cols = st.columns([5, 1])
+        cols[0].markdown("**🆕 Hay módulos nuevos**")
+        cols[0].caption("Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
+        if cols[1].button("Ver todos", key="home_whats_new_button", use_container_width=True):
+            _navigate("Inicio", "Novedades")
 
     metrics = st.columns(4)
     metrics[0].metric("Clientes registrados", str(clients))

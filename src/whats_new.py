@@ -1,0 +1,109 @@
+"""Novedades para CopyMary ERP.
+
+Lista visible dentro de la app de los módulos y mejoras nuevos, para que se
+puedan encontrar sin tener que revisar el historial de commits o el
+README. Cada entrada tiene un botón que lleva directo al módulo nuevo.
+
+Se actualiza a mano al agregar cambios significativos — no es un historial
+automático, es una guía para el usuario. Está pensada para ser eliminada o
+recortada cuando las novedades dejen de serlo (típicamente después de
+2-3 meses de uso).
+"""
+
+from __future__ import annotations
+
+import streamlit as st
+
+from src import app_shell
+from src.components import render_info_card, render_page_header
+
+
+WHATS_NEW = (
+    {
+        "title": "Venta rápida de mostrador",
+        "target": "Venta rápida de mostrador",
+        "category": "Nuevo",
+        "description": "Cobra fotocopias, impresiones y ventas sueltas sin registrar cliente. Tarifario configurable ya cargado con precios típicos de papelería (fotocopia B/N y color, impresión, escaneo, plastificado, anillado). Las ventas aparecen automáticamente en el Estado de Resultados, flujo de caja y comisiones.",
+    },
+    {
+        "title": "Estado de Resultados (P&L)",
+        "target": "Estado de Resultados",
+        "category": "Nuevo",
+        "description": "Reporte gerencial mensual consolidado: ingresos − costo de ventas − gastos operativos − nómina = utilidad neta. Con margen bruto/neto, desglose de gastos por categoría, y tendencia de 6 meses.",
+    },
+    {
+        "title": "Flujo de caja proyectado",
+        "target": "Flujo de caja proyectado",
+        "category": "Nuevo",
+        "description": "Posición de efectivo esperada a 30, 60 y 90 días. Combina cuentas por cobrar (con vencimientos), cuentas por pagar, gastos recurrentes y nómina activa. Alerta si algún horizonte muestra caja negativa.",
+    },
+    {
+        "title": "RRHH y nómina",
+        "target": "RRHH y nómina",
+        "category": "Nuevo",
+        "description": "Registro de empleados y recibos de pago por período (salario + bonos − deducciones = neto), con cierre de período y bitácora de auditoría. No calcula prestaciones sociales ni retenciones de ley — eso lo valida el contador.",
+    },
+    {
+        "title": "Mantenimiento preventivo de máquinas",
+        "target": "Mantenimiento preventivo",
+        "category": "Nuevo",
+        "description": "Calendario de mantenimiento por máquina (sublimadora, plotter, impresoras). Alerta de atrasados y próximos a vencer. Al registrar un mantenimiento realizado se reprograma automáticamente la próxima fecha.",
+    },
+    {
+        "title": "Base de datos PostgreSQL",
+        "target": None,
+        "category": "Infraestructura",
+        "description": "El sistema ahora puede correr sobre PostgreSQL además de SQLite. Se activa con la variable de entorno COPYMARY_DATABASE_URL. Ver README.md y DEPLOY.md.",
+    },
+    {
+        "title": "Despliegue self-hosted con Docker",
+        "target": None,
+        "category": "Infraestructura",
+        "description": "Guía completa (DEPLOY.md) para poner el sistema en producción en un VPS propio: Docker + PostgreSQL + HTTPS automático + respaldos diarios, sin depender de ningún proveedor específico.",
+    },
+    {
+        "title": "Bloqueo temporal por intentos de login fallidos",
+        "target": None,
+        "category": "Seguridad",
+        "description": "Tras 5 intentos fallidos consecutivos, la cuenta se bloquea 15 minutos para prevenir ataques de fuerza bruta.",
+    },
+    {
+        "title": "Suite de pruebas automáticas",
+        "target": None,
+        "category": "Calidad",
+        "description": "Más de 240 pruebas automáticas cubriendo la lógica de negocio central: autenticación, base de datos, costeo, inventario, producción, comisiones, caja, conciliación, nómina, estado de resultados, flujo de caja y mantenimiento.",
+    },
+)
+
+
+def render_whats_new() -> None:
+    render_page_header("Novedades", "Módulos y mejoras recientes agregados al sistema.")
+    st.caption("Toca 'Abrir' en cada tarjeta para ir directo al módulo nuevo.")
+
+    categories = {}
+    for item in WHATS_NEW:
+        categories.setdefault(item["category"], []).append(item)
+
+    category_order = ("Nuevo", "Infraestructura", "Seguridad", "Calidad")
+    for category in category_order:
+        items = categories.get(category, ())
+        if not items:
+            continue
+        st.markdown(f"### {category}")
+        for item in items:
+            with st.container(border=True):
+                cols = st.columns([5, 1])
+                cols[0].markdown(f"**{item['title']}**")
+                cols[0].write(item["description"])
+                if item.get("target"):
+                    if cols[1].button("Abrir", key=f"open_{item['title']}", use_container_width=True):
+                        app_shell.go_to(item["target"])
+
+    render_info_card(
+        "Sobre esta página",
+        "Se actualiza a mano cuando se agregan cambios significativos. Cuando las novedades ya no lo sean, esta página se puede recortar o eliminar.",
+        "GUÍA",
+    )
+
+
+app_shell.FUNCTIONAL_MODULES["Novedades"] = render_whats_new

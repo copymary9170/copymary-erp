@@ -12,6 +12,7 @@ from src import app_shell
 logger = logging.getLogger(__name__)
 
 MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
+    ("Novedades", "src.whats_new", "render_whats_new"),
     ("Centro de control", "src.control_center_today", "render_control_center_today"),
     ("Auditoría de datos", "src.data_audit_insights", "render_data_audit_insights"),
     ("Fundación técnica", "src.foundation_status", "render_foundation_status"),
