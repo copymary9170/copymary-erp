@@ -13,7 +13,7 @@ from src.finishing_sublimation import render_finishing_sublimation
 
 MODULES = (
     ("Plastificado", render_finishing_laminating, "Descuenta laminado/bolsa de Inventario y suma uso de la plastificadora."),
-    ("Corte en Cameo", render_finishing_cutting_cameo, "Descuenta vinil/sticker de Inventario y suma uso de la Silhouette Cameo."),
+    ("Corte en Cameo", render_finishing_cutting_cameo, "Cotiza cortes, valida materiales y calcula cuchilla, tapete, pasadas, depilado y producción."),
     ("Sublimado", render_finishing_sublimation, "Descuenta blancos/papel de sublimación de Inventario y suma uso de la prensa."),
 )
 
