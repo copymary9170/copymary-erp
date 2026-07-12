@@ -43,6 +43,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Estado de Resultados", "src.income_statement", "render_income_statement"),
     ("Flujo de caja proyectado", "src.cash_flow_forecast", "render_cash_flow_forecast"),
     ("Mantenimiento preventivo", "src.machine_maintenance", "render_machine_maintenance"),
+    ("Ajustes de inventario", "src.inventory_adjustments", "render_inventory_adjustments"),
 )
 
 SIDE_EFFECT_MODULES: tuple[str, ...] = (
@@ -53,7 +54,7 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 
 PRODUCTS_NAVIGATION: tuple[str, ...] = (
     "Catálogo y producción", "Mantenimiento del catálogo", "Reversos de producción",
-    "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
+    "Inventario", "Ajustes de inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo",
     "Costeo por procesos", "Tasas de cambio", "BOM multinivel", "Órdenes de producción", "Ajustar precios", "Exportar precios", "Mantenimiento preventivo",
 )
 
@@ -94,6 +95,19 @@ def _load_renderer(module_path: str, attr_name: str, display_name: str) -> Calla
     return renderer
 
 
+def _merge_navigation(area: str, pages: tuple[str, ...]) -> None:
+    """Agrega páginas a un grupo de navegación sin descartar las que ya
+    haya puesto ahí otro módulo (p. ej. app_shell_goals.py). Antes esta
+    función reemplazaba la tupla completa y así desaparecían del menú
+    páginas que sí estaban registradas y funcionando en FUNCTIONAL_MODULES."""
+    existing = app_shell.NAVIGATION_GROUPS.get(area, ())
+    merged = list(existing)
+    for page in pages:
+        if page not in merged:
+            merged.append(page)
+    app_shell.NAVIGATION_GROUPS[area] = tuple(merged)
+
+
 def activate_module_bootstrap() -> None:
     FAILED_MODULES.clear()
     for module_path in SIDE_EFFECT_MODULES:
@@ -102,6 +116,12 @@ def activate_module_bootstrap() -> None:
         renderer = _load_renderer(module_path, renderer_name, module_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-    app_shell.NAVIGATION_GROUPS["Inicio"] = ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados", "Flujo de caja proyectado")
-    app_shell.NAVIGATION_GROUPS["Productos e inventario"] = PRODUCTS_NAVIGATION
-    app_shell.NAVIGATION_GROUPS["Administración"] = ADMIN_NAVIGATION
+    _merge_navigation("Inicio", ("Inicio", "Centro de control", "Auditoría de datos", "Fundación técnica", "Panel comercial", "Panel financiero y cierres", "Estado de Resultados", "Flujo de caja proyectado"))
+    _merge_navigation("Productos e inventario", PRODUCTS_NAVIGATION)
+    _merge_navigation("Administración", ADMIN_NAVIGATION)
+
+    status_module = _try_import("src.status_consistency", "Normalización de estados")
+    if status_module is not None:
+        normalizer = getattr(status_module, "normalize_session_statuses", None)
+        if callable(normalizer):
+            normalizer()
