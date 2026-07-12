@@ -68,13 +68,6 @@ def _fetch_all(query: str, params: tuple = ()) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def _fetch_one(query: str, params: tuple = ()) -> dict | None:
-    initialize_database()
-    with connect() as conn:
-        row = conn.execute(query, params).fetchone()
-    return dict(row) if row else None
-
-
 def list_employees() -> list[dict]:
     return _fetch_all("SELECT * FROM employees ORDER BY full_name")
 
