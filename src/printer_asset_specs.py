@@ -8,6 +8,14 @@ from src import app_shell, assets, session_backup
 from src.session_utils import read_list, save_list, now_iso
 
 
+TECHNOLOGIES = (
+    "Inyección con tanque",
+    "Inyección con cartuchos",
+    "Láser monocromática",
+    "Láser color",
+)
+
+
 def _activate_backup() -> None:
     section = "printer_asset_specs"
     if section not in session_backup.LIST_SECTIONS:
@@ -16,47 +24,134 @@ def _activate_backup() -> None:
         session_backup.SESSION_KEYS = ("general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS)
 
 
+def _positive(value: float, label: str, errors: list[str]) -> None:
+    if value <= 0:
+        errors.append(f"{label} debe ser mayor que cero.")
+
+
 def render_printer_asset_specs() -> None:
     st.title("Ficha técnica de impresoras")
-    st.caption("Completa una sola vez los datos obligatorios que reutilizarán costeo, mantenimiento y producción.")
+    st.caption("Registra la tecnología y los consumibles reales: botellas, cartuchos o tóner.")
     printers = [a for a in assets._get_assets() if "impres" in a.category.casefold() or "impres" in a.name.casefold()]
     if not printers:
         st.warning("Primero registra una impresora en Activos.")
         return
+
     rows = read_list("printer_asset_specs")
     options = {f"{a.name} · {a.asset_id}": a for a in printers}
     selected_label = st.selectbox("Impresora", tuple(options))
     asset = options[selected_label]
     current = next((r for r in reversed(rows) if str(r.get("asset_id")) == str(asset.asset_id) and r.get("active", True)), {})
-    st.info(f"Costo y vida útil se toman obligatoriamente de Activos: ${asset.acquisition_cost:,.2f} · {asset.lifetime_units:,} páginas.")
+    technology = st.selectbox("Tecnología de impresión", TECHNOLOGIES, index=TECHNOLOGIES.index(current.get("technology", "Inyección con tanque")) if current.get("technology") in TECHNOLOGIES else 0)
+    st.info(f"Costo y vida útil se toman de Activos: ${asset.acquisition_cost:,.2f} · {asset.lifetime_units:,} páginas.")
+
     with st.form("printer_asset_spec_form"):
-        a, b, c, d = st.columns(4)
-        head_cost = a.number_input("Costo cabezales ($)", min_value=0.01, value=float(current.get("head_cost", 100.0)))
-        head_life = b.number_input("Vida cabezales (páginas)", min_value=1, value=int(current.get("head_life", 30000)))
-        color_yield = c.number_input("Rendimiento color al 5%", min_value=1, value=int(current.get("color_yield", 6000)))
-        black_yield = d.number_input("Rendimiento negro al 5%", min_value=1, value=int(current.get("black_yield", 12000)))
-        a, b, c, d = st.columns(4)
-        ink_c = a.number_input("Botella C ($)", min_value=0.01, value=float(current.get("ink_c", 19.0)))
-        ink_m = b.number_input("Botella M ($)", min_value=0.01, value=float(current.get("ink_m", 19.0)))
-        ink_y = c.number_input("Botella Y ($)", min_value=0.01, value=float(current.get("ink_y", 19.0)))
-        ink_k = d.number_input("Botella K ($)", min_value=0.01, value=float(current.get("ink_k", 19.0)))
         a, b, c = st.columns(3)
         ppm = a.number_input("Velocidad real (ppm)", min_value=0.1, value=float(current.get("ppm", 8.0)))
         watts = b.number_input("Consumo imprimiendo (W)", min_value=0.1, value=float(current.get("watts", 18.0)))
         maintenance_page = c.number_input("Reserva mantenimiento/página ($)", min_value=0.0, value=float(current.get("maintenance_page", 0.003)), format="%.4f")
+
+        head_cost = head_life = drum_cost = drum_life = fuser_cost = fuser_life = 0.0
+        black_cost = black_yield = color_cost = color_yield = 0.0
+        c_cost = c_yield = m_cost = m_yield = y_cost = y_yield = 0.0
+
+        if technology == "Inyección con tanque":
+            st.markdown("#### Botellas y cabezales")
+            a, b = st.columns(2)
+            head_cost = a.number_input("Costo cabezales ($)", min_value=0.0, value=float(current.get("head_cost", 100.0)))
+            head_life = b.number_input("Vida cabezales (páginas)", min_value=1.0, value=float(current.get("head_life", 30000)))
+            a, b, c, d = st.columns(4)
+            c_cost = a.number_input("Botella C ($)", min_value=0.01, value=float(current.get("c_cost", current.get("ink_c", 19.0))))
+            m_cost = b.number_input("Botella M ($)", min_value=0.01, value=float(current.get("m_cost", current.get("ink_m", 19.0))))
+            y_cost = c.number_input("Botella Y ($)", min_value=0.01, value=float(current.get("y_cost", current.get("ink_y", 19.0))))
+            black_cost = d.number_input("Botella K ($)", min_value=0.01, value=float(current.get("black_cost", current.get("ink_k", 19.0))))
+            a, b = st.columns(2)
+            color_yield = a.number_input("Rendimiento color al 5%", min_value=1.0, value=float(current.get("color_yield", 6000)))
+            black_yield = b.number_input("Rendimiento negro al 5%", min_value=1.0, value=float(current.get("black_yield", 12000)))
+            c_yield = m_yield = y_yield = color_yield
+
+        elif technology == "Inyección con cartuchos":
+            st.markdown("#### Cartuchos")
+            cartridge_layout = st.radio("Configuración", ("Negro + tricolor", "Cartuchos C/M/Y separados"), horizontal=True, index=1 if current.get("cartridge_layout") == "separate" else 0)
+            a, b = st.columns(2)
+            black_cost = a.number_input("Cartucho negro ($)", min_value=0.01, value=float(current.get("black_cost", 22.0)))
+            black_yield = b.number_input("Rendimiento cartucho negro", min_value=1.0, value=float(current.get("black_yield", 300)))
+            if cartridge_layout == "Negro + tricolor":
+                a, b = st.columns(2)
+                color_cost = a.number_input("Cartucho tricolor ($)", min_value=0.01, value=float(current.get("color_cost", 23.0)))
+                color_yield = b.number_input("Rendimiento cartucho tricolor", min_value=1.0, value=float(current.get("color_yield", 100)))
+            else:
+                a, b, c = st.columns(3)
+                c_cost = a.number_input("Cartucho C ($)", min_value=0.01, value=float(current.get("c_cost", 15.0)))
+                m_cost = b.number_input("Cartucho M ($)", min_value=0.01, value=float(current.get("m_cost", 15.0)))
+                y_cost = c.number_input("Cartucho Y ($)", min_value=0.01, value=float(current.get("y_cost", 15.0)))
+                a, b, c = st.columns(3)
+                c_yield = a.number_input("Rendimiento C", min_value=1.0, value=float(current.get("c_yield", 300)))
+                m_yield = b.number_input("Rendimiento M", min_value=1.0, value=float(current.get("m_yield", 300)))
+                y_yield = c.number_input("Rendimiento Y", min_value=1.0, value=float(current.get("y_yield", 300)))
+
+        else:
+            st.markdown("#### Tóner y componentes láser")
+            a, b = st.columns(2)
+            black_cost = a.number_input("Tóner negro ($)", min_value=0.01, value=float(current.get("black_cost", 45.0)))
+            black_yield = b.number_input("Rendimiento tóner negro", min_value=1.0, value=float(current.get("black_yield", 1500)))
+            if technology == "Láser color":
+                a, b, c = st.columns(3)
+                c_cost = a.number_input("Tóner C ($)", min_value=0.01, value=float(current.get("c_cost", 55.0)))
+                m_cost = b.number_input("Tóner M ($)", min_value=0.01, value=float(current.get("m_cost", 55.0)))
+                y_cost = c.number_input("Tóner Y ($)", min_value=0.01, value=float(current.get("y_cost", 55.0)))
+                a, b, c = st.columns(3)
+                c_yield = a.number_input("Rendimiento C", min_value=1.0, value=float(current.get("c_yield", 1300)))
+                m_yield = b.number_input("Rendimiento M", min_value=1.0, value=float(current.get("m_yield", 1300)))
+                y_yield = c.number_input("Rendimiento Y", min_value=1.0, value=float(current.get("y_yield", 1300)))
+            a, b, c, d = st.columns(4)
+            drum_cost = a.number_input("Costo tambor ($)", min_value=0.0, value=float(current.get("drum_cost", 80.0)))
+            drum_life = b.number_input("Vida tambor (páginas)", min_value=1.0, value=float(current.get("drum_life", 12000)))
+            fuser_cost = c.number_input("Costo fusor ($)", min_value=0.0, value=float(current.get("fuser_cost", 120.0)))
+            fuser_life = d.number_input("Vida fusor (páginas)", min_value=1.0, value=float(current.get("fuser_life", 50000)))
+
         submitted = st.form_submit_button("Guardar ficha técnica", type="primary", use_container_width=True)
+
     if submitted:
+        errors: list[str] = []
+        _positive(ppm, "Velocidad", errors)
+        _positive(watts, "Consumo eléctrico", errors)
+        _positive(black_cost, "Consumible negro", errors)
+        _positive(black_yield, "Rendimiento negro", errors)
+        if technology == "Inyección con tanque":
+            for value, label in ((c_cost, "Botella C"), (m_cost, "Botella M"), (y_cost, "Botella Y"), (color_yield, "Rendimiento color")):
+                _positive(value, label, errors)
+        elif technology == "Inyección con cartuchos" and cartridge_layout == "Negro + tricolor":
+            _positive(color_cost, "Cartucho tricolor", errors)
+            _positive(color_yield, "Rendimiento tricolor", errors)
+        elif technology in {"Inyección con cartuchos", "Láser color"}:
+            for value, label in ((c_cost, "Consumible C"), (m_cost, "Consumible M"), (y_cost, "Consumible Y"), (c_yield, "Rendimiento C"), (m_yield, "Rendimiento M"), (y_yield, "Rendimiento Y")):
+                _positive(value, label, errors)
+        if errors:
+            for error in errors:
+                st.error(error)
+            return
+
         for row in rows:
             if str(row.get("asset_id")) == str(asset.asset_id):
                 row["active"] = False
         rows.append({
-            "spec_id": f"PRS-{uuid4().hex[:8].upper()}", "asset_id": asset.asset_id, "head_cost": head_cost,
-            "head_life": int(head_life), "color_yield": int(color_yield), "black_yield": int(black_yield),
-            "ink_c": ink_c, "ink_m": ink_m, "ink_y": ink_y, "ink_k": ink_k, "ppm": ppm, "watts": watts,
-            "maintenance_page": maintenance_page, "active": True, "created_at_utc": now_iso(),
+            "spec_id": f"PRS-{uuid4().hex[:8].upper()}", "asset_id": asset.asset_id,
+            "technology": technology,
+            "cartridge_layout": "separate" if technology == "Inyección con cartuchos" and cartridge_layout == "Cartuchos C/M/Y separados" else "tricolor",
+            "head_cost": head_cost, "head_life": int(head_life or 1),
+            "drum_cost": drum_cost, "drum_life": int(drum_life or 1),
+            "fuser_cost": fuser_cost, "fuser_life": int(fuser_life or 1),
+            "black_cost": black_cost, "black_yield": int(black_yield),
+            "color_cost": color_cost, "color_yield": int(color_yield or 1),
+            "c_cost": c_cost, "c_yield": int(c_yield or 1),
+            "m_cost": m_cost, "m_yield": int(m_yield or 1),
+            "y_cost": y_cost, "y_yield": int(y_yield or 1),
+            "ppm": ppm, "watts": watts, "maintenance_page": maintenance_page,
+            "active": True, "created_at_utc": now_iso(),
         })
         save_list("printer_asset_specs", rows)
-        st.success("Ficha técnica guardada, respaldable y disponible para el costeo automático.")
+        st.success("Ficha técnica guardada para el tipo de consumible seleccionado.")
         st.rerun()
 
 
@@ -74,6 +169,6 @@ def activate_printer_asset_specs() -> None:
         icon, eyebrow, description, area_pages = top_navigation_app.SPECIALTY_AREAS["Activos y mantenimiento"]
         if name not in area_pages:
             top_navigation_app.SPECIALTY_AREAS["Activos y mantenimiento"] = (icon, eyebrow, description, (*area_pages, name))
-        top_navigation_app.DESCRIPTIONS[name] = "Datos obligatorios de tintas, cabezales, rendimiento, velocidad y energía."
+        top_navigation_app.DESCRIPTIONS[name] = "Botellas, cartuchos, tóner, componentes, rendimiento, velocidad y energía."
     except (ImportError, KeyError):
         pass
