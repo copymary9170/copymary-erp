@@ -1,11 +1,11 @@
 """Registro del módulo de análisis y costeo de impresión."""
 from src import app_shell
-from src.print_cost_analyzer import render_print_cost_analyzer
+from src.print_cost_analyzer_v2 import render_print_cost_analyzer_v2
 
 
 def activate_print_cost_module() -> None:
     name = "Análisis y costeo de impresión"
-    app_shell.FUNCTIONAL_MODULES[name] = render_print_cost_analyzer
+    app_shell.FUNCTIONAL_MODULES[name] = render_print_cost_analyzer_v2
 
     pages = list(app_shell.NAVIGATION_GROUPS.get("Productos e inventario", ()))
     if name not in pages:
@@ -13,7 +13,6 @@ def activate_print_cost_module() -> None:
         pages.insert(insert_at, name)
         app_shell.NAVIGATION_GROUPS["Productos e inventario"] = tuple(pages)
 
-    # La interfaz empresarial usa áreas de especialidad propias.
     try:
         from src import top_navigation_app
         icon, eyebrow, description, production_pages = top_navigation_app.SPECIALTY_AREAS["Producción"]
@@ -24,6 +23,6 @@ def activate_print_cost_module() -> None:
                 "Preprensa, análisis de archivos, producción y control de trabajos.",
                 (name, *production_pages),
             )
-        top_navigation_app.DESCRIPTIONS[name] = "Cobertura CMYK y costo técnico de cada trabajo."
+        top_navigation_app.DESCRIPTIONS[name] = "Cobertura CMYK, desgaste, tiempo y precio recomendado."
     except (ImportError, KeyError):
         pass
