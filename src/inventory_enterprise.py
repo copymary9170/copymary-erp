@@ -12,12 +12,19 @@ import math
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+from src.erp_database import latest_exchange_rate
+from src.money import format_money, get_currency
 from src.session_utils import read_list, save_list
 
 CSV_COLUMNS = (
     "item_id", "sku", "name", "category", "available_quantity", "unit_name",
     "unit_cost", "minimum_stock", "maximum_stock", "supplier", "location", "lot", "expiry_date",
+    "purchase_currency", "content_type", "content_value", "content_unit",
 )
+
+CURRENCIES = ("USD", "VES", "EUR")
+PAYMENT_METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Tarjeta", "Crédito de proveedor", "Otro")
+CONTENT_TYPES = ("Pieza completa (sin medida)", "Área (cm²)", "Peso (g)", "Volumen (ml)")
 
 CATEGORIES = (
     "Papel y cartulina", "Tintas y botellas", "Cartuchos", "Tóner",
@@ -37,6 +44,75 @@ def _num(value, default=0.0) -> float:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _default_exchange_rate(currency: str, base_currency: str) -> float:
+    if currency == base_currency:
+        return 1.0
+    looked_up = latest_exchange_rate(currency, base_currency)
+    return _num(looked_up.get("rate"), 1.0) if looked_up else 1.0
+
+
+def _landed_unit_cost(subtotal: float, shipping: float, tax: float, exchange_rate: float, quantity: float) -> tuple[float, float]:
+    """Convierte costo del material + envío + impuestos (en la moneda de
+    compra) a la moneda base del ERP, usando la tasa de cambio indicada, y
+    devuelve `(costo_unitario_base, total_landed_base)`.
+    """
+    total_purchase_currency = subtotal + shipping + tax
+    total_base = total_purchase_currency / max(exchange_rate, 0.0001)
+    unit_cost = total_base / max(quantity, 1.0)
+    return unit_cost, total_base
+
+
+def _purchase_inputs(prefix: str, *, default_supplier: str = "") -> dict:
+    """Campos compartidos de "cómo se adquirió este material": proveedor,
+    moneda, tasa de cambio usada, método de pago, costo del material, envío
+    y impuestos. Se usa tanto al registrar un artículo nuevo (existencia
+    inicial) como al registrar cada "Entrada" posterior, para que el costo
+    unitario siempre refleje lo que realmente costó traer el material al
+    negocio, no solo el precio de lista.
+    """
+    base_currency = get_currency()
+    a, b, c = st.columns(3)
+    currency = a.selectbox("Moneda de la compra", CURRENCIES, index=CURRENCIES.index(base_currency) if base_currency in CURRENCIES else 0, key=f"{prefix}_currency")
+    same_currency = currency == base_currency
+    exchange_rate = b.number_input(
+        f"Tasa de cambio usada (1 {base_currency} = ? {currency})",
+        min_value=0.0001, value=1.0 if same_currency else _default_exchange_rate(currency, base_currency),
+        step=0.01, format="%.4f", disabled=same_currency, key=f"{prefix}_rate",
+    )
+    payment_method = c.selectbox("Método de pago", PAYMENT_METHODS, key=f"{prefix}_payment")
+    a, b, c = st.columns(3)
+    material_subtotal = a.number_input(f"Costo del material ({currency})", min_value=0.0, value=0.0, step=1.0, format="%.4f", key=f"{prefix}_subtotal")
+    shipping_cost = b.number_input(f"Envío / flete ({currency})", min_value=0.0, value=0.0, step=1.0, format="%.2f", key=f"{prefix}_shipping")
+    tax_amount = c.number_input(f"Impuestos ({currency})", min_value=0.0, value=0.0, step=1.0, format="%.2f", key=f"{prefix}_tax")
+    supplier = st.text_input("Proveedor", value=default_supplier, key=f"{prefix}_supplier")
+    return {
+        "currency": currency, "same_currency": same_currency, "exchange_rate": 1.0 if same_currency else float(exchange_rate),
+        "payment_method": payment_method, "material_subtotal": float(material_subtotal),
+        "shipping_cost": float(shipping_cost), "tax_amount": float(tax_amount), "supplier": supplier.strip(),
+    }
+
+
+def _content_inputs(prefix: str) -> dict:
+    """Contenido físico de cada unidad (cm², g o ml), para poder calcular
+    merma más adelante en Plastificado, Corte en Cameo y Sublimado. Es una
+    propiedad del material (no de cada compra), por eso solo se pide al
+    registrar el artículo.
+    """
+    content_type = st.selectbox("¿Cómo se mide el contenido de cada unidad? (para calcular merma después)", CONTENT_TYPES, key=f"{prefix}_content_type")
+    if content_type == CONTENT_TYPES[1]:
+        a, b = st.columns(2)
+        width_cm = a.number_input("Ancho (cm)", min_value=0.0, value=0.0, key=f"{prefix}_width")
+        height_cm = b.number_input("Alto (cm)", min_value=0.0, value=0.0, key=f"{prefix}_height")
+        return {"content_type": "area", "content_value": round(width_cm * height_cm, 2), "content_unit": "cm²", "width_cm": width_cm, "height_cm": height_cm}
+    if content_type == CONTENT_TYPES[2]:
+        weight_g = st.number_input("Peso por unidad (g)", min_value=0.0, value=0.0, key=f"{prefix}_weight")
+        return {"content_type": "weight", "content_value": weight_g, "content_unit": "g"}
+    if content_type == CONTENT_TYPES[3]:
+        volume_ml = st.number_input("Volumen por unidad (ml)", min_value=0.0, value=0.0, key=f"{prefix}_volume")
+        return {"content_type": "volume", "content_value": volume_ml, "content_unit": "ml"}
+    return {"content_type": "piece", "content_value": 0.0, "content_unit": ""}
 
 
 def _items() -> list[dict]:
@@ -66,6 +142,12 @@ def _items() -> list[dict]:
             "lot": str(row.get("lot") or ""),
             "expiry_date": str(row.get("expiry_date") or ""),
             "active": bool(row.get("active", True)),
+            "purchase_currency": str(row.get("purchase_currency") or get_currency()),
+            "exchange_rate_used": _num(row.get("exchange_rate_used"), 1.0),
+            "payment_method": str(row.get("payment_method") or ""),
+            "content_type": str(row.get("content_type") or "piece"),
+            "content_value": _num(row.get("content_value")),
+            "content_unit": str(row.get("content_unit") or ""),
         })
     return normalized
 
@@ -83,7 +165,7 @@ def _build_csv(rows: list[dict]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
-def _movement(item: dict, movement_type: str, quantity: float, reason: str, unit_cost: float = 0.0) -> None:
+def _movement(item: dict, movement_type: str, quantity: float, reason: str, unit_cost: float = 0.0, purchase_detail: dict | None = None) -> None:
     before = _num(item.get("available_quantity"))
     positive = movement_type in {"Entrada", "Ajuste positivo", "Devolución"}
     after = before + quantity if positive else max(0.0, before - quantity)
@@ -92,16 +174,33 @@ def _movement(item: dict, movement_type: str, quantity: float, reason: str, unit
         incoming_value = quantity * unit_cost
         item["unit_cost"] = (old_value + incoming_value) / max(after, 0.00001)
         item["purchase_cost"] = item["unit_cost"] * max(_num(item.get("purchased_quantity")), 1)
+        if purchase_detail:
+            item["purchase_currency"] = purchase_detail.get("currency", item.get("purchase_currency"))
+            item["exchange_rate_used"] = purchase_detail.get("exchange_rate", item.get("exchange_rate_used"))
+            item["payment_method"] = purchase_detail.get("payment_method", item.get("payment_method"))
+            if purchase_detail.get("supplier"):
+                item["supplier"] = purchase_detail["supplier"]
     item["available_quantity"] = after
     movements = read_list("inventory_movements")
-    movements.append({
+    movement_record = {
         "movement_id": f"MOV-{uuid4().hex[:8].upper()}", "created_at_utc": _now(),
         "item_id": item["item_id"], "item_name": item["name"],
         "movement_type": movement_type, "quantity": quantity, "reason": reason.strip(),
         "previous_quantity": before, "resulting_quantity": after,
         "unit_cost": unit_cost or _num(item.get("unit_cost")),
         "total_value": quantity * (unit_cost or _num(item.get("unit_cost"))),
-    })
+    }
+    if purchase_detail:
+        movement_record.update({
+            "supplier": purchase_detail.get("supplier", ""),
+            "purchase_currency": purchase_detail.get("currency", ""),
+            "exchange_rate_used": purchase_detail.get("exchange_rate", 1.0),
+            "payment_method": purchase_detail.get("payment_method", ""),
+            "material_subtotal": purchase_detail.get("material_subtotal", 0.0),
+            "shipping_cost": purchase_detail.get("shipping_cost", 0.0),
+            "tax_amount": purchase_detail.get("tax_amount", 0.0),
+        })
+    movements.append(movement_record)
     save_list("inventory_movements", movements)
 
 
@@ -139,35 +238,48 @@ def _register(rows: list[dict]) -> None:
         name = b.text_input("Nombre obligatorio")
         category = c.selectbox("Categoría", CATEGORIES)
         unit = d.selectbox("Unidad", UNITS)
-        a, b, c, d = st.columns(4)
-        quantity = a.number_input("Existencia inicial", min_value=0.0, value=0.0)
-        unit_cost = b.number_input("Costo unitario", min_value=0.0, value=0.0, format="%.4f")
-        minimum = c.number_input("Stock mínimo", min_value=0.0, value=0.0)
-        maximum = d.number_input("Stock máximo", min_value=0.0, value=0.0)
-        a, b, c, d = st.columns(4)
-        supplier = a.text_input("Proveedor")
-        location = b.text_input("Ubicación", value="Almacén principal")
-        lot = c.text_input("Lote")
-        expiry = d.date_input("Vencimiento", value=None)
+        a, b, c = st.columns(3)
+        quantity = a.number_input("Cantidad comprada / existencia inicial", min_value=0.0, value=0.0)
+        minimum = b.number_input("Stock mínimo", min_value=0.0, value=0.0)
+        maximum = c.number_input("Stock máximo", min_value=0.0, value=0.0)
+
+        st.markdown("##### ¿Qué costó realmente traer este material?")
+        purchase = _purchase_inputs("reg")
+
+        st.markdown("##### Contenido físico (para calcular merma después)")
+        content = _content_inputs("reg")
+
+        a, b, c = st.columns(3)
+        location = a.text_input("Ubicación", value="Almacén principal")
+        lot = b.text_input("Lote")
+        expiry = c.date_input("Vencimiento", value=None)
         submit = st.form_submit_button("Registrar artículo", type="primary", use_container_width=True)
     if submit:
         if not name.strip():
             st.error("El nombre es obligatorio.")
             return
-        if unit_cost <= 0:
-            st.error("El costo unitario debe ser mayor que cero.")
+        if purchase["material_subtotal"] <= 0:
+            st.error("El costo del material debe ser mayor que cero.")
             return
         item_id = sku.strip() or uuid4().hex[:8].upper()
         if any(str(r.get("item_id")) == item_id or (sku.strip() and str(r.get("sku")) == sku.strip()) for r in rows):
             st.error("El SKU o ID ya existe.")
             return
+
+        unit_cost, landed_total = _landed_unit_cost(
+            purchase["material_subtotal"], purchase["shipping_cost"], purchase["tax_amount"],
+            purchase["exchange_rate"], max(quantity, 1),
+        )
         item = {
             "item_id": item_id, "sku": sku.strip(), "name": name.strip(), "category": category,
             "unit_name": unit, "available_quantity": 0.0, "minimum_stock": float(minimum),
-            "maximum_stock": float(maximum), "unit_cost": float(unit_cost),
-            "purchase_cost": float(unit_cost * max(quantity, 1)), "purchased_quantity": float(max(quantity, 1)),
-            "supplier": supplier.strip(), "location": location.strip(), "lot": lot.strip(),
+            "maximum_stock": float(maximum), "unit_cost": unit_cost,
+            "purchase_cost": landed_total, "purchased_quantity": float(max(quantity, 1)),
+            "supplier": purchase["supplier"], "location": location.strip(), "lot": lot.strip(),
             "expiry_date": expiry.isoformat() if expiry else "", "active": True, "created_at_utc": _now(),
+            "purchase_currency": purchase["currency"], "exchange_rate_used": purchase["exchange_rate"],
+            "payment_method": purchase["payment_method"],
+            "content_type": content["content_type"], "content_value": content["content_value"], "content_unit": content["content_unit"],
         }
         rows.append(item)
         # La existencia inicial se registra siempre como un movimiento de "Entrada", nunca
@@ -176,9 +288,9 @@ def _register(rows: list[dict]) -> None:
         # contarla dos veces (antes: se fijaba aquí Y se volvía a sumar en `_movement`).
         _save(rows)
         if quantity > 0:
-            _movement(item, "Entrada", float(quantity), "Existencia inicial", float(unit_cost))
+            _movement(item, "Entrada", float(quantity), "Existencia inicial", unit_cost, purchase_detail=purchase)
             _save(rows)
-        st.success("Artículo registrado e integrado con Producción y Costeo.")
+        st.success(f"Artículo registrado. Costo unitario real (con envío e impuestos incluidos): {format_money(unit_cost)}.")
         st.rerun()
 
 
@@ -203,7 +315,10 @@ def _catalog(rows: list[dict]) -> None:
     st.dataframe([
         {"SKU": r["sku"] or r["item_id"], "Artículo": r["name"], "Categoría": r["category"],
          "Existencia": r["available_quantity"], "Unidad": r["unit_name"], "Costo unitario": round(_num(r["unit_cost"]), 4),
-         "Valor": round(_num(r["available_quantity"]) * _num(r["unit_cost"]), 2), "Ubicación": r["location"], "Estado": state}
+         "Valor": round(_num(r["available_quantity"]) * _num(r["unit_cost"]), 2), "Proveedor": r["supplier"],
+         "Método de pago": r.get("payment_method", ""), "Moneda de compra": r.get("purchase_currency", ""),
+         "Contenido/unidad": f"{r['content_value']:,.2f} {r['content_unit']}".strip() if r.get("content_unit") else "—",
+         "Ubicación": r["location"], "Estado": state}
         for r, state in filtered
     ], use_container_width=True, hide_index=True)
     if filtered:
@@ -221,12 +336,17 @@ def _movements(rows: list[dict]) -> None:
         st.info("Registra artículos antes de crear movimientos.")
         return
     labels = {f"{r['name']} · {r['sku'] or r['item_id']} · stock {r['available_quantity']:,.2f}": r for r in rows if r.get("active", True)}
+    selected = st.selectbox("Artículo", tuple(labels), key="mov_item_select")
+    movement_type = st.selectbox("Movimiento", MOVEMENTS, key="mov_type_select")
+    is_entrada = movement_type == "Entrada"
     with st.form("enterprise_inventory_movement", clear_on_submit=True):
-        selected = st.selectbox("Artículo", tuple(labels))
-        a, b, c = st.columns(3)
-        movement_type = a.selectbox("Movimiento", MOVEMENTS)
-        quantity = b.number_input("Cantidad", min_value=0.0001, value=1.0)
-        unit_cost = c.number_input("Costo unitario de entrada", min_value=0.0, value=0.0, format="%.4f")
+        purchase = None
+        if is_entrada:
+            st.caption("Es una nueva compra: registra exactamente lo que costó traerla, para que el costo unitario quede real.")
+            purchase = _purchase_inputs("mov", default_supplier=labels[selected].get("supplier", ""))
+            quantity = st.number_input("Cantidad comprada", min_value=0.0001, value=1.0, key="mov_qty_entrada")
+        else:
+            quantity = st.number_input("Cantidad", min_value=0.0001, value=1.0, key="mov_qty_otro")
         reason = st.text_input("Motivo / documento / trabajo")
         submit = st.form_submit_button("Registrar movimiento", type="primary", use_container_width=True)
     if submit:
@@ -235,12 +355,20 @@ def _movements(rows: list[dict]) -> None:
         if negative and quantity > _num(item["available_quantity"]):
             st.error("La salida supera la existencia disponible.")
             return
-        if movement_type == "Entrada" and unit_cost <= 0:
-            st.error("Las entradas requieren costo unitario para actualizar el promedio ponderado.")
-            return
-        _movement(item, movement_type, float(quantity), reason or "Movimiento manual", float(unit_cost))
+        if is_entrada:
+            if purchase["material_subtotal"] <= 0:
+                st.error("El costo del material debe ser mayor que cero para registrar la entrada.")
+                return
+            unit_cost, _landed_total = _landed_unit_cost(
+                purchase["material_subtotal"], purchase["shipping_cost"], purchase["tax_amount"],
+                purchase["exchange_rate"], quantity,
+            )
+            _movement(item, movement_type, float(quantity), reason or "Compra", unit_cost, purchase_detail=purchase)
+            st.success(f"Entrada registrada. Costo unitario real de esta compra: {format_money(unit_cost)}.")
+        else:
+            _movement(item, movement_type, float(quantity), reason or "Movimiento manual")
+            st.success("Movimiento registrado con trazabilidad.")
         _save(rows)
-        st.success("Movimiento registrado con trazabilidad.")
         st.rerun()
     history = list(reversed(read_list("inventory_movements")[-200:]))
     if history:

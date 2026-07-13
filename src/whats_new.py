@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Costo de compra detallado en Inventario",
+        "target": "Inventario",
+        "category": "Nuevo",
+        "description": "Al registrar un artículo o una nueva entrada, Inventario ahora pide el detalle real de la compra: proveedor, moneda, tasa de cambio usada, método de pago, costo del material, envío/flete e impuestos por separado. El costo unitario se calcula automáticamente sobre ese total real (\"landed cost\"), no solo el precio de lista. También se puede registrar el contenido físico de cada unidad (cm², g o ml) para calcular merma más adelante en Plastificado, Corte en Cameo y Sublimado.",
+    },
+    {
         "title": "Confirmar trabajo impreso y enviarlo a acabado",
         "target": "Análisis y costeo de impresión",
         "category": "Nuevo",
