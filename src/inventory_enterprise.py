@@ -4,13 +4,20 @@ Mantiene compatibilidad con ``inventory_registry`` y ``inventory_movements``.
 """
 from __future__ import annotations
 
+import csv
 from datetime import date, datetime, timezone
+from io import StringIO
 from uuid import uuid4
 import math
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.session_utils import read_list, save_list
+
+CSV_COLUMNS = (
+    "item_id", "sku", "name", "category", "available_quantity", "unit_name",
+    "unit_cost", "minimum_stock", "maximum_stock", "supplier", "location", "lot", "expiry_date",
+)
 
 CATEGORIES = (
     "Papel y cartulina", "Tintas y botellas", "Cartuchos", "Tóner",
@@ -65,6 +72,15 @@ def _items() -> list[dict]:
 
 def _save(rows: list[dict]) -> None:
     save_list("inventory_registry", rows)
+
+
+def _build_csv(rows: list[dict]) -> bytes:
+    buffer = StringIO()
+    writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
+    writer.writerow(CSV_COLUMNS)
+    for row in rows:
+        writer.writerow([row.get(column, "") for column in CSV_COLUMNS])
+    return buffer.getvalue().encode("utf-8")
 
 
 def _movement(item: dict, movement_type: str, quantity: float, reason: str, unit_cost: float = 0.0) -> None:
@@ -147,13 +163,17 @@ def _register(rows: list[dict]) -> None:
             return
         item = {
             "item_id": item_id, "sku": sku.strip(), "name": name.strip(), "category": category,
-            "unit_name": unit, "available_quantity": float(quantity), "minimum_stock": float(minimum),
+            "unit_name": unit, "available_quantity": 0.0, "minimum_stock": float(minimum),
             "maximum_stock": float(maximum), "unit_cost": float(unit_cost),
             "purchase_cost": float(unit_cost * max(quantity, 1)), "purchased_quantity": float(max(quantity, 1)),
             "supplier": supplier.strip(), "location": location.strip(), "lot": lot.strip(),
             "expiry_date": expiry.isoformat() if expiry else "", "active": True, "created_at_utc": _now(),
         }
         rows.append(item)
+        # La existencia inicial se registra siempre como un movimiento de "Entrada", nunca
+        # asignada directamente al campo `available_quantity` del ítem: así el historial de
+        # movimientos siempre explica de dónde salió cada unidad de existencia, y evita
+        # contarla dos veces (antes: se fijaba aquí Y se volvía a sumar en `_movement`).
         _save(rows)
         if quantity > 0:
             _movement(item, "Entrada", float(quantity), "Existencia inicial", float(unit_cost))
@@ -186,6 +206,14 @@ def _catalog(rows: list[dict]) -> None:
          "Valor": round(_num(r["available_quantity"]) * _num(r["unit_cost"]), 2), "Ubicación": r["location"], "Estado": state}
         for r, state in filtered
     ], use_container_width=True, hide_index=True)
+    if filtered:
+        st.download_button(
+            "Descargar catálogo filtrado (CSV)",
+            data=_build_csv([r for r, _state in filtered]),
+            file_name=f"inventario_{date.today().isoformat()}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
 
 def _movements(rows: list[dict]) -> None:
@@ -262,14 +290,83 @@ def _replenishment(rows: list[dict]) -> None:
         render_info_card("Siguiente paso", "Convierte esta sugerencia en una solicitud o compra desde Compras y Proveedores.", "ABASTECIMIENTO")
 
 
+def _reserved_for(item_id: str, reservations: list[dict]) -> float:
+    return sum(
+        _num(row.get("quantity"))
+        for row in reservations
+        if str(row.get("item_id")) == str(item_id) and row.get("status") == "Activa"
+    )
+
+
+def _reservations(rows: list[dict]) -> None:
+    st.caption("Aparta existencia para un pedido, cotización o trabajo de producción sin descontarla todavía del inventario.")
+    reservations = read_list("inventory_reservations")
+    active_rows = [r for r in rows if r.get("active", True)]
+    if not active_rows:
+        st.info("Registra artículos antes de reservar.")
+    else:
+        labels = {f"{r['name']} · disponible {max(_num(r['available_quantity']) - _reserved_for(r['item_id'], reservations), 0.0):,.2f} {r['unit_name']}": r for r in active_rows}
+        with st.form("inventory_reservation_form", clear_on_submit=True):
+            selected = st.selectbox("Artículo", tuple(labels))
+            item = labels[selected]
+            free = max(_num(item["available_quantity"]) - _reserved_for(item["item_id"], reservations), 0.0)
+            a, b, c, d = st.columns(4)
+            quantity = a.number_input("Cantidad a reservar", min_value=0.0, max_value=float(free) if free > 0 else 0.0, value=0.0, step=1.0)
+            source = b.selectbox("Origen", ("Pedido", "Producción", "Cotización", "Uso interno", "Otro"))
+            reference = c.text_input("Referencia")
+            due_date = d.date_input("Vence", value=date.today())
+            responsible = st.text_input("Responsable")
+            submit = st.form_submit_button("Reservar", type="primary", use_container_width=True)
+        if submit:
+            if quantity <= 0:
+                st.error("La cantidad a reservar debe ser mayor que cero.")
+            elif quantity > free:
+                st.error("La cantidad a reservar supera la existencia disponible (ya descontando otras reservas activas).")
+            else:
+                reservations.append({
+                    "reservation_id": f"RSV-{uuid4().hex[:8].upper()}",
+                    "item_id": item["item_id"], "quantity": float(quantity), "source": source,
+                    "reference": reference.strip(), "due_date": due_date.isoformat(),
+                    "responsible": responsible.strip() or "Sin asignar", "note": "",
+                    "status": "Activa", "created_at_utc": _now(),
+                })
+                save_list("inventory_reservations", reservations)
+                st.success("Reserva creada. La existencia disponible ya la descuenta en el resto del ERP.")
+                st.rerun()
+
+    active_reservations = [row for row in reservations if row.get("status") == "Activa"]
+    if not active_reservations:
+        st.info("No hay reservas activas.")
+        return
+    st.markdown("#### Reservas activas")
+    names = {r["item_id"]: r["name"] for r in rows}
+    for reservation in reversed(active_reservations[-50:]):
+        with st.container(border=True):
+            cols = st.columns([3, 1, 1])
+            cols[0].markdown(f"**{names.get(reservation.get('item_id'), 'Material no disponible')}**")
+            cols[0].caption(f"{reservation.get('source', '')} · {reservation.get('reference', '')} · vence {reservation.get('due_date', '')} · {reservation.get('responsible', '')}")
+            cols[1].metric("Cantidad", f"{_num(reservation.get('quantity')):,.2f}")
+            if cols[2].button("Liberar", key=f"release_{reservation.get('reservation_id')}", use_container_width=True):
+                updated = []
+                for row in reservations:
+                    current = dict(row)
+                    if current.get("reservation_id") == reservation.get("reservation_id"):
+                        current["status"] = "Liberada"
+                        current["released_at_utc"] = _now()
+                    updated.append(current)
+                save_list("inventory_reservations", updated)
+                st.rerun()
+
+
 def render_inventory_enterprise() -> None:
     render_page_header("Inventario empresarial", "Controla existencias, costos, movimientos, conteos, lotes y reposición desde una sola área.")
     rows = _items()
-    tabs = st.tabs(("Panel", "Registrar", "Catálogo", "Movimientos", "Conteo físico", "Reposición"))
+    tabs = st.tabs(("Panel", "Registrar", "Catálogo", "Movimientos", "Reservas", "Conteo físico", "Reposición"))
     with tabs[0]: _dashboard(rows)
     with tabs[1]: _register(rows)
     with tabs[2]: _catalog(rows)
     with tabs[3]: _movements(rows)
-    with tabs[4]: _counts(rows)
-    with tabs[5]: _replenishment(rows)
+    with tabs[4]: _reservations(rows)
+    with tabs[5]: _counts(rows)
+    with tabs[6]: _replenishment(rows)
     st.caption("Los papeles, blancos de sublimación, materiales de Cameo y plastificación registrados aquí son reutilizados automáticamente por Producción y Costeo.")
