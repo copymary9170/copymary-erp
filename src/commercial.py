@@ -7,7 +7,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-from src.payment_fees import fee_breakdown, should_apply_igtf
+from src.payment_fees import sale_breakdown, should_apply_igtf
 from src.session_utils import now_iso as _now
 
 
@@ -169,33 +169,43 @@ def render_sales() -> None:
         with third[2]:
             payment_method = st.selectbox("Método de pago", ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro"))
 
-        apply_igtf = st.checkbox(
-            "Esta venta paga IGTF",
-            value=should_apply_igtf(payment_method),
-            help="Decisión manual: márcalo solo si esta operación específica paga IGTF. Se sugiere marcado para pagos en divisas/cripto, pero hay casos exentos — confírmalo tú.",
-        )
-        preview_total = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
-        preview = fee_breakdown(preview_total, payment_method, apply_igtf=apply_igtf)
-        if preview_total > 0 and (preview["fee_amount"] > 0 or preview["igtf_amount"] > 0):
-            note = f"Comisión {payment_method}: {format_money(preview['fee_amount'])}"
+        iva_col, igtf_col = st.columns(2)
+        with iva_col:
+            apply_iva = st.checkbox("Esta venta cobra IVA", value=False, help="Decisión manual: márcalo solo si esta venta específica debe facturar IVA.")
+        with igtf_col:
+            apply_igtf = st.checkbox(
+                "Esta venta paga IGTF",
+                value=should_apply_igtf(payment_method),
+                help="Decisión manual: márcalo solo si esta operación específica paga IGTF. Se sugiere marcado para pagos en divisas/cripto, pero hay casos exentos — confírmalo tú.",
+            )
+        preview_subtotal = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
+        preview = sale_breakdown(preview_subtotal, payment_method, apply_iva=apply_iva, apply_igtf=apply_igtf)
+        if preview_subtotal > 0:
+            note_parts = []
+            if preview["iva_applied"]:
+                note_parts.append(f"IVA ({preview['iva_rate']:.1f}%): {format_money(preview['iva_amount'])}")
+            if preview["fee_amount"] > 0:
+                note_parts.append(f"Comisión {payment_method}: {format_money(preview['fee_amount'])}")
             if preview["igtf_applied"]:
-                note += f" · IGTF: {format_money(preview['igtf_amount'])}"
-            note += f" → Neto real: {format_money(preview['net_amount'])}"
-            st.caption(note)
+                note_parts.append(f"IGTF: {format_money(preview['igtf_amount'])}")
+            if note_parts:
+                st.caption(f"Total con IVA: {format_money(preview['total'])} · " + " · ".join(note_parts) + f" → Neto real: {format_money(preview['net_amount'])}")
+            elif preview["iva_applied"]:
+                st.caption(f"Total con IVA: {format_money(preview['total'])}")
 
         notes = st.text_area("Notas del pedido", max_chars=300)
         submitted = st.form_submit_button("Registrar venta o pedido", type="primary", use_container_width=True)
 
     if submitted:
         cleaned_description = description.strip()
-        total = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
+        subtotal = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
         if not cleaned_description:
             st.error("La descripción es obligatoria.")
-        elif total <= 0:
+        elif subtotal <= 0:
             st.error("El total de la venta debe ser mayor que cero.")
         else:
             sale_id = uuid4().hex[:10]
-            breakdown = fee_breakdown(total, payment_method, apply_igtf=apply_igtf)
+            breakdown = sale_breakdown(subtotal, payment_method, apply_iva=apply_iva, apply_igtf=apply_igtf)
             sales.append(
                 {
                     "sale_id": sale_id,
@@ -205,13 +215,17 @@ def render_sales() -> None:
                     "quantity": float(quantity),
                     "unit_price": float(unit_price),
                     "discount": float(discount),
-                    "total": total,
+                    "subtotal": breakdown["subtotal"],
+                    "total": breakdown["total"],
                     "estimated_cost": float(estimated_cost),
                     "payment_status": payment_status,
                     "order_status": order_status,
                     "payment_method": payment_method,
                     "notes": notes.strip(),
                     "cash_registered": payment_status == "Pagado",
+                    "iva_applied": breakdown["iva_applied"],
+                    "iva_rate": breakdown["iva_rate"],
+                    "iva_amount": breakdown["iva_amount"],
                     "payment_fee_rate": breakdown["fee_rate"],
                     "payment_fee_amount": breakdown["fee_amount"],
                     "igtf_applied": breakdown["igtf_applied"],
@@ -226,7 +240,7 @@ def render_sales() -> None:
                         "created_at_utc": _now(),
                         "movement_type": "Ingreso",
                         "category": "Venta",
-                        "amount": total,
+                        "amount": breakdown["total"],
                         "payment_method": payment_method,
                         "reference": sale_id,
                         "notes": cleaned_description,

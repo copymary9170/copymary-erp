@@ -133,6 +133,55 @@ def test_net_amount_matches_fee_breakdown_net_amount():
 
 
 # ---------------------------------------------------------------------------
+# sale_breakdown — IVA (suma al total) + comisión/IGTF (restan del neto)
+# ---------------------------------------------------------------------------
+
+def test_sale_breakdown_without_iva_total_equals_subtotal():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo")
+    assert breakdown["iva_applied"] is False
+    assert breakdown["total"] == 100.0
+    assert breakdown["net_amount"] == 100.0
+
+
+def test_sale_breakdown_with_iva_increases_total():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo", apply_iva=True)
+    assert breakdown["iva_applied"] is True
+    assert breakdown["iva_amount"] == 16.0
+    assert breakdown["total"] == 116.0
+    assert breakdown["net_amount"] == 116.0  # sin comisión ni IGTF en efectivo
+
+
+def test_sale_breakdown_fee_and_igtf_apply_over_iva_inclusive_total():
+    """La comisión del medio de pago y el IGTF se calculan sobre el TOTAL ya
+    con IVA incluido, porque es el monto real que se procesa/cobra."""
+    st.session_state["general_settings"] = _settings(iva_rate=16.0, pos_fee=5.0, igtf_rate=3.0)
+    breakdown = pf.sale_breakdown(100.0, "Punto de venta", apply_iva=True, apply_igtf=True)
+    assert breakdown["total"] == 116.0
+    assert breakdown["fee_amount"] == round(116.0 * 0.05, 2)
+    expected_after_fee = 116.0 - round(116.0 * 0.05, 2)
+    expected_igtf = round(expected_after_fee * 0.03, 2)
+    assert breakdown["igtf_amount"] == expected_igtf
+    assert breakdown["net_amount"] == round(expected_after_fee - expected_igtf, 2)
+
+
+def test_sale_breakdown_rounds_all_money_fields_to_two_decimals():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0, pos_fee=2.5, igtf_rate=3.0)
+    breakdown = pf.sale_breakdown(33.333, "Punto de venta", apply_iva=True, apply_igtf=True)
+    for key in ("subtotal", "iva_amount", "total", "fee_amount", "igtf_amount", "net_amount"):
+        value = breakdown[key]
+        assert round(value, 2) == value, f"{key} no está redondeado a 2 decimales: {value}"
+
+
+def test_sale_breakdown_without_settings_never_fails():
+    st.session_state.pop("general_settings", None)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo", apply_iva=True, apply_igtf=True)
+    assert breakdown["total"] == 100.0
+    assert breakdown["net_amount"] == 100.0
+
+
+# ---------------------------------------------------------------------------
 # rates_are_stale / days_since_rates_updated — el "avisador" de tasas
 # ---------------------------------------------------------------------------
 
