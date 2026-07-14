@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Tasa BCV Euro agregada",
+        "target": "Configuración General",
+        "category": "Nuevo",
+        "description": "Faltaba: Configuración General ya guarda también la tasa oficial del BCV para el euro (VES por 1 EUR), aparte de la tasa BCV en dólares — visible en el resumen, en la franja de tasas siempre visible, y accesible para cualquier módulo vía payment_fees.exchange_rate('BCV (EUR)').",
+    },
+    {
         "title": "Franja de tasas y comisiones siempre visible",
         "target": "Cualquier área",
         "category": "Nuevo",

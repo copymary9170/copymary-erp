@@ -55,6 +55,12 @@ def test_exchange_rate_reads_from_stored_settings():
     assert pf.exchange_rate("BCV") == 40.0
 
 
+def test_exchange_rate_reads_bcv_euro_separately_from_bcv_usd():
+    st.session_state["general_settings"] = _settings(bcv_rate=40.0, bcv_eur_rate=46.5)
+    assert pf.exchange_rate("BCV (EUR)") == 46.5
+    assert pf.exchange_rate("BCV") == 40.0
+
+
 def test_igtf_rate_and_iva_rate_read_from_stored_settings():
     st.session_state["general_settings"] = _settings(igtf_rate=3.0, iva_rate=16.0)
     assert pf.igtf_rate() == 3.0
@@ -171,12 +177,14 @@ def test_rates_badge_html_none_when_nothing_saved():
 
 
 def test_rates_badge_html_includes_all_configured_rates():
-    st.session_state["general_settings"] = _settings(bcv_rate=40.5, binance_rate=45.5, kontigo_in_rate=42.0, kontigo_out_rate=44.0)
+    st.session_state["general_settings"] = _settings(bcv_rate=40.5, bcv_eur_rate=46.5, binance_rate=45.5, kontigo_in_rate=42.0, kontigo_out_rate=44.0)
     html = pf.rates_badge_html()
     assert html is not None
     assert "40.50" in html
+    assert "46.50" in html
     assert "45.50" in html
     assert "BCV" in html
+    assert "BCV Euro" in html
     assert "Kontigo entrada" in html
     assert "Kontigo salida" in html
 

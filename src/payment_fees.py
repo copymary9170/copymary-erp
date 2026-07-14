@@ -111,6 +111,7 @@ def rates_badge_html() -> str | None:
         return None
     chips = [
         ("BCV", f"Bs {getattr(settings, 'bcv_rate', 0.0):,.2f}"),
+        ("BCV Euro", f"Bs {getattr(settings, 'bcv_eur_rate', 0.0):,.2f}"),
         ("Binance", f"Bs {getattr(settings, 'binance_rate', 0.0):,.2f}"),
         ("Kontigo entrada", f"Bs {getattr(settings, 'kontigo_in_rate', 0.0):,.2f} · {getattr(settings, 'kontigo_in_fee', 0.0):.1f}%"),
         ("Kontigo salida", f"Bs {getattr(settings, 'kontigo_out_rate', 0.0):,.2f} · {getattr(settings, 'kontigo_out_fee', 0.0):.1f}%"),

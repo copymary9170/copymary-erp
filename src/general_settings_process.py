@@ -32,6 +32,7 @@ class GeneralSettings:
     # registra por encima), así que es aquí donde tienen que vivir para que
     # se vean en la app.
     bcv_rate: float = 0.0
+    bcv_eur_rate: float = 0.0
     binance_rate: float = 0.0
     kontigo_in_rate: float = 0.0
     kontigo_out_rate: float = 0.0
@@ -66,6 +67,7 @@ class GeneralSettings:
     def rate_for(self, rate_name: str) -> float:
         return {
             "BCV": self.bcv_rate,
+            "BCV (EUR)": self.bcv_eur_rate,
             "Binance": self.binance_rate,
             "Kontigo (entrada)": self.kontigo_in_rate,
             "Kontigo (salida)": self.kontigo_out_rate,
@@ -107,6 +109,7 @@ def _defaults() -> GeneralSettings:
         monthly_electricity=float(getattr(stored, "monthly_electricity", 3.0)),
         estimated_monthly_units=int(getattr(stored, "estimated_monthly_units", 200)),
         bcv_rate=float(getattr(stored, "bcv_rate", 0.0)),
+        bcv_eur_rate=float(getattr(stored, "bcv_eur_rate", 0.0)),
         binance_rate=float(getattr(stored, "binance_rate", 0.0)),
         kontigo_in_rate=float(getattr(stored, "kontigo_in_rate", 0.0)),
         kontigo_out_rate=float(getattr(stored, "kontigo_out_rate", 0.0)),
@@ -187,6 +190,7 @@ def render_general_settings_process() -> None:
             kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
         with rate_columns[3]:
             kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+        bcv_eur_rate = st.number_input("Tasa BCV Euro (VES por 1 EUR)", min_value=0.0, value=float(defaults.bcv_eur_rate), step=0.01, format="%.4f", help="La tasa oficial del BCV para el euro, aparte de la del dólar.")
         kontigo_fee_columns = st.columns(2)
         with kontigo_fee_columns[0]:
             kontigo_in_fee = st.number_input("Kontigo — comisión de entrada (%)", min_value=0.0, max_value=100.0, value=float(defaults.kontigo_in_fee), step=0.1, format="%.2f", help="Lo que Kontigo cobra por recibir el dinero, aparte de la tasa de cambio.")
@@ -217,6 +221,7 @@ def render_general_settings_process() -> None:
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
                 bcv_rate=float(bcv_rate), binance_rate=float(binance_rate),
+                bcv_eur_rate=float(bcv_eur_rate),
                 kontigo_in_rate=float(kontigo_in_rate), kontigo_out_rate=float(kontigo_out_rate),
                 kontigo_in_fee=float(kontigo_in_fee), kontigo_out_fee=float(kontigo_out_fee),
                 iva_rate=float(iva_rate), igtf_rate=float(igtf_rate),
@@ -240,11 +245,12 @@ def render_general_settings_process() -> None:
         st.caption(f"Última actualización de tasas: {rates_updated_at[:16].replace('T', ' ')} UTC")
     else:
         st.caption("Todavía no se han guardado tasas.")
-    rate_summary_columns = st.columns(4)
+    rate_summary_columns = st.columns(5)
     rate_summary_columns[0].metric("BCV", f"{getattr(settings, 'bcv_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[1].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[2].metric("Kontigo entrada", f"{getattr(settings, 'kontigo_in_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[3].metric("Kontigo salida", f"{getattr(settings, 'kontigo_out_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[1].metric("BCV Euro", f"{getattr(settings, 'bcv_eur_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[2].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[3].metric("Kontigo entrada", f"{getattr(settings, 'kontigo_in_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[4].metric("Kontigo salida", f"{getattr(settings, 'kontigo_out_rate', 0.0):,.4f} Bs")
     kontigo_fee_summary_columns = st.columns(2)
     kontigo_fee_summary_columns[0].metric("Comisión Kontigo entrada", f"{getattr(settings, 'kontigo_in_fee', 0.0):.2f}%")
     kontigo_fee_summary_columns[1].metric("Comisión Kontigo salida", f"{getattr(settings, 'kontigo_out_fee', 0.0):.2f}%")

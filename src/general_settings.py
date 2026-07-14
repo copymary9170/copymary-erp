@@ -25,6 +25,7 @@ class GeneralSettings:
     # entrada (cuando el dinero llega) y de salida (cuando se retira), por
     # el spread propio de la plataforma.
     bcv_rate: float = 0.0
+    bcv_eur_rate: float = 0.0
     binance_rate: float = 0.0
     kontigo_in_rate: float = 0.0
     kontigo_out_rate: float = 0.0
@@ -60,6 +61,7 @@ class GeneralSettings:
         o 'Kontigo (salida)'. Devuelve 0.0 si el nombre no se reconoce."""
         return {
             "BCV": self.bcv_rate,
+            "BCV (EUR)": self.bcv_eur_rate,
             "Binance": self.binance_rate,
             "Kontigo (entrada)": self.kontigo_in_rate,
             "Kontigo (salida)": self.kontigo_out_rate,
@@ -284,6 +286,7 @@ def render_general_settings() -> None:
             kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
         with rate_columns[3]:
             kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+        bcv_eur_rate = st.number_input("Tasa BCV Euro (VES por 1 EUR)", min_value=0.0, value=float(defaults.bcv_eur_rate), step=0.01, format="%.4f", help="La tasa oficial del BCV para el euro, aparte de la del dólar.")
         kontigo_fee_columns = st.columns(2)
         with kontigo_fee_columns[0]:
             kontigo_in_fee = st.number_input("Kontigo — comisión de entrada (%)", min_value=0.0, max_value=100.0, value=float(defaults.kontigo_in_fee), step=0.1, format="%.2f")
@@ -323,6 +326,7 @@ def render_general_settings() -> None:
                 estimated_monthly_units=int(estimated_monthly_units),
                 selected_asset_ids=tuple(selected_asset_ids),
                 bcv_rate=float(bcv_rate),
+                bcv_eur_rate=float(bcv_eur_rate),
                 binance_rate=float(binance_rate),
                 kontigo_in_rate=float(kontigo_in_rate),
                 kontigo_out_rate=float(kontigo_out_rate),
@@ -395,11 +399,12 @@ def render_general_settings() -> None:
         st.warning("Selecciona al menos un activo productivo para incorporar su depreciación al costeo.")
 
     st.markdown("#### Tasas y comisiones vigentes")
-    rate_summary_columns = st.columns(4)
+    rate_summary_columns = st.columns(5)
     rate_summary_columns[0].metric("BCV", f"{settings.bcv_rate:,.4f} Bs")
-    rate_summary_columns[1].metric("Binance / paralelo", f"{settings.binance_rate:,.4f} Bs")
-    rate_summary_columns[2].metric("Kontigo entrada", f"{settings.kontigo_in_rate:,.4f} Bs")
-    rate_summary_columns[3].metric("Kontigo salida", f"{settings.kontigo_out_rate:,.4f} Bs")
+    rate_summary_columns[1].metric("BCV Euro", f"{settings.bcv_eur_rate:,.4f} Bs")
+    rate_summary_columns[2].metric("Binance / paralelo", f"{settings.binance_rate:,.4f} Bs")
+    rate_summary_columns[3].metric("Kontigo entrada", f"{settings.kontigo_in_rate:,.4f} Bs")
+    rate_summary_columns[4].metric("Kontigo salida", f"{settings.kontigo_out_rate:,.4f} Bs")
     kontigo_fee_summary_columns = st.columns(2)
     kontigo_fee_summary_columns[0].metric("Comisión Kontigo entrada", f"{settings.kontigo_in_fee:.2f}%")
     kontigo_fee_summary_columns[1].metric("Comisión Kontigo salida", f"{settings.kontigo_out_fee:.2f}%")
