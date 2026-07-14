@@ -18,6 +18,22 @@ class GeneralSettings:
     monthly_electricity: float
     estimated_monthly_units: int
     selected_asset_ids: tuple[str, ...]
+    # Tasas de cambio de referencia (unidades de VES por 1 USD). Se guardan
+    # varias porque en Venezuela conviven distintas tasas según de dónde
+    # venga o hacia dónde vaya el dinero: BCV (oficial), Binance/paralelo
+    # (referencia de mercado), y Kontigo, que además tiene tasa distinta de
+    # entrada (cuando el dinero llega) y de salida (cuando se retira), por
+    # el spread propio de la plataforma.
+    bcv_rate: float = 0.0
+    binance_rate: float = 0.0
+    kontigo_in_rate: float = 0.0
+    kontigo_out_rate: float = 0.0
+    # Impuestos y comisiones (%) que reducen lo que realmente se recibe de
+    # una venta, o encarecen lo que realmente cuesta pagar con cada medio.
+    iva_rate: float = 16.0
+    igtf_rate: float = 3.0
+    mobile_payment_fee: float = 0.0
+    pos_fee: float = 0.0
 
     @property
     def monthly_fixed_costs(self) -> float:
@@ -33,6 +49,37 @@ class GeneralSettings:
         if self.pricing_method == "Margen sobre venta":
             return 1 / (1 - rate) if rate < 1 else 0.0
         return 1 + rate
+
+    def rate_for(self, rate_name: str) -> float:
+        """Tasa VES-por-USD según su nombre: 'BCV', 'Binance', 'Kontigo (entrada)'
+        o 'Kontigo (salida)'. Devuelve 0.0 si el nombre no se reconoce."""
+        return {
+            "BCV": self.bcv_rate,
+            "Binance": self.binance_rate,
+            "Kontigo (entrada)": self.kontigo_in_rate,
+            "Kontigo (salida)": self.kontigo_out_rate,
+        }.get(rate_name, 0.0)
+
+    def fee_for_payment_method(self, payment_method: str) -> float:
+        """Comisión (%) asociada al medio de pago: pago móvil, punto de
+        venta/tarjeta, o 0 para medios sin comisión configurada (efectivo,
+        transferencia, etc.)."""
+        normalized = payment_method.strip().casefold()
+        if "móvil" in normalized or "movil" in normalized:
+            return self.mobile_payment_fee
+        if "punto" in normalized or "tarjeta" in normalized or "pos" in normalized:
+            return self.pos_fee
+        return 0.0
+
+    def net_after_fees(self, gross_amount: float, payment_method: str, *, apply_igtf: bool = False) -> float:
+        """Monto que realmente queda de `gross_amount` después de descontar
+        la comisión del medio de pago y, si aplica (pagos en divisas/cripto),
+        el IGTF."""
+        fee_rate = self.fee_for_payment_method(payment_method)
+        net = gross_amount * (1 - fee_rate / 100)
+        if apply_igtf:
+            net *= (1 - self.igtf_rate / 100)
+        return net
 
 
 @dataclass(frozen=True)
@@ -217,6 +264,29 @@ def render_general_settings() -> None:
             selected_asset_ids = []
             st.info("No hay activos registrados. Registra primero la impresora o equipo en el módulo Activos.")
 
+        st.markdown("#### Tasas de cambio de referencia (VES por 1 USD)")
+        st.caption("Cada una se guarda por separado porque suelen ser distintas: BCV es la oficial, Binance/paralelo es la de mercado, y Kontigo tiene una tasa cuando el dinero entra y otra cuando sale.")
+        rate_columns = st.columns(4)
+        with rate_columns[0]:
+            bcv_rate = st.number_input("Tasa BCV", min_value=0.0, value=float(defaults.bcv_rate), step=0.01, format="%.4f")
+        with rate_columns[1]:
+            binance_rate = st.number_input("Tasa Binance / paralelo", min_value=0.0, value=float(defaults.binance_rate), step=0.01, format="%.4f")
+        with rate_columns[2]:
+            kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
+        with rate_columns[3]:
+            kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+
+        st.markdown("#### Impuestos y comisiones (%)")
+        fee_columns = st.columns(4)
+        with fee_columns[0]:
+            iva_rate = st.number_input("IVA", min_value=0.0, max_value=100.0, value=float(defaults.iva_rate), step=0.5, format="%.2f")
+        with fee_columns[1]:
+            igtf_rate = st.number_input("IGTF", min_value=0.0, max_value=100.0, value=float(defaults.igtf_rate), step=0.5, format="%.2f", help="Impuesto a las Grandes Transacciones Financieras, aplica a pagos en divisas/cripto.")
+        with fee_columns[2]:
+            mobile_payment_fee = st.number_input("Comisión pago móvil", min_value=0.0, max_value=100.0, value=float(defaults.mobile_payment_fee), step=0.1, format="%.2f")
+        with fee_columns[3]:
+            pos_fee = st.number_input("Comisión punto de venta / tarjeta", min_value=0.0, max_value=100.0, value=float(defaults.pos_fee), step=0.1, format="%.2f")
+
         submitted = st.form_submit_button(
             "Guardar configuración", type="primary", use_container_width=True,
         )
@@ -238,6 +308,14 @@ def render_general_settings() -> None:
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
                 selected_asset_ids=tuple(selected_asset_ids),
+                bcv_rate=float(bcv_rate),
+                binance_rate=float(binance_rate),
+                kontigo_in_rate=float(kontigo_in_rate),
+                kontigo_out_rate=float(kontigo_out_rate),
+                iva_rate=float(iva_rate),
+                igtf_rate=float(igtf_rate),
+                mobile_payment_fee=float(mobile_payment_fee),
+                pos_fee=float(pos_fee),
             )
             st.session_state.pop("price_estimate", None)
             st.success("Configuración guardada durante esta sesión.")
@@ -299,6 +377,21 @@ def render_general_settings() -> None:
                 )
     else:
         st.warning("Selecciona al menos un activo productivo para incorporar su depreciación al costeo.")
+
+    st.markdown("#### Tasas y comisiones vigentes")
+    rate_summary_columns = st.columns(4)
+    rate_summary_columns[0].metric("BCV", f"{settings.bcv_rate:,.4f} Bs")
+    rate_summary_columns[1].metric("Binance / paralelo", f"{settings.binance_rate:,.4f} Bs")
+    rate_summary_columns[2].metric("Kontigo entrada", f"{settings.kontigo_in_rate:,.4f} Bs")
+    rate_summary_columns[3].metric("Kontigo salida", f"{settings.kontigo_out_rate:,.4f} Bs")
+    fee_summary_columns = st.columns(4)
+    fee_summary_columns[0].metric("IVA", f"{settings.iva_rate:.2f}%")
+    fee_summary_columns[1].metric("IGTF", f"{settings.igtf_rate:.2f}%")
+    fee_summary_columns[2].metric("Comisión pago móvil", f"{settings.mobile_payment_fee:.2f}%")
+    fee_summary_columns[3].metric("Comisión punto de venta", f"{settings.pos_fee:.2f}%")
+    if settings.kontigo_in_rate and settings.kontigo_out_rate and settings.kontigo_in_rate != settings.kontigo_out_rate:
+        spread = abs(settings.kontigo_out_rate - settings.kontigo_in_rate) / settings.kontigo_in_rate * 100
+        st.caption(f"Spread entre entrada y salida de Kontigo: {spread:.2f}%.")
 
     st.divider()
     st.subheader("Calculadora detallada de costos")
