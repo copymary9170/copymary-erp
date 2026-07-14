@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Franja de tasas y comisiones siempre visible",
+        "target": "Cualquier área",
+        "category": "Nuevo",
+        "description": "Debajo del encabezado de cada área (excepto en Configuración General, donde ya se ve el detalle completo) aparece ahora una franja compacta con BCV, Binance, Kontigo (entrada/salida, tasa y comisión), IVA, IGTF, pago móvil y punto de venta — para no tener que entrar a Configuración General solo para recordar qué tasa está vigente. El punto de color al inicio de la franja se pone verde si las tasas se confirmaron hoy, y rojo si no.",
+    },
+    {
         "title": "Aviso cuando las tasas de cambio no se han actualizado hoy",
         "target": "Configuración General",
         "category": "Nuevo",

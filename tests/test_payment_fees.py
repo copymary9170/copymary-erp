@@ -159,3 +159,33 @@ def test_rates_last_updated_returns_stored_timestamp():
 def test_rates_last_updated_empty_string_when_never_saved():
     st.session_state.pop("general_settings", None)
     assert pf.rates_last_updated() == ""
+
+
+# ---------------------------------------------------------------------------
+# rates_badge_html — la franja compacta de tasas siempre visible
+# ---------------------------------------------------------------------------
+
+def test_rates_badge_html_none_when_nothing_saved():
+    st.session_state.pop("general_settings", None)
+    assert pf.rates_badge_html() is None
+
+
+def test_rates_badge_html_includes_all_configured_rates():
+    st.session_state["general_settings"] = _settings(bcv_rate=40.5, binance_rate=45.5, kontigo_in_rate=42.0, kontigo_out_rate=44.0)
+    html = pf.rates_badge_html()
+    assert html is not None
+    assert "40.50" in html
+    assert "45.50" in html
+    assert "BCV" in html
+    assert "Kontigo entrada" in html
+    assert "Kontigo salida" in html
+
+
+def test_rates_badge_html_reflects_stale_state_in_dot_color():
+    import datetime as dt
+    st.session_state["general_settings"] = _settings(rates_updated_at=dt.datetime.now(dt.timezone.utc).isoformat())
+    fresh_html = pf.rates_badge_html()
+    st.session_state["general_settings"] = _settings(rates_updated_at="2020-01-01T00:00:00+00:00")
+    stale_html = pf.rates_badge_html()
+    assert "#22a6a1" in fresh_html  # verde: al día
+    assert "#e04f4f" in stale_html  # rojo: desactualizado
