@@ -79,6 +79,38 @@ def test_build_sale_record_total_matches_line_total():
     assert sale["total"] == quick_sale.line_total(10, 0.05, 0.10)
 
 
+def test_build_sale_record_includes_fee_breakdown_fields():
+    sale = quick_sale.build_sale_record("CLI-1", "Fotocopia", 5, 0.20, 0.0, "Efectivo")
+    assert "payment_fee_rate" in sale
+    assert "payment_fee_amount" in sale
+    assert "igtf_applied" in sale
+    assert "igtf_amount" in sale
+    assert "net_amount" in sale
+
+
+def test_build_sale_record_net_amount_equals_total_without_configured_fees():
+    """Sin Configuración General llenada, no debe inventarse ninguna
+    comisión: el neto debe coincidir con el total."""
+    import streamlit as st
+    st.session_state.pop("general_settings", None)
+    sale = quick_sale.build_sale_record("CLI-1", "Fotocopia", 5, 0.20, 0.0, "Efectivo")
+    assert sale["net_amount"] == sale["total"]
+    assert sale["payment_fee_amount"] == 0.0
+
+
+def test_build_sale_record_discounts_configured_payment_fee():
+    import streamlit as st
+    from src.general_settings_process import GeneralSettings
+    st.session_state["general_settings"] = GeneralSettings(
+        business_name="Copy Mary", currency="USD", profit_margin=40.0, margin_method="Margen sobre venta",
+        monthly_internet=5.0, monthly_electricity=3.0, estimated_monthly_units=200, pos_fee=5.0,
+    )
+    sale = quick_sale.build_sale_record("CLI-1", "Fotocopia", 10, 1.0, 0.0, "Punto de venta")
+    assert sale["total"] == 10.0
+    assert sale["payment_fee_amount"] == 0.5
+    assert sale["net_amount"] == 9.5
+
+
 def test_build_cash_movement_has_all_fields_reports_expect():
     sale = quick_sale.build_sale_record("CLI-1", "Fotocopia", 5, 0.20, 0.0, "Efectivo")
     mvmt = quick_sale.build_cash_movement_record(sale)

@@ -32,6 +32,7 @@ from src import app_shell
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, initialize_database
 from src.money import format_money, get_currency
+from src.payment_fees import fee_breakdown
 from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 WALK_IN_CLIENT_NAME = "Cliente ocasional"
@@ -66,6 +67,12 @@ def find_walk_in_client(clients: list[dict]) -> dict | None:
 
 def build_sale_record(client_id: str, description: str, quantity: float, unit_price: float, discount: float, payment_method: str, notes: str = "") -> dict:
     total = line_total(quantity, unit_price, discount)
+    # Lo que se le cobra al cliente (total) no cambia por la comisión del
+    # medio de pago o el IGTF — eso lo asume el negocio, no el cliente. Se
+    # guarda aparte para saber cuánto llega realmente a caja/banco, usando
+    # Configuración General (tasas, comisiones, IGTF) sin que este módulo
+    # tenga que saber cómo está configurado cada medio de pago.
+    breakdown = fee_breakdown(total, payment_method)
     return {
         "sale_id": uuid4().hex[:10],
         "created_at_utc": _now(),
@@ -81,6 +88,11 @@ def build_sale_record(client_id: str, description: str, quantity: float, unit_pr
         "payment_method": payment_method,
         "notes": notes.strip(),
         "cash_registered": True,
+        "payment_fee_rate": breakdown["fee_rate"],
+        "payment_fee_amount": breakdown["fee_amount"],
+        "igtf_applied": breakdown["igtf_applied"],
+        "igtf_amount": breakdown["igtf_amount"],
+        "net_amount": breakdown["net_amount"],
     }
 
 
@@ -189,7 +201,15 @@ def render_quick_sale() -> None:
             unit_price = cols[1].number_input("Precio unitario", min_value=0.0, value=float(selected_service["unit_price"]) if selected_service else 0.0, step=0.05)
             discount = cols[2].number_input("Descuento", min_value=0.0, value=0.0, step=0.5)
             payment_method = st.selectbox("Método de pago", PAYMENT_METHODS)
-            st.metric("Total a cobrar", format_money(line_total(quantity, unit_price, discount), currency))
+            total_now = line_total(quantity, unit_price, discount)
+            st.metric("Total a cobrar", format_money(total_now, currency))
+            preview = fee_breakdown(total_now, payment_method)
+            if preview["fee_amount"] > 0 or preview["igtf_amount"] > 0:
+                note = f"Comisión {payment_method}: {format_money(preview['fee_amount'], currency)}"
+                if preview["igtf_applied"]:
+                    note += f" · IGTF: {format_money(preview['igtf_amount'], currency)}"
+                note += f" → Neto real: {format_money(preview['net_amount'], currency)}"
+                st.caption(note)
             submitted = st.form_submit_button("Cobrar", type="primary", use_container_width=True)
 
         if submitted:
@@ -208,7 +228,10 @@ def render_quick_sale() -> None:
                 cash = _rows("cash_movements")
                 cash.append(build_cash_movement_record(sale))
                 _save("cash_movements", cash)
-                st.success(f"Venta registrada: {format_money(sale['total'], currency)}")
+                st.success(
+                    f"Venta registrada: {format_money(sale['total'], currency)}"
+                    + (f" (neto real: {format_money(sale['net_amount'], currency)})" if sale["net_amount"] != sale["total"] else "")
+                )
                 st.rerun()
 
     with prices_tab:

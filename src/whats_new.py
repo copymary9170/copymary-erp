@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Comisiones e IGTF conectados a Venta rápida y Comercial",
+        "target": "Venta rápida de mostrador",
+        "category": "Nuevo",
+        "description": "Las tasas y comisiones de Configuración General ya no son solo números guardados: Venta rápida de mostrador y Comercial ahora calculan automáticamente cuánto queda realmente después de la comisión del medio de pago (pago móvil, punto de venta, Kontigo) y, si corresponde, el IGTF — que se aplica solo a pagos en divisas/cripto (Zelle, Binance, Kontigo), nunca a efectivo o pago móvil en bolívares. El cliente sigue pagando el mismo total; lo que cambia es que ahora cada venta guarda también cuánto llegó neto, para que cuadre con lo que realmente entra a caja/banco. Cualquier otro módulo puede usar el mismo cálculo importando `src.payment_fees`.",
+    },
+    {
         "title": "Tasas de cambio y comisiones en Configuración General",
         "target": "Configuración General",
         "category": "Nuevo",
