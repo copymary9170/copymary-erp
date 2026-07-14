@@ -13,6 +13,7 @@ class GeneralSettings:
     business_name: str
     currency: str
     profit_margin: float
+    pricing_method: str
     monthly_internet: float
     monthly_electricity: float
     estimated_monthly_units: int
@@ -28,7 +29,10 @@ class GeneralSettings:
 
     @property
     def sale_multiplier(self) -> float:
-        return 1 + (self.profit_margin / 100)
+        rate = self.profit_margin / 100
+        if self.pricing_method == "Margen sobre venta":
+            return 1 / (1 - rate) if rate < 1 else 0.0
+        return 1 + rate
 
 
 @dataclass(frozen=True)
@@ -45,11 +49,12 @@ class PriceEstimate:
     unit_price: float
     total_price: float
     estimated_profit: float
+    real_margin_percent: float
 
 
-def _format_money(value: float, currency: str) -> str:
+def _format_money(value: float, currency: str, decimals: int = 2) -> str:
     symbols = {"USD": "$", "VES": "Bs", "EUR": "€"}
-    return f"{symbols.get(currency, currency)} {value:,.2f}"
+    return f"{symbols.get(currency, currency)} {value:,.{decimals}f}"
 
 
 def _selected_assets(settings: GeneralSettings, assets: list[Asset]) -> list[Asset]:
@@ -75,6 +80,8 @@ def _calculate_price_estimate(
     total_cost = unit_cost * quantity
     unit_price = unit_cost * settings.sale_multiplier
     total_price = unit_price * quantity
+    estimated_profit = total_price - total_cost
+    real_margin_percent = (estimated_profit / total_price * 100) if total_price else 0.0
     return PriceEstimate(
         paper_cost=paper_cost,
         ink_cost=ink_cost,
@@ -87,8 +94,15 @@ def _calculate_price_estimate(
         total_cost=total_cost,
         unit_price=unit_price,
         total_price=total_price,
-        estimated_profit=total_price - total_cost,
+        estimated_profit=estimated_profit,
+        real_margin_percent=real_margin_percent,
     )
+
+
+def _go_to_assets() -> None:
+    st.session_state["pending_navigation_area"] = "Activos y mantenimiento"
+    st.session_state["pending_navigation_page"] = "Activos"
+    st.rerun()
 
 
 def render_general_settings() -> None:
@@ -107,15 +121,15 @@ def render_general_settings() -> None:
 
     assets = _get_assets()
     asset_options = {asset.asset_id: asset for asset in assets}
-    default_asset_ids = tuple(asset_options)
     default_settings = GeneralSettings(
         business_name="Copy Mary",
         currency="USD",
         profit_margin=40.0,
+        pricing_method="Margen sobre venta",
         monthly_internet=5.0,
         monthly_electricity=3.0,
         estimated_monthly_units=200,
-        selected_asset_ids=default_asset_ids,
+        selected_asset_ids=tuple(asset_options),
     )
     stored_settings = st.session_state.get("general_settings")
     defaults = stored_settings if isinstance(stored_settings, GeneralSettings) else default_settings
@@ -129,33 +143,59 @@ def render_general_settings() -> None:
             options=("USD", "VES", "EUR"),
             index=("USD", "VES", "EUR").index(defaults.currency),
         )
-        profit_margin = st.number_input(
-            "Margen de ganancia (%)", min_value=0.0, max_value=500.0,
-            value=float(defaults.profit_margin), step=1.0,
-        )
+
+        price_columns = st.columns(2)
+        with price_columns[0]:
+            pricing_method = st.selectbox(
+                "Método de fijación de precio",
+                options=("Margen sobre venta", "Recargo sobre costo"),
+                index=("Margen sobre venta", "Recargo sobre costo").index(defaults.pricing_method),
+                help=(
+                    "Margen sobre venta calcula precio = costo / (1 - margen). "
+                    "Recargo sobre costo calcula precio = costo × (1 + porcentaje)."
+                ),
+            )
+        with price_columns[1]:
+            max_percentage = 99.0 if pricing_method == "Margen sobre venta" else 500.0
+            profit_margin = st.number_input(
+                "Margen objetivo (%)" if pricing_method == "Margen sobre venta" else "Recargo sobre costo (%)",
+                min_value=0.0,
+                max_value=max_percentage,
+                value=min(float(defaults.profit_margin), max_percentage),
+                step=1.0,
+            )
 
         cost_columns = st.columns(3)
         with cost_columns[0]:
             monthly_internet = st.number_input(
-                "Internet mensual", min_value=0.0,
-                value=float(defaults.monthly_internet), step=1.0,
+                "Internet mensual imputado al negocio",
+                min_value=0.0,
+                value=float(defaults.monthly_internet),
+                step=1.0,
             )
         with cost_columns[1]:
             monthly_electricity = st.number_input(
-                "Electricidad mensual", min_value=0.0,
-                value=float(defaults.monthly_electricity), step=1.0,
+                "Electricidad mensual imputada al negocio",
+                min_value=0.0,
+                value=float(defaults.monthly_electricity),
+                step=1.0,
             )
         with cost_columns[2]:
             estimated_monthly_units = st.number_input(
-                "Producción mensual estimada", min_value=1,
-                value=int(defaults.estimated_monthly_units), step=1,
-                help="Cantidad aproximada de unidades, hojas o trabajos producidos al mes.",
+                "Unidades productivas equivalentes al mes",
+                min_value=1,
+                value=int(defaults.estimated_monthly_units),
+                step=1,
+                help=(
+                    "Base utilizada para repartir costos fijos. Por ahora representa una unidad productiva "
+                    "estándar; más adelante podrá sustituirse por horas máquina o centros de costo."
+                ),
             )
 
-        st.markdown("#### Equipos tomados desde Activos")
+        st.markdown("#### Equipos productivos tomados desde Activos")
         if assets:
             selected_asset_ids = st.multiselect(
-                "Activos productivos incluidos en el cálculo",
+                "Selecciona los activos que participan en este cálculo",
                 options=list(asset_options),
                 default=valid_default_ids,
                 format_func=lambda asset_id: (
@@ -164,24 +204,25 @@ def render_general_settings() -> None:
                     f"{asset_options[asset_id].lifetime_units:,} unidades"
                 ),
                 help=(
-                    "El nombre, costo de adquisición y vida útil se leen automáticamente del módulo Activos. "
-                    "Modifica esos datos allí para actualizar este cálculo."
+                    "El nombre, costo de adquisición y vida útil se leen automáticamente de Activos. "
+                    "Cualquier corrección debe hacerse en ese módulo."
                 ),
             )
             preview_cost = sum(asset_options[item].depreciation_per_unit for item in selected_asset_ids)
             st.caption(
-                f"Depreciación combinada calculada automáticamente: "
-                f"{_format_money(preview_cost, currency)} por unidad."
+                f"{len(selected_asset_ids)} activo(s) seleccionado(s) · Depreciación combinada: "
+                f"{_format_money(preview_cost, currency, 4)} por unidad."
             )
         else:
             selected_asset_ids = []
-            st.info(
-                "No hay activos registrados. Ve a Activos, registra la impresora o equipo y luego vuelve aquí."
-            )
+            st.info("No hay activos registrados. Registra primero la impresora o equipo en el módulo Activos.")
 
         submitted = st.form_submit_button(
             "Guardar configuración", type="primary", use_container_width=True,
         )
+
+    if not assets and st.button("Ir al módulo Activos", use_container_width=True):
+        _go_to_assets()
 
     if submitted:
         cleaned_name = business_name.strip()
@@ -192,6 +233,7 @@ def render_general_settings() -> None:
                 business_name=cleaned_name,
                 currency=currency,
                 profit_margin=float(profit_margin),
+                pricing_method=pricing_method,
                 monthly_internet=float(monthly_internet),
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
@@ -210,35 +252,60 @@ def render_general_settings() -> None:
     summary_columns = st.columns(4)
     summary_columns[0].metric("Negocio", settings.business_name)
     summary_columns[1].metric(
-        "Costo fijo por unidad", _format_money(settings.fixed_cost_per_unit, settings.currency)
+        "Costo fijo por unidad equivalente",
+        _format_money(settings.fixed_cost_per_unit, settings.currency),
     )
     summary_columns[2].metric(
-        "Depreciación por unidad", _format_money(equipment_cost_per_unit, settings.currency)
+        "Depreciación automática por unidad",
+        _format_money(equipment_cost_per_unit, settings.currency, 4),
     )
-    summary_columns[3].metric("Multiplicador de venta", f"× {settings.sale_multiplier:.2f}")
+    summary_columns[3].metric(
+        "Factor de precio",
+        f"× {settings.sale_multiplier:.4f}",
+        help=f"Método utilizado: {settings.pricing_method}.",
+    )
 
     cards = st.columns(2)
     with cards[0]:
         render_info_card(
             "Prorrateo de costos fijos",
-            f"Internet y electricidad se distribuyen entre {settings.estimated_monthly_units:,} unidades. "
-            f"El resultado es {_format_money(settings.fixed_cost_per_unit, settings.currency)} por unidad.",
+            f"Internet y electricidad se distribuyen entre {settings.estimated_monthly_units:,} "
+            f"unidades productivas equivalentes. El resultado es "
+            f"{_format_money(settings.fixed_cost_per_unit, settings.currency)} por unidad.",
             "COSTO INDIRECTO SUGERIDO",
         )
     with cards[1]:
         if selected_assets:
-            names = ", ".join(asset.name for asset in selected_assets)
             detail = (
-                f"Equipos incluidos: {names}. La depreciación se calcula con el costo y la vida útil "
-                f"registrados en Activos: {_format_money(equipment_cost_per_unit, settings.currency)} por unidad."
+                f"Se incluyen {len(selected_assets)} activo(s). La reserva combinada es "
+                f"{_format_money(equipment_cost_per_unit, settings.currency, 4)} por unidad, "
+                "calculada con el costo y la vida útil registrados en Activos."
             )
         else:
-            detail = "No se ha seleccionado ningún activo productivo para el cálculo."
+            detail = "No hay activos productivos seleccionados. La depreciación aplicada es cero."
         render_info_card("Reserva para reemplazo de equipos", detail, "DEPRECIACIÓN AUTOMÁTICA")
+
+    if selected_assets:
+        st.markdown("#### Desglose de activos incluidos")
+        for asset in selected_assets:
+            with st.container(border=True):
+                cols = st.columns([3, 1, 1, 1])
+                cols[0].markdown(f"**{asset.name}**  \n{asset.category}")
+                cols[1].metric("Costo", _format_money(asset.acquisition_cost, settings.currency))
+                cols[2].metric("Vida útil", f"{asset.lifetime_units:,}")
+                cols[3].metric(
+                    "Depreciación/unidad",
+                    _format_money(asset.depreciation_per_unit, settings.currency, 4),
+                )
+    else:
+        st.warning("Selecciona al menos un activo productivo para incorporar su depreciación al costeo.")
 
     st.divider()
     st.subheader("Calculadora detallada de costos")
-    st.caption("Suma los costos por unidad y aplica el margen configurado arriba.")
+    st.caption(
+        f"Suma los costos por unidad y aplica el método «{settings.pricing_method}» con "
+        f"{settings.profit_margin:.0f}%."
+    )
 
     with st.form("price_estimate_form"):
         first_row = st.columns(3)
@@ -252,14 +319,22 @@ def render_general_settings() -> None:
         second_row = st.columns(4)
         with second_row[0]:
             indirect_cost = st.number_input(
-                "Gastos indirectos por unidad", min_value=0.0,
-                value=float(settings.fixed_cost_per_unit), step=0.01, format="%.2f",
+                "Gastos indirectos por unidad",
+                min_value=0.0,
+                value=float(settings.fixed_cost_per_unit),
+                step=0.01,
+                format="%.2f",
+                help="Se propone desde el prorrateo mensual, pero puede ajustarse para un trabajo específico.",
             )
         with second_row[1]:
-            equipment_cost = st.number_input(
-                "Depreciación de equipos por unidad", min_value=0.0,
-                value=float(equipment_cost_per_unit), step=0.001, format="%.3f",
-                help="Se obtiene automáticamente de los activos seleccionados.",
+            st.number_input(
+                "Depreciación automática de activos",
+                min_value=0.0,
+                value=float(equipment_cost_per_unit),
+                step=0.0001,
+                format="%.4f",
+                disabled=True,
+                help="Valor bloqueado: se obtiene exclusivamente de los activos seleccionados.",
             )
         with second_row[2]:
             other_cost = st.number_input("Otros costos por unidad", min_value=0.0, value=0.0, step=0.01, format="%.2f")
@@ -272,29 +347,37 @@ def render_general_settings() -> None:
 
     if calculate_submitted:
         st.session_state.price_estimate = _calculate_price_estimate(
-            paper_cost=float(paper_cost), ink_cost=float(ink_cost), labor_cost=float(labor_cost),
-            indirect_cost=float(indirect_cost), equipment_cost=float(equipment_cost),
-            other_cost=float(other_cost), quantity=int(quantity), settings=settings,
+            paper_cost=float(paper_cost),
+            ink_cost=float(ink_cost),
+            labor_cost=float(labor_cost),
+            indirect_cost=float(indirect_cost),
+            equipment_cost=float(equipment_cost_per_unit),
+            other_cost=float(other_cost),
+            quantity=int(quantity),
+            settings=settings,
         )
 
     estimate = st.session_state.get("price_estimate")
     if estimate is not None:
         st.subheader("Resultado")
-        result_columns = st.columns(4)
+        result_columns = st.columns(5)
         result_columns[0].metric("Costo por unidad", _format_money(estimate.unit_cost, settings.currency))
         result_columns[1].metric("Precio por unidad", _format_money(estimate.unit_price, settings.currency))
         result_columns[2].metric("Venta total", _format_money(estimate.total_price, settings.currency))
         result_columns[3].metric("Ganancia estimada", _format_money(estimate.estimated_profit, settings.currency))
+        result_columns[4].metric("Margen real", f"{estimate.real_margin_percent:.2f}%")
 
         render_info_card(
             "Resultado de la estimación",
             f"Para {estimate.quantity} unidad(es), el costo total es "
             f"{_format_money(estimate.total_cost, settings.currency)}, la venta orientativa es "
             f"{_format_money(estimate.total_price, settings.currency)} y la ganancia estimada es "
-            f"{_format_money(estimate.estimated_profit, settings.currency)}.",
+            f"{_format_money(estimate.estimated_profit, settings.currency)}. "
+            f"El margen real sobre la venta es {estimate.real_margin_percent:.2f}%.",
             "RESULTADO TEMPORAL",
         )
 
     st.info(
-        "Los equipos ya no se escriben manualmente aquí. El nombre, costo y vida útil provienen del módulo Activos."
+        "Los equipos no se escriben manualmente aquí. Nombre, costo, vida útil y depreciación "
+        "provienen del módulo Activos."
     )
