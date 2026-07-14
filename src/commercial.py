@@ -7,7 +7,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
-from src.payment_fees import fee_breakdown
+from src.payment_fees import fee_breakdown, should_apply_igtf
 from src.session_utils import now_iso as _now
 
 
@@ -169,8 +169,13 @@ def render_sales() -> None:
         with third[2]:
             payment_method = st.selectbox("Método de pago", ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro"))
 
+        apply_igtf = st.checkbox(
+            "Esta venta paga IGTF",
+            value=should_apply_igtf(payment_method),
+            help="Decisión manual: márcalo solo si esta operación específica paga IGTF. Se sugiere marcado para pagos en divisas/cripto, pero hay casos exentos — confírmalo tú.",
+        )
         preview_total = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
-        preview = fee_breakdown(preview_total, payment_method)
+        preview = fee_breakdown(preview_total, payment_method, apply_igtf=apply_igtf)
         if preview_total > 0 and (preview["fee_amount"] > 0 or preview["igtf_amount"] > 0):
             note = f"Comisión {payment_method}: {format_money(preview['fee_amount'])}"
             if preview["igtf_applied"]:
@@ -190,7 +195,7 @@ def render_sales() -> None:
             st.error("El total de la venta debe ser mayor que cero.")
         else:
             sale_id = uuid4().hex[:10]
-            breakdown = fee_breakdown(total, payment_method)
+            breakdown = fee_breakdown(total, payment_method, apply_igtf=apply_igtf)
             sales.append(
                 {
                     "sale_id": sale_id,

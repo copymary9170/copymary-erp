@@ -81,9 +81,19 @@ def test_should_apply_igtf_false_for_bolivar_methods():
 # fee_breakdown / net_amount
 # ---------------------------------------------------------------------------
 
-def test_fee_breakdown_applies_igtf_automatically_for_zelle():
+def test_fee_breakdown_does_not_apply_igtf_by_default_even_for_zelle():
+    """El IGTF nunca se infiere solo, ni para medios en divisas: hay casos
+    exentos según cómo se procese, así que queda en False salvo que se pida
+    explícitamente."""
     st.session_state["general_settings"] = _settings(igtf_rate=3.0)
     breakdown = pf.fee_breakdown(100.0, "Zelle")
+    assert breakdown["igtf_applied"] is False
+    assert breakdown["net_amount"] == 100.0
+
+
+def test_fee_breakdown_applies_igtf_only_when_explicitly_requested():
+    st.session_state["general_settings"] = _settings(igtf_rate=3.0)
+    breakdown = pf.fee_breakdown(100.0, "Zelle", apply_igtf=True)
     assert breakdown["igtf_applied"] is True
     assert round(breakdown["net_amount"], 4) == 97.0
 
@@ -102,7 +112,9 @@ def test_fee_breakdown_combines_pos_fee_and_explicit_igtf():
     assert round(breakdown["net_amount"], 4) == round(100.0 * 0.95 * 0.97, 4)
 
 
-def test_fee_breakdown_explicit_apply_igtf_overrides_default_rule():
+def test_fee_breakdown_apply_igtf_respected_even_for_bolivar_methods_if_requested():
+    """La decisión es siempre manual — si alguien marca IGTF a mano para un
+    medio que normalmente no lo paga (caso raro pero posible), se respeta."""
     st.session_state["general_settings"] = _settings(igtf_rate=3.0)
     breakdown = pf.fee_breakdown(100.0, "Efectivo", apply_igtf=True)
     assert breakdown["igtf_applied"] is True
