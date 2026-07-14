@@ -17,6 +17,8 @@ Sigue funcionando aunque Configuración General no se haya llenado todavía
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 # Medios de pago sobre los que aplica el IGTF venezolano en la práctica:
@@ -101,3 +103,36 @@ def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool 
 
 def net_amount(gross_amount: float, payment_method: str, *, apply_igtf: bool = False) -> float:
     return fee_breakdown(gross_amount, payment_method, apply_igtf=apply_igtf)["net_amount"]
+
+
+def rates_last_updated() -> str:
+    """Fecha (ISO, puede venir vacía) de la última vez que se guardó
+    Configuración General — se usa como proxy de 'la última vez que alguien
+    revisó/confirmó las tasas', ya que guardar el formulario implica volver
+    a escribir (o reconfirmar) cada tasa."""
+    settings = current_settings()
+    return str(getattr(settings, "rates_updated_at", "") or "") if settings is not None else ""
+
+
+def rates_are_stale() -> bool:
+    """True si nunca se han guardado tasas, o si no se han vuelto a guardar
+    hoy (fecha UTC). No distingue fines de semana ni feriados: cualquier
+    día sin guardar cuenta como desactualizado."""
+    updated_at = rates_last_updated()
+    if not updated_at:
+        return True
+    today = datetime.now(timezone.utc).date().isoformat()
+    return updated_at[:10] != today
+
+
+def days_since_rates_updated() -> int | None:
+    """Días completos desde la última vez que se guardaron las tasas, o
+    None si nunca se han guardado."""
+    updated_at = rates_last_updated()
+    if not updated_at:
+        return None
+    try:
+        last = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return None
+    return (datetime.now(timezone.utc) - last).days

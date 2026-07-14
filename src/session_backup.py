@@ -126,6 +126,7 @@ def _settings(raw: dict | None) -> GeneralSettings | None:
         monthly_electricity=float(raw["monthly_electricity"]),
         estimated_monthly_units=int(raw["estimated_monthly_units"]),
         selected_asset_ids=tuple(raw["selected_asset_ids"]),
+        rates_updated_at=str(raw.get("rates_updated_at", "") or ""),
         **{key: float(raw.get(key, default)) for key, default in optional_defaults.items()},
     )
 

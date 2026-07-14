@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Aviso cuando las tasas de cambio no se han actualizado hoy",
+        "target": "Configuración General",
+        "category": "Nuevo",
+        "description": "Cada vez que se guarda Configuración General se registra la fecha y hora. Si pasa un día sin volver a guardar (o revisar) las tasas BCV, Binance o Kontigo, aparece un aviso — tanto dentro de Configuración General (con cuántos días llevan sin actualizarse) como un banner visible en cualquier otra área del sistema, para no tener que entrar a revisar manualmente si ya se cuadraron las tasas del día.",
+    },
+    {
         "title": "Comisiones e IGTF conectados a Venta rápida y Comercial",
         "target": "Venta rápida de mostrador",
         "category": "Nuevo",

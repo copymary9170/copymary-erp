@@ -137,6 +137,10 @@ def run_app() -> None:
 
     icon, eyebrow, description, pages = areas[selected_area]
     st.markdown(f'<div class="cm-workspace"><div><div class="cm-eyebrow">{eyebrow}</div><div class="cm-workspace-title">{selected_area}</div><div class="cm-workspace-copy">{description}</div></div><div class="cm-workspace-icon">{icon}</div></div>', unsafe_allow_html=True)
+    if selected_area != "Administración y seguridad":
+        from src.payment_fees import rates_are_stale
+        if rates_are_stale():
+            st.warning("⚠️ Las tasas de cambio (BCV/Binance/Kontigo) no se han confirmado hoy. Ve a Administración y seguridad → Configuración General para revisarlas.")
     selected_page = _render_module_selector(selected_area, tuple(pages))
     _render_current_page(selected_page, allowed)
     st.markdown(f'<div class="cm-footer">Versión {APP_VERSION} · {PROJECT_STATUS} · Mantén respaldos periódicos de la información.</div>', unsafe_allow_html=True)

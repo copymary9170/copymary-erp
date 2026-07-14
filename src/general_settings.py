@@ -38,6 +38,7 @@ class GeneralSettings:
     igtf_rate: float = 3.0
     mobile_payment_fee: float = 0.0
     pos_fee: float = 0.0
+    rates_updated_at: str = ""
 
     @property
     def monthly_fixed_costs(self) -> float:
