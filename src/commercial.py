@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.components import render_info_card, render_page_header
 from src.money import format_money
+from src.payment_fees import fee_breakdown
 from src.session_utils import now_iso as _now
 
 
@@ -168,6 +169,15 @@ def render_sales() -> None:
         with third[2]:
             payment_method = st.selectbox("Método de pago", ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro"))
 
+        preview_total = max((float(quantity) * float(unit_price)) - float(discount), 0.0)
+        preview = fee_breakdown(preview_total, payment_method)
+        if preview_total > 0 and (preview["fee_amount"] > 0 or preview["igtf_amount"] > 0):
+            note = f"Comisión {payment_method}: {format_money(preview['fee_amount'])}"
+            if preview["igtf_applied"]:
+                note += f" · IGTF: {format_money(preview['igtf_amount'])}"
+            note += f" → Neto real: {format_money(preview['net_amount'])}"
+            st.caption(note)
+
         notes = st.text_area("Notas del pedido", max_chars=300)
         submitted = st.form_submit_button("Registrar venta o pedido", type="primary", use_container_width=True)
 
@@ -180,6 +190,7 @@ def render_sales() -> None:
             st.error("El total de la venta debe ser mayor que cero.")
         else:
             sale_id = uuid4().hex[:10]
+            breakdown = fee_breakdown(total, payment_method)
             sales.append(
                 {
                     "sale_id": sale_id,
@@ -196,6 +207,11 @@ def render_sales() -> None:
                     "payment_method": payment_method,
                     "notes": notes.strip(),
                     "cash_registered": payment_status == "Pagado",
+                    "payment_fee_rate": breakdown["fee_rate"],
+                    "payment_fee_amount": breakdown["fee_amount"],
+                    "igtf_applied": breakdown["igtf_applied"],
+                    "igtf_amount": breakdown["igtf_amount"],
+                    "net_amount": breakdown["net_amount"],
                 }
             )
             if payment_status == "Pagado":
