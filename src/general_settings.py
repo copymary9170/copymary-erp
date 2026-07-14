@@ -28,6 +28,10 @@ class GeneralSettings:
     binance_rate: float = 0.0
     kontigo_in_rate: float = 0.0
     kontigo_out_rate: float = 0.0
+    # Comisión (%) que cobra la propia plataforma Kontigo en cada operación,
+    # distinta de la tasa de cambio.
+    kontigo_in_fee: float = 0.0
+    kontigo_out_fee: float = 0.0
     # Impuestos y comisiones (%) que reducen lo que realmente se recibe de
     # una venta, o encarecen lo que realmente cuesta pagar con cada medio.
     iva_rate: float = 16.0
@@ -65,6 +69,10 @@ class GeneralSettings:
         venta/tarjeta, o 0 para medios sin comisión configurada (efectivo,
         transferencia, etc.)."""
         normalized = payment_method.strip().casefold()
+        if "kontigo" in normalized and "entrada" in normalized:
+            return self.kontigo_in_fee
+        if "kontigo" in normalized and "salida" in normalized:
+            return self.kontigo_out_fee
         if "móvil" in normalized or "movil" in normalized:
             return self.mobile_payment_fee
         if "punto" in normalized or "tarjeta" in normalized or "pos" in normalized:
@@ -275,6 +283,11 @@ def render_general_settings() -> None:
             kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
         with rate_columns[3]:
             kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+        kontigo_fee_columns = st.columns(2)
+        with kontigo_fee_columns[0]:
+            kontigo_in_fee = st.number_input("Kontigo — comisión de entrada (%)", min_value=0.0, max_value=100.0, value=float(defaults.kontigo_in_fee), step=0.1, format="%.2f")
+        with kontigo_fee_columns[1]:
+            kontigo_out_fee = st.number_input("Kontigo — comisión de salida (%)", min_value=0.0, max_value=100.0, value=float(defaults.kontigo_out_fee), step=0.1, format="%.2f")
 
         st.markdown("#### Impuestos y comisiones (%)")
         fee_columns = st.columns(4)
@@ -312,6 +325,8 @@ def render_general_settings() -> None:
                 binance_rate=float(binance_rate),
                 kontigo_in_rate=float(kontigo_in_rate),
                 kontigo_out_rate=float(kontigo_out_rate),
+                kontigo_in_fee=float(kontigo_in_fee),
+                kontigo_out_fee=float(kontigo_out_fee),
                 iva_rate=float(iva_rate),
                 igtf_rate=float(igtf_rate),
                 mobile_payment_fee=float(mobile_payment_fee),
@@ -384,6 +399,9 @@ def render_general_settings() -> None:
     rate_summary_columns[1].metric("Binance / paralelo", f"{settings.binance_rate:,.4f} Bs")
     rate_summary_columns[2].metric("Kontigo entrada", f"{settings.kontigo_in_rate:,.4f} Bs")
     rate_summary_columns[3].metric("Kontigo salida", f"{settings.kontigo_out_rate:,.4f} Bs")
+    kontigo_fee_summary_columns = st.columns(2)
+    kontigo_fee_summary_columns[0].metric("Comisión Kontigo entrada", f"{settings.kontigo_in_fee:.2f}%")
+    kontigo_fee_summary_columns[1].metric("Comisión Kontigo salida", f"{settings.kontigo_out_fee:.2f}%")
     fee_summary_columns = st.columns(4)
     fee_summary_columns[0].metric("IVA", f"{settings.iva_rate:.2f}%")
     fee_summary_columns[1].metric("IGTF", f"{settings.igtf_rate:.2f}%")

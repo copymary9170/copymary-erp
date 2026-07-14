@@ -80,6 +80,12 @@ def test_fee_for_payment_method_matches_mobile_and_pos():
     assert settings.fee_for_payment_method("Efectivo") == 0.0
 
 
+def test_fee_for_payment_method_matches_kontigo_entrada_and_salida():
+    settings = _settings(kontigo_in_fee=1.0, kontigo_out_fee=2.0)
+    assert settings.fee_for_payment_method("Kontigo (entrada)") == 1.0
+    assert settings.fee_for_payment_method("Kontigo (salida)") == 2.0
+
+
 def test_net_after_fees_combines_payment_fee_and_igtf():
     settings = _settings(pos_fee=5.0, igtf_rate=3.0)
     net = settings.net_after_fees(100.0, "Tarjeta", apply_igtf=True)

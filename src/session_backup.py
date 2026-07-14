@@ -114,6 +114,7 @@ def _settings(raw: dict | None) -> GeneralSettings | None:
         raise ValueError("La moneda debe ser USD, VES o EUR.")
     optional_defaults = {
         "bcv_rate": 0.0, "binance_rate": 0.0, "kontigo_in_rate": 0.0, "kontigo_out_rate": 0.0,
+        "kontigo_in_fee": 0.0, "kontigo_out_fee": 0.0,
         "iva_rate": 16.0, "igtf_rate": 3.0, "mobile_payment_fee": 0.0, "pos_fee": 0.0,
     }
     return GeneralSettings(

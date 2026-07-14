@@ -56,6 +56,20 @@ def test_fee_for_payment_method_matches_mobile_payment():
     assert settings.fee_for_payment_method("pago movil") == 1.5  # sin tilde
 
 
+def test_fee_for_payment_method_matches_kontigo_entrada_and_salida():
+    settings = _settings(kontigo_in_fee=1.0, kontigo_out_fee=2.0)
+    assert settings.fee_for_payment_method("Kontigo (entrada)") == 1.0
+    assert settings.fee_for_payment_method("Kontigo (salida)") == 2.0
+
+
+def test_settings_roundtrip_preserves_kontigo_fees():
+    settings = _settings(kontigo_in_fee=1.25, kontigo_out_fee=2.75)
+    serialized = session_backup._serialize(settings)
+    restored = session_backup._settings(serialized)
+    assert restored.kontigo_in_fee == 1.25
+    assert restored.kontigo_out_fee == 2.75
+
+
 def test_fee_for_payment_method_matches_pos_or_card():
     settings = _settings(pos_fee=2.5)
     assert settings.fee_for_payment_method("Punto de venta") == 2.5
