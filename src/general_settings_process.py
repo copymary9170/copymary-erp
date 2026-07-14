@@ -13,6 +13,7 @@ from src.production_processes import (
     normalize_process_codes,
     process_coverage,
 )
+from src.session_utils import now_iso as _now
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,9 @@ class GeneralSettings:
     igtf_rate: float = 3.0
     mobile_payment_fee: float = 0.0
     pos_fee: float = 0.0
+    # Fecha (ISO) de la última vez que se guardó esta configuración — se usa
+    # para avisar si hoy todavía no se han revisado/actualizado las tasas.
+    rates_updated_at: str = ""
 
     @property
     def monthly_fixed_costs(self) -> float:
@@ -112,6 +116,7 @@ def _defaults() -> GeneralSettings:
         igtf_rate=float(getattr(stored, "igtf_rate", 3.0)),
         mobile_payment_fee=float(getattr(stored, "mobile_payment_fee", 0.0)),
         pos_fee=float(getattr(stored, "pos_fee", 0.0)),
+        rates_updated_at=str(getattr(stored, "rates_updated_at", "") or ""),
     )
 
 
@@ -124,6 +129,17 @@ def render_general_settings_process() -> None:
         st.caption("No necesitas volver aquí cuando compres, reemplaces o desactives una máquina.")
 
     defaults = _defaults()
+    if defaults.rates_updated_at:
+        from src.payment_fees import days_since_rates_updated, rates_are_stale
+        if rates_are_stale():
+            days = days_since_rates_updated()
+            if days and days >= 1:
+                st.warning(f"⚠️ No has actualizado las tasas de cambio hace {days} día(s). Revisa BCV/Binance/Kontigo antes de cotizar hoy.")
+            else:
+                st.warning("⚠️ Todavía no has confirmado las tasas de cambio hoy. Revísalas antes de cotizar.")
+    else:
+        st.warning("⚠️ Nunca se han guardado tasas de cambio. Complétalas abajo antes de cotizar en divisas.")
+
     with st.form("general_settings_process_form"):
         business_name = st.text_input("Nombre del negocio", value=defaults.business_name, max_chars=80)
         currency = st.selectbox(
@@ -205,6 +221,7 @@ def render_general_settings_process() -> None:
                 kontigo_in_fee=float(kontigo_in_fee), kontigo_out_fee=float(kontigo_out_fee),
                 iva_rate=float(iva_rate), igtf_rate=float(igtf_rate),
                 mobile_payment_fee=float(mobile_payment_fee), pos_fee=float(pos_fee),
+                rates_updated_at=_now(),
             )
             st.success("Configuración global guardada.")
             st.rerun()
@@ -218,6 +235,11 @@ def render_general_settings_process() -> None:
     summary[3].metric("Factor de venta", f"× {settings.sale_multiplier:.4f}")
 
     st.markdown("#### Tasas y comisiones vigentes")
+    rates_updated_at = getattr(settings, "rates_updated_at", "")
+    if rates_updated_at:
+        st.caption(f"Última actualización de tasas: {rates_updated_at[:16].replace('T', ' ')} UTC")
+    else:
+        st.caption("Todavía no se han guardado tasas.")
     rate_summary_columns = st.columns(4)
     rate_summary_columns[0].metric("BCV", f"{getattr(settings, 'bcv_rate', 0.0):,.4f} Bs")
     rate_summary_columns[1].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
