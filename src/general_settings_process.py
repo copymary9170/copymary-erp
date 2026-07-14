@@ -24,6 +24,20 @@ class GeneralSettings:
     monthly_internet: float
     monthly_electricity: float
     estimated_monthly_units: int
+    # Tasas de cambio de referencia (VES por 1 USD) y comisiones/impuestos (%).
+    # Ver la nota en render_general_settings_process(): existe otra clase
+    # GeneralSettings en src/general_settings.py con estos mismos campos;
+    # esta es la que de verdad está activa (process_quote_loader.py la
+    # registra por encima), así que es aquí donde tienen que vivir para que
+    # se vean en la app.
+    bcv_rate: float = 0.0
+    binance_rate: float = 0.0
+    kontigo_in_rate: float = 0.0
+    kontigo_out_rate: float = 0.0
+    iva_rate: float = 16.0
+    igtf_rate: float = 3.0
+    mobile_payment_fee: float = 0.0
+    pos_fee: float = 0.0
 
     @property
     def monthly_fixed_costs(self) -> float:
@@ -38,6 +52,29 @@ class GeneralSettings:
         if self.margin_method == "Margen sobre venta":
             return 1 / max(1 - (self.profit_margin / 100), 0.01)
         return 1 + (self.profit_margin / 100)
+
+    def rate_for(self, rate_name: str) -> float:
+        return {
+            "BCV": self.bcv_rate,
+            "Binance": self.binance_rate,
+            "Kontigo (entrada)": self.kontigo_in_rate,
+            "Kontigo (salida)": self.kontigo_out_rate,
+        }.get(rate_name, 0.0)
+
+    def fee_for_payment_method(self, payment_method: str) -> float:
+        normalized = payment_method.strip().casefold()
+        if "móvil" in normalized or "movil" in normalized:
+            return self.mobile_payment_fee
+        if "punto" in normalized or "tarjeta" in normalized or "pos" in normalized:
+            return self.pos_fee
+        return 0.0
+
+    def net_after_fees(self, gross_amount: float, payment_method: str, *, apply_igtf: bool = False) -> float:
+        fee_rate = self.fee_for_payment_method(payment_method)
+        net = gross_amount * (1 - fee_rate / 100)
+        if apply_igtf:
+            net *= (1 - self.igtf_rate / 100)
+        return net
 
 
 def _money(value: float, currency: str) -> str:
@@ -55,6 +92,14 @@ def _defaults() -> GeneralSettings:
         monthly_internet=float(getattr(stored, "monthly_internet", 5.0)),
         monthly_electricity=float(getattr(stored, "monthly_electricity", 3.0)),
         estimated_monthly_units=int(getattr(stored, "estimated_monthly_units", 200)),
+        bcv_rate=float(getattr(stored, "bcv_rate", 0.0)),
+        binance_rate=float(getattr(stored, "binance_rate", 0.0)),
+        kontigo_in_rate=float(getattr(stored, "kontigo_in_rate", 0.0)),
+        kontigo_out_rate=float(getattr(stored, "kontigo_out_rate", 0.0)),
+        iva_rate=float(getattr(stored, "iva_rate", 16.0)),
+        igtf_rate=float(getattr(stored, "igtf_rate", 3.0)),
+        mobile_payment_fee=float(getattr(stored, "mobile_payment_fee", 0.0)),
+        pos_fee=float(getattr(stored, "pos_fee", 0.0)),
     )
 
 
@@ -103,6 +148,29 @@ def render_general_settings_process() -> None:
                 value=int(defaults.estimated_monthly_units), step=1,
             )
 
+        st.markdown("#### Tasas de cambio de referencia (VES por 1 USD)")
+        st.caption("Se guardan por separado porque suelen ser distintas: BCV es la oficial, Binance/paralelo es la de mercado, y Kontigo tiene una tasa cuando el dinero entra y otra cuando sale.")
+        rate_columns = st.columns(4)
+        with rate_columns[0]:
+            bcv_rate = st.number_input("Tasa BCV", min_value=0.0, value=float(defaults.bcv_rate), step=0.01, format="%.4f")
+        with rate_columns[1]:
+            binance_rate = st.number_input("Tasa Binance / paralelo", min_value=0.0, value=float(defaults.binance_rate), step=0.01, format="%.4f")
+        with rate_columns[2]:
+            kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
+        with rate_columns[3]:
+            kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+
+        st.markdown("#### Impuestos y comisiones (%)")
+        fee_columns = st.columns(4)
+        with fee_columns[0]:
+            iva_rate = st.number_input("IVA", min_value=0.0, max_value=100.0, value=float(defaults.iva_rate), step=0.5, format="%.2f")
+        with fee_columns[1]:
+            igtf_rate = st.number_input("IGTF", min_value=0.0, max_value=100.0, value=float(defaults.igtf_rate), step=0.5, format="%.2f", help="Impuesto a las Grandes Transacciones Financieras, aplica a pagos en divisas/cripto.")
+        with fee_columns[2]:
+            mobile_payment_fee = st.number_input("Comisión pago móvil", min_value=0.0, max_value=100.0, value=float(defaults.mobile_payment_fee), step=0.1, format="%.2f")
+        with fee_columns[3]:
+            pos_fee = st.number_input("Comisión punto de venta / tarjeta", min_value=0.0, max_value=100.0, value=float(defaults.pos_fee), step=0.1, format="%.2f")
+
         submitted = st.form_submit_button("Guardar configuración", type="primary", use_container_width=True)
 
     if submitted:
@@ -115,6 +183,10 @@ def render_general_settings_process() -> None:
                 monthly_internet=float(monthly_internet),
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
+                bcv_rate=float(bcv_rate), binance_rate=float(binance_rate),
+                kontigo_in_rate=float(kontigo_in_rate), kontigo_out_rate=float(kontigo_out_rate),
+                iva_rate=float(iva_rate), igtf_rate=float(igtf_rate),
+                mobile_payment_fee=float(mobile_payment_fee), pos_fee=float(pos_fee),
             )
             st.success("Configuración global guardada.")
             st.rerun()
@@ -126,6 +198,18 @@ def render_general_settings_process() -> None:
     summary[1].metric("Costo fijo por unidad", _money(settings.fixed_cost_per_unit, settings.currency))
     summary[2].metric("Margen objetivo", f"{settings.profit_margin:.1f}%")
     summary[3].metric("Factor de venta", f"× {settings.sale_multiplier:.4f}")
+
+    st.markdown("#### Tasas y comisiones vigentes")
+    rate_summary_columns = st.columns(4)
+    rate_summary_columns[0].metric("BCV", f"{getattr(settings, 'bcv_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[1].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[2].metric("Kontigo entrada", f"{getattr(settings, 'kontigo_in_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[3].metric("Kontigo salida", f"{getattr(settings, 'kontigo_out_rate', 0.0):,.4f} Bs")
+    fee_summary_columns = st.columns(4)
+    fee_summary_columns[0].metric("IVA", f"{getattr(settings, 'iva_rate', 16.0):.2f}%")
+    fee_summary_columns[1].metric("IGTF", f"{getattr(settings, 'igtf_rate', 3.0):.2f}%")
+    fee_summary_columns[2].metric("Comisión pago móvil", f"{getattr(settings, 'mobile_payment_fee', 0.0):.2f}%")
+    fee_summary_columns[3].metric("Comisión punto de venta", f"{getattr(settings, 'pos_fee', 0.0):.2f}%")
 
     assets = _get_assets()
     available_assets = [asset for asset in assets if asset.available_for_quoting]
