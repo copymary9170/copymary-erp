@@ -55,6 +55,12 @@ def test_exchange_rate_reads_from_stored_settings():
     assert pf.exchange_rate("BCV") == 40.0
 
 
+def test_exchange_rate_reads_bcv_euro_separately_from_bcv_usd():
+    st.session_state["general_settings"] = _settings(bcv_rate=40.0, bcv_eur_rate=46.5)
+    assert pf.exchange_rate("BCV (EUR)") == 46.5
+    assert pf.exchange_rate("BCV") == 40.0
+
+
 def test_igtf_rate_and_iva_rate_read_from_stored_settings():
     st.session_state["general_settings"] = _settings(igtf_rate=3.0, iva_rate=16.0)
     assert pf.igtf_rate() == 3.0
@@ -127,6 +133,55 @@ def test_net_amount_matches_fee_breakdown_net_amount():
 
 
 # ---------------------------------------------------------------------------
+# sale_breakdown — IVA (suma al total) + comisión/IGTF (restan del neto)
+# ---------------------------------------------------------------------------
+
+def test_sale_breakdown_without_iva_total_equals_subtotal():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo")
+    assert breakdown["iva_applied"] is False
+    assert breakdown["total"] == 100.0
+    assert breakdown["net_amount"] == 100.0
+
+
+def test_sale_breakdown_with_iva_increases_total():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo", apply_iva=True)
+    assert breakdown["iva_applied"] is True
+    assert breakdown["iva_amount"] == 16.0
+    assert breakdown["total"] == 116.0
+    assert breakdown["net_amount"] == 116.0  # sin comisión ni IGTF en efectivo
+
+
+def test_sale_breakdown_fee_and_igtf_apply_over_iva_inclusive_total():
+    """La comisión del medio de pago y el IGTF se calculan sobre el TOTAL ya
+    con IVA incluido, porque es el monto real que se procesa/cobra."""
+    st.session_state["general_settings"] = _settings(iva_rate=16.0, pos_fee=5.0, igtf_rate=3.0)
+    breakdown = pf.sale_breakdown(100.0, "Punto de venta", apply_iva=True, apply_igtf=True)
+    assert breakdown["total"] == 116.0
+    assert breakdown["fee_amount"] == round(116.0 * 0.05, 2)
+    expected_after_fee = 116.0 - round(116.0 * 0.05, 2)
+    expected_igtf = round(expected_after_fee * 0.03, 2)
+    assert breakdown["igtf_amount"] == expected_igtf
+    assert breakdown["net_amount"] == round(expected_after_fee - expected_igtf, 2)
+
+
+def test_sale_breakdown_rounds_all_money_fields_to_two_decimals():
+    st.session_state["general_settings"] = _settings(iva_rate=16.0, pos_fee=2.5, igtf_rate=3.0)
+    breakdown = pf.sale_breakdown(33.333, "Punto de venta", apply_iva=True, apply_igtf=True)
+    for key in ("subtotal", "iva_amount", "total", "fee_amount", "igtf_amount", "net_amount"):
+        value = breakdown[key]
+        assert round(value, 2) == value, f"{key} no está redondeado a 2 decimales: {value}"
+
+
+def test_sale_breakdown_without_settings_never_fails():
+    st.session_state.pop("general_settings", None)
+    breakdown = pf.sale_breakdown(100.0, "Efectivo", apply_iva=True, apply_igtf=True)
+    assert breakdown["total"] == 100.0
+    assert breakdown["net_amount"] == 100.0
+
+
+# ---------------------------------------------------------------------------
 # rates_are_stale / days_since_rates_updated — el "avisador" de tasas
 # ---------------------------------------------------------------------------
 
@@ -171,12 +226,14 @@ def test_rates_badge_html_none_when_nothing_saved():
 
 
 def test_rates_badge_html_includes_all_configured_rates():
-    st.session_state["general_settings"] = _settings(bcv_rate=40.5, binance_rate=45.5, kontigo_in_rate=42.0, kontigo_out_rate=44.0)
+    st.session_state["general_settings"] = _settings(bcv_rate=40.5, bcv_eur_rate=46.5, binance_rate=45.5, kontigo_in_rate=42.0, kontigo_out_rate=44.0)
     html = pf.rates_badge_html()
     assert html is not None
     assert "40.50" in html
+    assert "46.50" in html
     assert "45.50" in html
     assert "BCV" in html
+    assert "BCV Euro" in html
     assert "Kontigo entrada" in html
     assert "Kontigo salida" in html
 

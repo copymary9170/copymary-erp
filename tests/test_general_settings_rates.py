@@ -35,8 +35,9 @@ def _settings(**overrides) -> GeneralSettings:
 # ---------------------------------------------------------------------------
 
 def test_rate_for_returns_correct_named_rate():
-    settings = _settings()
+    settings = _settings(bcv_eur_rate=46.5)
     assert settings.rate_for("BCV") == 40.0
+    assert settings.rate_for("BCV (EUR)") == 46.5
     assert settings.rate_for("Binance") == 45.0
     assert settings.rate_for("Kontigo (entrada)") == 42.0
     assert settings.rate_for("Kontigo (salida)") == 44.0

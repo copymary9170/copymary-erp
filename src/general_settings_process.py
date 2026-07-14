@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import streamlit as st
 
+from src import auth, session_backup
 from src.assets import _get_assets
 from src.components import render_info_card, render_page_header
 from src.production_processes import (
@@ -13,7 +14,44 @@ from src.production_processes import (
     normalize_process_codes,
     process_coverage,
 )
-from src.session_utils import now_iso as _now
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save_list
+
+
+def _activate_rates_history_backup() -> None:
+    if "rates_history" not in session_backup.LIST_SECTIONS:
+        session_backup.LIST_SECTIONS = (*session_backup.LIST_SECTIONS, "rates_history")
+        session_backup.SECTION_LABELS["rates_history"] = "Historial de tasas y comisiones"
+    session_backup.SESSION_KEYS = (
+        "general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS,
+    )
+
+
+_activate_rates_history_backup()
+
+
+def _log_rate_history(settings: "GeneralSettings") -> None:
+    """Guarda una foto de las tasas/comisiones cada vez que se guarda
+    Configuración General: quién lo hizo y cuándo, y con qué valores quedó.
+    Responde 'a qué tasa vendimos el día X' sin depender de que nadie se
+    acuerde de anotarlo aparte."""
+    user = auth.current_user()
+    history = _rows("rates_history")
+    history.append({
+        "recorded_at_utc": _now(),
+        "recorded_by": user.display_name if user else "Desconocido",
+        "bcv_rate": settings.bcv_rate,
+        "bcv_eur_rate": settings.bcv_eur_rate,
+        "binance_rate": settings.binance_rate,
+        "kontigo_in_rate": settings.kontigo_in_rate,
+        "kontigo_out_rate": settings.kontigo_out_rate,
+        "kontigo_in_fee": settings.kontigo_in_fee,
+        "kontigo_out_fee": settings.kontigo_out_fee,
+        "iva_rate": settings.iva_rate,
+        "igtf_rate": settings.igtf_rate,
+        "mobile_payment_fee": settings.mobile_payment_fee,
+        "pos_fee": settings.pos_fee,
+    })
+    _save_list("rates_history", history)
 
 
 @dataclass(frozen=True)
@@ -32,6 +70,7 @@ class GeneralSettings:
     # registra por encima), así que es aquí donde tienen que vivir para que
     # se vean en la app.
     bcv_rate: float = 0.0
+    bcv_eur_rate: float = 0.0
     binance_rate: float = 0.0
     kontigo_in_rate: float = 0.0
     kontigo_out_rate: float = 0.0
@@ -66,6 +105,7 @@ class GeneralSettings:
     def rate_for(self, rate_name: str) -> float:
         return {
             "BCV": self.bcv_rate,
+            "BCV (EUR)": self.bcv_eur_rate,
             "Binance": self.binance_rate,
             "Kontigo (entrada)": self.kontigo_in_rate,
             "Kontigo (salida)": self.kontigo_out_rate,
@@ -107,6 +147,7 @@ def _defaults() -> GeneralSettings:
         monthly_electricity=float(getattr(stored, "monthly_electricity", 3.0)),
         estimated_monthly_units=int(getattr(stored, "estimated_monthly_units", 200)),
         bcv_rate=float(getattr(stored, "bcv_rate", 0.0)),
+        bcv_eur_rate=float(getattr(stored, "bcv_eur_rate", 0.0)),
         binance_rate=float(getattr(stored, "binance_rate", 0.0)),
         kontigo_in_rate=float(getattr(stored, "kontigo_in_rate", 0.0)),
         kontigo_out_rate=float(getattr(stored, "kontigo_out_rate", 0.0)),
@@ -187,6 +228,7 @@ def render_general_settings_process() -> None:
             kontigo_in_rate = st.number_input("Kontigo — tasa de entrada", min_value=0.0, value=float(defaults.kontigo_in_rate), step=0.01, format="%.4f", help="Tasa cuando el dinero llega/se deposita en Kontigo.")
         with rate_columns[3]:
             kontigo_out_rate = st.number_input("Kontigo — tasa de salida", min_value=0.0, value=float(defaults.kontigo_out_rate), step=0.01, format="%.4f", help="Tasa cuando se retira/convierte desde Kontigo.")
+        bcv_eur_rate = st.number_input("Tasa BCV Euro (VES por 1 EUR)", min_value=0.0, value=float(defaults.bcv_eur_rate), step=0.01, format="%.4f", help="La tasa oficial del BCV para el euro, aparte de la del dólar.")
         kontigo_fee_columns = st.columns(2)
         with kontigo_fee_columns[0]:
             kontigo_in_fee = st.number_input("Kontigo — comisión de entrada (%)", min_value=0.0, max_value=100.0, value=float(defaults.kontigo_in_fee), step=0.1, format="%.2f", help="Lo que Kontigo cobra por recibir el dinero, aparte de la tasa de cambio.")
@@ -217,12 +259,14 @@ def render_general_settings_process() -> None:
                 monthly_electricity=float(monthly_electricity),
                 estimated_monthly_units=int(estimated_monthly_units),
                 bcv_rate=float(bcv_rate), binance_rate=float(binance_rate),
+                bcv_eur_rate=float(bcv_eur_rate),
                 kontigo_in_rate=float(kontigo_in_rate), kontigo_out_rate=float(kontigo_out_rate),
                 kontigo_in_fee=float(kontigo_in_fee), kontigo_out_fee=float(kontigo_out_fee),
                 iva_rate=float(iva_rate), igtf_rate=float(igtf_rate),
                 mobile_payment_fee=float(mobile_payment_fee), pos_fee=float(pos_fee),
                 rates_updated_at=_now(),
             )
+            _log_rate_history(st.session_state.general_settings)
             st.success("Configuración global guardada.")
             st.rerun()
 
@@ -240,11 +284,12 @@ def render_general_settings_process() -> None:
         st.caption(f"Última actualización de tasas: {rates_updated_at[:16].replace('T', ' ')} UTC")
     else:
         st.caption("Todavía no se han guardado tasas.")
-    rate_summary_columns = st.columns(4)
+    rate_summary_columns = st.columns(5)
     rate_summary_columns[0].metric("BCV", f"{getattr(settings, 'bcv_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[1].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[2].metric("Kontigo entrada", f"{getattr(settings, 'kontigo_in_rate', 0.0):,.4f} Bs")
-    rate_summary_columns[3].metric("Kontigo salida", f"{getattr(settings, 'kontigo_out_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[1].metric("BCV Euro", f"{getattr(settings, 'bcv_eur_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[2].metric("Binance / paralelo", f"{getattr(settings, 'binance_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[3].metric("Kontigo entrada", f"{getattr(settings, 'kontigo_in_rate', 0.0):,.4f} Bs")
+    rate_summary_columns[4].metric("Kontigo salida", f"{getattr(settings, 'kontigo_out_rate', 0.0):,.4f} Bs")
     kontigo_fee_summary_columns = st.columns(2)
     kontigo_fee_summary_columns[0].metric("Comisión Kontigo entrada", f"{getattr(settings, 'kontigo_in_fee', 0.0):.2f}%")
     kontigo_fee_summary_columns[1].metric("Comisión Kontigo salida", f"{getattr(settings, 'kontigo_out_fee', 0.0):.2f}%")
@@ -253,6 +298,25 @@ def render_general_settings_process() -> None:
     fee_summary_columns[1].metric("IGTF", f"{getattr(settings, 'igtf_rate', 3.0):.2f}%")
     fee_summary_columns[2].metric("Comisión pago móvil", f"{getattr(settings, 'mobile_payment_fee', 0.0):.2f}%")
     fee_summary_columns[3].metric("Comisión punto de venta", f"{getattr(settings, 'pos_fee', 0.0):.2f}%")
+
+    history = list(reversed(_rows("rates_history")[-100:]))
+    if history:
+        with st.expander(f"Historial de tasas guardadas ({len(history)})", expanded=False):
+            st.caption("Responde '¿a qué tasa se guardó tal día?' — cada vez que se guarda Configuración General queda una foto de las tasas, con quién y cuándo lo hizo.")
+            st.dataframe(
+                [
+                    {
+                        "Fecha": entry["recorded_at_utc"][:16].replace("T", " "),
+                        "Usuario": entry["recorded_by"],
+                        "BCV": entry["bcv_rate"], "BCV Euro": entry.get("bcv_eur_rate", 0.0),
+                        "Binance": entry["binance_rate"],
+                        "Kontigo entrada": entry["kontigo_in_rate"], "Kontigo salida": entry["kontigo_out_rate"],
+                        "IVA %": entry["iva_rate"], "IGTF %": entry["igtf_rate"],
+                    }
+                    for entry in history
+                ],
+                use_container_width=True, hide_index=True,
+            )
 
     assets = _get_assets()
     available_assets = [asset for asset in assets if asset.available_for_quoting]

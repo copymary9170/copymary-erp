@@ -82,13 +82,17 @@ def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool 
     del medio de pago, porque hay pagos en divisas/cripto que igual quedan
     exentos según el caso. Quien registra la venta decide explícitamente si
     aplica, marcándolo a mano.
+
+    Todos los montos de dinero se redondean a 2 decimales (precio final al
+    cliente), aunque las tasas/porcentajes internos conservan más precisión.
     """
+    gross_amount = round(float(gross_amount), 2)
     fee_rate = fee_rate_for(payment_method)
-    fee_amount = gross_amount * fee_rate / 100
+    fee_amount = round(gross_amount * fee_rate / 100, 2)
     after_fee = gross_amount - fee_amount
     applied_igtf_rate = igtf_rate() if apply_igtf else 0.0
-    igtf_amount = after_fee * applied_igtf_rate / 100
-    net = after_fee - igtf_amount
+    igtf_amount = round(after_fee * applied_igtf_rate / 100, 2)
+    net = round(after_fee - igtf_amount, 2)
     return {
         "gross_amount": gross_amount,
         "payment_method": payment_method,
@@ -98,6 +102,43 @@ def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool 
         "igtf_rate": applied_igtf_rate,
         "igtf_amount": igtf_amount,
         "net_amount": net,
+    }
+
+
+def sale_breakdown(subtotal: float, payment_method: str, *, apply_iva: bool = False, apply_igtf: bool = False) -> dict:
+    """Desglose completo de una venta, de punta a punta:
+
+    1. Aplica IVA (si `apply_iva`) sobre `subtotal` para obtener el `total`
+       que realmente se le cobra al cliente — el IVA aumenta lo que paga el
+       cliente, a diferencia de la comisión del medio de pago y el IGTF, que
+       reducen lo que le queda al negocio.
+    2. Sobre ese `total` (ya con IVA si aplica, porque la comisión del medio
+       de pago se cobra sobre el monto real procesado) calcula la comisión
+       del medio de pago y, si `apply_igtf`, el IGTF, para saber cuánto
+       queda neto.
+
+    Todos los montos se redondean a 2 decimales. IVA e IGTF son siempre
+    decisiones manuales (`apply_iva`/`apply_igtf`), nunca automáticas — hay
+    ventas exentas de uno o de ambos según el caso.
+    """
+    subtotal = round(float(subtotal), 2)
+    applied_iva_rate = iva_rate() if apply_iva else 0.0
+    iva_amount = round(subtotal * applied_iva_rate / 100, 2)
+    total = round(subtotal + iva_amount, 2)
+    fees = fee_breakdown(total, payment_method, apply_igtf=apply_igtf)
+    return {
+        "subtotal": subtotal,
+        "iva_applied": apply_iva,
+        "iva_rate": applied_iva_rate,
+        "iva_amount": iva_amount,
+        "total": total,
+        "payment_method": payment_method,
+        "fee_rate": fees["fee_rate"],
+        "fee_amount": fees["fee_amount"],
+        "igtf_applied": fees["igtf_applied"],
+        "igtf_rate": fees["igtf_rate"],
+        "igtf_amount": fees["igtf_amount"],
+        "net_amount": fees["net_amount"],
     }
 
 
@@ -111,6 +152,7 @@ def rates_badge_html() -> str | None:
         return None
     chips = [
         ("BCV", f"Bs {getattr(settings, 'bcv_rate', 0.0):,.2f}"),
+        ("BCV Euro", f"Bs {getattr(settings, 'bcv_eur_rate', 0.0):,.2f}"),
         ("Binance", f"Bs {getattr(settings, 'binance_rate', 0.0):,.2f}"),
         ("Kontigo entrada", f"Bs {getattr(settings, 'kontigo_in_rate', 0.0):,.2f} · {getattr(settings, 'kontigo_in_fee', 0.0):.1f}%"),
         ("Kontigo salida", f"Bs {getattr(settings, 'kontigo_out_rate', 0.0):,.2f} · {getattr(settings, 'kontigo_out_fee', 0.0):.1f}%"),

@@ -20,6 +20,18 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "IVA conectado a ventas, redondeo a 2 decimales e historial de tasas",
+        "target": "Configuración General",
+        "category": "Nuevo",
+        "description": "Tres mejoras juntas: (1) el IVA ya se aplica de verdad en Venta rápida y Comercial con una casilla manual 'Esta venta cobra IVA' — se suma al total que paga el cliente, y la comisión del medio de pago/IGTF se calculan sobre ese total ya con IVA, porque es el monto real que se procesa. (2) Todos los montos de dinero en el desglose de ventas (subtotal, IVA, comisión, IGTF, neto) se redondean a 2 decimales — las tasas de cambio y costos unitarios internos conservan más precisión a propósito, el redondeo aplica al precio final. (3) Cada vez que se guarda Configuración General queda una foto en el historial (quién y cuándo), visible en un desplegable dentro de la misma página, para poder responder '¿a qué tasa se guardó tal día?' sin depender de la memoria.",
+    },
+    {
+        "title": "Tasa BCV Euro agregada",
+        "target": "Configuración General",
+        "category": "Nuevo",
+        "description": "Faltaba: Configuración General ya guarda también la tasa oficial del BCV para el euro (VES por 1 EUR), aparte de la tasa BCV en dólares — visible en el resumen, en la franja de tasas siempre visible, y accesible para cualquier módulo vía payment_fees.exchange_rate('BCV (EUR)').",
+    },
+    {
         "title": "Franja de tasas y comisiones siempre visible",
         "target": "Cualquier área",
         "category": "Nuevo",

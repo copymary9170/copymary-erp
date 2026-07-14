@@ -98,6 +98,25 @@ def test_build_sale_record_net_amount_equals_total_without_configured_fees():
     assert sale["payment_fee_amount"] == 0.0
 
 
+def test_build_sale_record_iva_is_manual_and_increases_total():
+    import streamlit as st
+    from src.general_settings_process import GeneralSettings
+    st.session_state["general_settings"] = GeneralSettings(
+        business_name="Copy Mary", currency="USD", profit_margin=40.0, margin_method="Margen sobre venta",
+        monthly_internet=5.0, monthly_electricity=3.0, estimated_monthly_units=200, iva_rate=16.0,
+    )
+    sale_without = quick_sale.build_sale_record("CLI-1", "Fotocopia", 1, 100.0, 0.0, "Efectivo")
+    assert sale_without["iva_applied"] is False
+    assert sale_without["total"] == 100.0
+    assert sale_without["subtotal"] == 100.0
+
+    sale_with = quick_sale.build_sale_record("CLI-1", "Fotocopia", 1, 100.0, 0.0, "Efectivo", apply_iva=True)
+    assert sale_with["iva_applied"] is True
+    assert sale_with["subtotal"] == 100.0
+    assert sale_with["iva_amount"] == 16.0
+    assert sale_with["total"] == 116.0
+
+
 def test_build_sale_record_igtf_is_manual_not_automatic():
     """Aunque el medio de pago sea Zelle (divisas), el IGTF no debe
     aplicarse solo: se decide a mano con apply_igtf en cada venta."""

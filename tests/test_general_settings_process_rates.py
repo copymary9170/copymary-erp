@@ -68,8 +68,9 @@ def _settings(**overrides) -> gsp.GeneralSettings:
 
 
 def test_rate_for_returns_correct_named_rate():
-    settings = _settings()
+    settings = _settings(bcv_eur_rate=46.5)
     assert settings.rate_for("BCV") == 40.0
+    assert settings.rate_for("BCV (EUR)") == 46.5
     assert settings.rate_for("Kontigo (salida)") == 44.0
 
 
@@ -90,3 +91,39 @@ def test_net_after_fees_combines_payment_fee_and_igtf():
     settings = _settings(pos_fee=5.0, igtf_rate=3.0)
     net = settings.net_after_fees(100.0, "Tarjeta", apply_igtf=True)
     assert round(net, 4) == round(100.0 * 0.95 * 0.97, 4)
+
+
+# ---------------------------------------------------------------------------
+# _log_rate_history — historial de tasas guardadas (quién y cuándo)
+# ---------------------------------------------------------------------------
+
+def test_log_rate_history_appends_snapshot_with_rate_values():
+    from src.session_utils import read_list
+    st.session_state.pop("rates_history", None)
+    settings = _settings(bcv_rate=41.0, bcv_eur_rate=47.0, igtf_rate=3.0)
+    gsp._log_rate_history(settings)
+    history = read_list("rates_history")
+    assert len(history) == 1
+    assert history[0]["bcv_rate"] == 41.0
+    assert history[0]["bcv_eur_rate"] == 47.0
+    assert history[0]["igtf_rate"] == 3.0
+
+
+def test_log_rate_history_records_unknown_user_when_not_logged_in():
+    from src.session_utils import read_list
+    st.session_state.pop("rates_history", None)
+    st.session_state.pop("auth_user", None)
+    gsp._log_rate_history(_settings())
+    history = read_list("rates_history")
+    assert history[-1]["recorded_by"] == "Desconocido"
+
+
+def test_log_rate_history_accumulates_multiple_saves():
+    from src.session_utils import read_list
+    st.session_state.pop("rates_history", None)
+    gsp._log_rate_history(_settings(bcv_rate=40.0))
+    gsp._log_rate_history(_settings(bcv_rate=41.0))
+    history = read_list("rates_history")
+    assert len(history) == 2
+    assert history[0]["bcv_rate"] == 40.0
+    assert history[1]["bcv_rate"] == 41.0
