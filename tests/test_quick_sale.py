@@ -98,6 +98,24 @@ def test_build_sale_record_net_amount_equals_total_without_configured_fees():
     assert sale["payment_fee_amount"] == 0.0
 
 
+def test_build_sale_record_igtf_is_manual_not_automatic():
+    """Aunque el medio de pago sea Zelle (divisas), el IGTF no debe
+    aplicarse solo: se decide a mano con apply_igtf en cada venta."""
+    import streamlit as st
+    from src.general_settings_process import GeneralSettings
+    st.session_state["general_settings"] = GeneralSettings(
+        business_name="Copy Mary", currency="USD", profit_margin=40.0, margin_method="Margen sobre venta",
+        monthly_internet=5.0, monthly_electricity=3.0, estimated_monthly_units=200, igtf_rate=3.0,
+    )
+    sale_without = quick_sale.build_sale_record("CLI-1", "Fotocopia", 1, 100.0, 0.0, "Zelle")
+    assert sale_without["igtf_applied"] is False
+    assert sale_without["net_amount"] == 100.0
+
+    sale_with = quick_sale.build_sale_record("CLI-1", "Fotocopia", 1, 100.0, 0.0, "Zelle", apply_igtf=True)
+    assert sale_with["igtf_applied"] is True
+    assert round(sale_with["net_amount"], 4) == 97.0
+
+
 def test_build_sale_record_discounts_configured_payment_fee():
     import streamlit as st
     from src.general_settings_process import GeneralSettings

@@ -32,7 +32,7 @@ from src import app_shell
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, initialize_database
 from src.money import format_money, get_currency
-from src.payment_fees import fee_breakdown
+from src.payment_fees import fee_breakdown, should_apply_igtf
 from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 WALK_IN_CLIENT_NAME = "Cliente ocasional"
@@ -65,14 +65,16 @@ def find_walk_in_client(clients: list[dict]) -> dict | None:
     return None
 
 
-def build_sale_record(client_id: str, description: str, quantity: float, unit_price: float, discount: float, payment_method: str, notes: str = "") -> dict:
+def build_sale_record(client_id: str, description: str, quantity: float, unit_price: float, discount: float, payment_method: str, notes: str = "", apply_igtf: bool = False) -> dict:
     total = line_total(quantity, unit_price, discount)
     # Lo que se le cobra al cliente (total) no cambia por la comisión del
     # medio de pago o el IGTF — eso lo asume el negocio, no el cliente. Se
     # guarda aparte para saber cuánto llega realmente a caja/banco, usando
     # Configuración General (tasas, comisiones, IGTF) sin que este módulo
-    # tenga que saber cómo está configurado cada medio de pago.
-    breakdown = fee_breakdown(total, payment_method)
+    # tenga que saber cómo está configurado cada medio de pago. El IGTF se
+    # deja siempre a decisión manual (apply_igtf) — hay pagos en divisas
+    # que igual quedan exentos según el caso, así que nunca se infiere solo.
+    breakdown = fee_breakdown(total, payment_method, apply_igtf=apply_igtf)
     return {
         "sale_id": uuid4().hex[:10],
         "created_at_utc": _now(),
@@ -201,9 +203,14 @@ def render_quick_sale() -> None:
             unit_price = cols[1].number_input("Precio unitario", min_value=0.0, value=float(selected_service["unit_price"]) if selected_service else 0.0, step=0.05)
             discount = cols[2].number_input("Descuento", min_value=0.0, value=0.0, step=0.5)
             payment_method = st.selectbox("Método de pago", PAYMENT_METHODS)
+            apply_igtf = st.checkbox(
+                "Esta venta paga IGTF",
+                value=should_apply_igtf(payment_method),
+                help="Decisión manual: márcalo solo si esta operación específica paga IGTF. Se sugiere marcado para pagos en divisas/cripto, pero hay casos exentos — confírmalo tú.",
+            )
             total_now = line_total(quantity, unit_price, discount)
             st.metric("Total a cobrar", format_money(total_now, currency))
-            preview = fee_breakdown(total_now, payment_method)
+            preview = fee_breakdown(total_now, payment_method, apply_igtf=apply_igtf)
             if preview["fee_amount"] > 0 or preview["igtf_amount"] > 0:
                 note = f"Comisión {payment_method}: {format_money(preview['fee_amount'], currency)}"
                 if preview["igtf_applied"]:
@@ -221,7 +228,7 @@ def render_quick_sale() -> None:
                 client_id = client_options[selected_client_label]
                 if client_id is None:
                     client_id, clients = _ensure_walk_in_client(clients)
-                sale = build_sale_record(client_id, description, quantity, unit_price, discount, payment_method)
+                sale = build_sale_record(client_id, description, quantity, unit_price, discount, payment_method, apply_igtf=apply_igtf)
                 sales = _rows("sales_registry")
                 sales.append(sale)
                 _save("sales_registry", sales)

@@ -62,23 +62,25 @@ def exchange_rate(rate_name: str) -> float:
 
 
 def should_apply_igtf(payment_method: str) -> bool:
-    """Regla por defecto de cuándo corresponde aplicar IGTF: pagos en
-    divisas o cripto (Zelle, Binance, Kontigo, tarjeta internacional), no
-    pagos en bolívares. Un módulo puede ignorar esta sugerencia y decidir
-    apply_igtf explícitamente si su caso es distinto."""
+    """Sugerencia de referencia, NO una regla automática: en la práctica hay
+    pagos en divisas/cripto que igual quedan exentos de IGTF según cómo se
+    procesen, así que decidir si aplica queda siempre en manos de quien
+    registra la venta — esta función solo puede usarse para pre-marcar una
+    casilla como sugerencia, nunca para aplicar el IGTF sin que alguien lo
+    confirme."""
     normalized = payment_method.strip().casefold()
     return any(keyword in normalized for keyword in _IGTF_PAYMENT_METHODS)
 
 
-def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool | None = None) -> dict:
+def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool = False) -> dict:
     """Desglose completo de cuánto queda realmente de `gross_amount` después
-    de la comisión del medio de pago y, si aplica, el IGTF.
+    de la comisión del medio de pago y, si `apply_igtf` es True, el IGTF.
 
-    Si `apply_igtf` se deja en None, se decide automáticamente con
-    `should_apply_igtf(payment_method)`.
+    El IGTF SIEMPRE queda en False por defecto: no se infiere automáticamente
+    del medio de pago, porque hay pagos en divisas/cripto que igual quedan
+    exentos según el caso. Quien registra la venta decide explícitamente si
+    aplica, marcándolo a mano.
     """
-    if apply_igtf is None:
-        apply_igtf = should_apply_igtf(payment_method)
     fee_rate = fee_rate_for(payment_method)
     fee_amount = gross_amount * fee_rate / 100
     after_fee = gross_amount - fee_amount
@@ -97,5 +99,5 @@ def fee_breakdown(gross_amount: float, payment_method: str, *, apply_igtf: bool 
     }
 
 
-def net_amount(gross_amount: float, payment_method: str, *, apply_igtf: bool | None = None) -> float:
+def net_amount(gross_amount: float, payment_method: str, *, apply_igtf: bool = False) -> float:
     return fee_breakdown(gross_amount, payment_method, apply_igtf=apply_igtf)["net_amount"]
