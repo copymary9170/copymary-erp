@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Tasas de cambio y comisiones en Configuración General",
+        "target": "Configuración General",
+        "category": "Nuevo",
+        "description": "Configuración General ahora guarda las tasas BCV, Binance/paralelo y Kontigo (entrada y salida, porque son distintas por el spread), además del IVA, el IGTF y las comisiones de pago móvil y punto de venta/tarjeta. De paso se corrigió un bug real que impedía restaurar cualquier respaldo: el validador del respaldo general se había quedado con el esquema viejo de Configuración General (antes de que se conectara con Activos), así que 'Restaurar respaldo' fallaba siempre con 'La configuración general no tiene la estructura esperada'. Ahora sigue el esquema actual y, además, los campos que falten (como estas tasas nuevas en un respaldo viejo) se completan con su valor por defecto en vez de romper la restauración.",
+    },
+    {
         "title": "Costo de compra detallado en Inventario",
         "target": "Inventario",
         "category": "Nuevo",

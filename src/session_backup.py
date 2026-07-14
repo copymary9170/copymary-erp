@@ -91,26 +91,41 @@ def _build_backup() -> bytes:
 def _settings(raw: dict | None) -> GeneralSettings | None:
     if raw is None:
         return None
+    # Bug real encontrado: `GeneralSettings` cambió hace poco (equipment_name/
+    # equipment_cost/equipment_lifetime_units se reemplazaron por
+    # pricing_method + selected_asset_ids, vinculado a Activos reales), pero
+    # esta función se quedó validando el esquema VIEJO. Resultado: exportar
+    # un respaldo funcionaba, pero restaurarlo fallaba siempre con "La
+    # configuración general no tiene la estructura esperada" — la app nunca
+    # llegaba a construir un GeneralSettings válido. Además, antes se exigía
+    # coincidencia EXACTA de claves (`!=` en vez de subconjunto), lo cual es
+    # frágil ante cualquier evolución futura del esquema; ahora sólo se
+    # exigen los campos obligatorios y los opcionales (tasas de cambio, IVA,
+    # IGTF, comisiones) se completan con su valor por defecto si faltan.
     required = {
-        "business_name", "currency", "profit_margin", "monthly_internet",
-        "monthly_electricity", "estimated_monthly_units", "equipment_name",
-        "equipment_cost", "equipment_lifetime_units",
+        "business_name", "currency", "profit_margin", "pricing_method",
+        "monthly_internet", "monthly_electricity", "estimated_monthly_units",
+        "selected_asset_ids",
     }
-    if not isinstance(raw, dict) or set(raw.keys()) != required:
+    if not isinstance(raw, dict) or not required.issubset(raw.keys()):
         raise ValueError("La configuración general no tiene la estructura esperada.")
     currency = str(raw["currency"]).upper()
     if currency not in {"USD", "VES", "EUR"}:
         raise ValueError("La moneda debe ser USD, VES o EUR.")
+    optional_defaults = {
+        "bcv_rate": 0.0, "binance_rate": 0.0, "kontigo_in_rate": 0.0, "kontigo_out_rate": 0.0,
+        "iva_rate": 16.0, "igtf_rate": 3.0, "mobile_payment_fee": 0.0, "pos_fee": 0.0,
+    }
     return GeneralSettings(
         business_name=str(raw["business_name"]).strip(),
         currency=currency,
         profit_margin=float(raw["profit_margin"]),
+        pricing_method=str(raw["pricing_method"]),
         monthly_internet=float(raw["monthly_internet"]),
         monthly_electricity=float(raw["monthly_electricity"]),
         estimated_monthly_units=int(raw["estimated_monthly_units"]),
-        equipment_name=str(raw["equipment_name"]).strip(),
-        equipment_cost=float(raw["equipment_cost"]),
-        equipment_lifetime_units=int(raw["equipment_lifetime_units"]),
+        selected_asset_ids=tuple(raw["selected_asset_ids"]),
+        **{key: float(raw.get(key, default)) for key, default in optional_defaults.items()},
     )
 
 
