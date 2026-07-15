@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.assets import Asset, _asset_from_dict, _update_asset_units, landed_acquisition_cost
+import streamlit as st
+
+from src.assets import Asset, _asset_from_dict, _inventory_value, _update_asset_units, landed_acquisition_cost
 
 
 def _make_asset(**overrides) -> Asset:
@@ -205,3 +207,20 @@ def test_asset_with_zero_cost_has_zero_depreciation_not_a_crash():
     assert asset.depreciation_per_unit == 0.0
     assert asset.accumulated_depreciation == 0.0
     assert asset.remaining_value == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _inventory_value — para el Patrimonio total (Activos + Inventario)
+# ---------------------------------------------------------------------------
+
+def test_inventory_value_sums_quantity_times_unit_cost():
+    st.session_state["inventory_registry"] = [
+        {"item_id": "ITM-1", "name": "Vinil", "available_quantity": 50.0, "unit_cost": 2.0},
+        {"item_id": "ITM-2", "name": "Papel", "available_quantity": 100.0, "unit_cost": 0.05},
+    ]
+    assert _inventory_value() == 105.0
+
+
+def test_inventory_value_zero_when_no_inventory():
+    st.session_state.pop("inventory_registry", None)
+    assert _inventory_value() == 0.0
