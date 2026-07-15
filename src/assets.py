@@ -6,7 +6,8 @@ from uuid import uuid4
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
-from src.money import format_money
+from src.erp_database import latest_exchange_rate
+from src.money import format_money, get_currency
 from src.production_processes import PROCESS_OPTIONS, normalize_process_codes, process_labels
 
 
@@ -19,6 +20,8 @@ ASSET_CATEGORIES = (
     "Computación",
     "Otro",
 )
+CURRENCIES = ("USD", "VES", "EUR")
+PAYMENT_METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Tarjeta", "Crédito de proveedor", "Otro")
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,23 @@ class Asset:
     status: str = "Activo"
     participates_in_costing: bool = True
     process_codes: tuple[str, ...] = ()
+    # Detalle real de cómo se adquirió el equipo, con el mismo criterio que
+    # el costo de compra detallado de Inventario: el costo del equipo, el
+    # envío/flete, los aranceles de importación y los impuestos pagados se
+    # capturan por separado, en la moneda real de la compra, y
+    # `acquisition_cost` termina siendo el costo total ya convertido a la
+    # moneda base del ERP ("landed cost") — no un número puesto a ojo.
+    supplier: str = ""
+    purchase_date: str = ""
+    invoice_reference: str = ""
+    purchase_currency: str = "USD"
+    exchange_rate_used: float = 1.0
+    payment_method: str = ""
+    acquisition_subtotal: float = 0.0
+    shipping_cost: float = 0.0
+    import_duties: float = 0.0
+    tax_amount: float = 0.0
+    warranty_until: str = ""
 
     @property
     def depreciation_per_unit(self) -> float:
@@ -54,6 +74,19 @@ class Asset:
     def available_for_quoting(self) -> bool:
         return self.status == "Activo" and self.participates_in_costing and bool(self.process_codes)
 
+    @property
+    def purchase_total_in_purchase_currency(self) -> float:
+        return self.acquisition_subtotal + self.shipping_cost + self.import_duties + self.tax_amount
+
+
+def landed_acquisition_cost(subtotal: float, shipping: float, import_duties: float, tax: float, exchange_rate: float) -> float:
+    """Convierte costo del equipo + envío/flete + aranceles + impuestos (en
+    la moneda de la compra) a la moneda base del ERP, usando la tasa de
+    cambio indicada. Mismo criterio que `inventory_enterprise._landed_unit_cost`,
+    aplicado aquí al activo completo en vez de a un costo por unidad."""
+    total_purchase_currency = subtotal + shipping + import_duties + tax
+    return total_purchase_currency / max(exchange_rate, 0.0001)
+
 
 def _asset_from_dict(raw_asset: dict) -> Asset:
     """Mantiene compatibilidad con activos creados antes del costeo por procesos."""
@@ -67,6 +100,17 @@ def _asset_from_dict(raw_asset: dict) -> Asset:
         status=str(raw_asset.get("status", "Activo")),
         participates_in_costing=bool(raw_asset.get("participates_in_costing", True)),
         process_codes=normalize_process_codes(raw_asset.get("process_codes", ())),
+        supplier=str(raw_asset.get("supplier", "") or ""),
+        purchase_date=str(raw_asset.get("purchase_date", "") or ""),
+        invoice_reference=str(raw_asset.get("invoice_reference", "") or ""),
+        purchase_currency=str(raw_asset.get("purchase_currency", "") or get_currency()),
+        exchange_rate_used=float(raw_asset.get("exchange_rate_used", 1.0) or 1.0),
+        payment_method=str(raw_asset.get("payment_method", "") or ""),
+        acquisition_subtotal=float(raw_asset.get("acquisition_subtotal", 0.0) or 0.0),
+        shipping_cost=float(raw_asset.get("shipping_cost", 0.0) or 0.0),
+        import_duties=float(raw_asset.get("import_duties", 0.0) or 0.0),
+        tax_amount=float(raw_asset.get("tax_amount", 0.0) or 0.0),
+        warranty_until=str(raw_asset.get("warranty_until", "") or ""),
     )
 
 
@@ -126,19 +170,51 @@ def render_assets() -> None:
         with first_row[2]:
             status = st.selectbox("Estado operativo", ASSET_STATUSES)
 
-        second_row = st.columns(3)
-        with second_row[0]:
-            acquisition_cost = st.number_input(
-                "Costo de adquisición", min_value=0.0, value=0.0, step=10.0
+        st.markdown("##### ¿Qué costó realmente adquirir este equipo?")
+        base_currency = get_currency()
+        purchase_row = st.columns(3)
+        with purchase_row[0]:
+            supplier = st.text_input("Proveedor")
+        with purchase_row[1]:
+            purchase_currency = st.selectbox(
+                "Moneda de la compra", CURRENCIES,
+                index=CURRENCIES.index(base_currency) if base_currency in CURRENCIES else 0,
             )
-        with second_row[1]:
-            lifetime_units = st.number_input(
-                "Vida útil estimada en unidades", min_value=1, value=30000, step=100
+        with purchase_row[2]:
+            payment_method = st.selectbox("Método de pago", PAYMENT_METHODS)
+        same_currency = purchase_currency == base_currency
+        default_rate = 1.0
+        if not same_currency:
+            looked_up = latest_exchange_rate(purchase_currency, base_currency)
+            default_rate = float(looked_up.get("rate", 1.0)) if looked_up else 1.0
+        rate_row = st.columns(3)
+        with rate_row[0]:
+            exchange_rate_used = st.number_input(
+                f"Tasa de cambio usada (1 {base_currency} = ? {purchase_currency})",
+                min_value=0.0001, value=1.0 if same_currency else default_rate,
+                step=0.01, format="%.4f", disabled=same_currency,
             )
-        with second_row[2]:
-            current_units = st.number_input(
-                "Unidades acumuladas iniciales", min_value=0, value=0, step=100
-            )
+        with rate_row[1]:
+            purchase_date = st.date_input("Fecha de compra", value=None)
+        with rate_row[2]:
+            invoice_reference = st.text_input("N° de factura / control")
+
+        cost_row = st.columns(3)
+        with cost_row[0]:
+            acquisition_subtotal = st.number_input(f"Costo del equipo ({purchase_currency})", min_value=0.0, value=0.0, step=10.0)
+        with cost_row[1]:
+            shipping_cost = st.number_input(f"Envío / flete / aduana ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
+        with cost_row[2]:
+            import_duties = st.number_input(f"Aranceles / derechos de importación ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
+        tax_amount = st.number_input(f"Impuestos pagados en la compra, ej. IVA ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
+
+        life_row = st.columns(3)
+        with life_row[0]:
+            lifetime_units = st.number_input("Vida útil estimada en unidades", min_value=1, value=30000, step=100)
+        with life_row[1]:
+            current_units = st.number_input("Unidades acumuladas iniciales", min_value=0, value=0, step=100)
+        with life_row[2]:
+            warranty_until = st.date_input("Garantía hasta (opcional)", value=None)
 
         participates_in_costing = st.checkbox(
             "Usar este activo para calcular costos y cotizaciones",
@@ -158,10 +234,12 @@ def render_assets() -> None:
 
     if submitted:
         cleaned_name = name.strip()
+        effective_rate = 1.0 if same_currency else float(exchange_rate_used)
+        landed_cost = landed_acquisition_cost(acquisition_subtotal, shipping_cost, import_duties, tax_amount, effective_rate)
         if not cleaned_name:
             st.error("El nombre del equipo no puede quedar vacío.")
-        elif acquisition_cost <= 0:
-            st.error("El costo de adquisición debe ser mayor que cero.")
+        elif acquisition_subtotal <= 0:
+            st.error("El costo del equipo debe ser mayor que cero.")
         elif participates_in_costing and not selected_processes:
             st.error("Selecciona al menos un proceso o desactiva su uso en costos y cotizaciones.")
         else:
@@ -170,16 +248,27 @@ def render_assets() -> None:
                     asset_id=uuid4().hex[:8],
                     name=cleaned_name,
                     category=category,
-                    acquisition_cost=float(acquisition_cost),
+                    acquisition_cost=landed_cost,
                     lifetime_units=int(lifetime_units),
                     current_units=int(current_units),
                     status=status,
                     participates_in_costing=bool(participates_in_costing),
                     process_codes=normalize_process_codes(selected_processes),
+                    supplier=supplier.strip(),
+                    purchase_date=purchase_date.isoformat() if purchase_date else "",
+                    invoice_reference=invoice_reference.strip(),
+                    purchase_currency=purchase_currency,
+                    exchange_rate_used=effective_rate,
+                    payment_method=payment_method,
+                    acquisition_subtotal=float(acquisition_subtotal),
+                    shipping_cost=float(shipping_cost),
+                    import_duties=float(import_duties),
+                    tax_amount=float(tax_amount),
+                    warranty_until=warranty_until.isoformat() if warranty_until else "",
                 )
             )
             _save_assets(assets)
-            st.success("Activo registrado y disponible para los procesos seleccionados.")
+            st.success(f"Activo registrado. Costo real (con envío, aranceles e impuestos incluidos): {format_money(landed_cost)}.")
             st.rerun()
 
     st.divider()
@@ -299,3 +388,21 @@ def render_assets() -> None:
                     ),
                     "COSTEO POR PROCESOS",
                 )
+
+            if asset.supplier or asset.acquisition_subtotal:
+                with st.expander("Detalle de la compra"):
+                    purchase_columns = st.columns(3)
+                    purchase_columns[0].metric("Proveedor", asset.supplier or "Sin registrar")
+                    purchase_columns[1].metric("Método de pago", asset.payment_method or "Sin registrar")
+                    purchase_columns[2].metric("N° de factura", asset.invoice_reference or "Sin registrar")
+                    breakdown_columns = st.columns(4)
+                    breakdown_columns[0].metric(f"Costo equipo ({asset.purchase_currency})", f"{asset.acquisition_subtotal:,.2f}")
+                    breakdown_columns[1].metric(f"Envío/aduana ({asset.purchase_currency})", f"{asset.shipping_cost:,.2f}")
+                    breakdown_columns[2].metric(f"Aranceles ({asset.purchase_currency})", f"{asset.import_duties:,.2f}")
+                    breakdown_columns[3].metric(f"Impuestos ({asset.purchase_currency})", f"{asset.tax_amount:,.2f}")
+                    st.caption(
+                        f"Tasa de cambio usada: {asset.exchange_rate_used:,.4f} · "
+                        f"Total en {asset.purchase_currency}: {asset.purchase_total_in_purchase_currency:,.2f} · "
+                        f"Fecha de compra: {asset.purchase_date or 'sin registrar'} · "
+                        f"Garantía hasta: {asset.warranty_until or 'sin registrar'}"
+                    )

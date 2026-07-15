@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Costo de compra detallado en Activos",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Registrar un equipo ya no pide solo un 'costo de adquisición' suelto. Ahora pide proveedor, moneda de la compra, tasa de cambio usada (sugerida automáticamente, editable), método de pago, fecha de compra, N° de factura, garantía, y el costo del equipo, envío/flete/aduana, aranceles de importación e impuestos pagados (ej. IVA) por separado. El costo de adquisición que usa el ERP para la depreciación se calcula solo, convirtiendo todo eso a la moneda base del ERP — mismo criterio que ya se usa en el costo de compra detallado de Inventario. El detalle completo queda visible en un desplegable por cada equipo.",
+    },
+    {
         "title": "IVA conectado a ventas, redondeo a 2 decimales e historial de tasas",
         "target": "Configuración General",
         "category": "Nuevo",
