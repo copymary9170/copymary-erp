@@ -9,6 +9,7 @@ from src.components import render_info_card, render_page_header
 from src.erp_database import latest_exchange_rate
 from src.money import format_money, get_currency
 from src.production_processes import PROCESS_OPTIONS, normalize_process_codes, process_labels
+from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save_list
 
 
 ASSET_STATUSES = ("Activo", "En mantenimiento", "Fuera de servicio", "Dado de baja", "Vendido")
@@ -146,6 +147,57 @@ def _update_asset_units(assets: list[Asset], asset_id: str, units_to_add: int) -
         else:
             updated_assets.append(asset)
     return updated_assets
+
+
+def _activate_maintenance_backup() -> None:
+    from src import session_backup
+    if "asset_maintenance_log" not in session_backup.LIST_SECTIONS:
+        session_backup.LIST_SECTIONS = (*session_backup.LIST_SECTIONS, "asset_maintenance_log")
+        session_backup.SECTION_LABELS["asset_maintenance_log"] = "Historial de mantenimiento de activos"
+        session_backup.SESSION_KEYS = (
+            "general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS,
+        )
+
+
+_activate_maintenance_backup()
+
+
+def _log_maintenance(
+    asset_id: str, *, event_date: str, description: str, part_replaced: str, cost: float,
+    inventory_item_id: str = "", inventory_quantity: float = 0.0,
+) -> dict:
+    """Registra un evento de mantenimiento o reemplazo de repuesto en un
+    activo específico — esto es distinto de simplemente TENER el repuesto
+    en existencia (eso es Inventario): aquí queda el momento real en que se
+    instaló/reemplazó en la máquina, qué costó y, si el repuesto salió de
+    Inventario, el descuento real de esa existencia.
+    """
+    inventory_deducted = False
+    if inventory_item_id and inventory_quantity > 0:
+        from src.print_jobs import deduct_inventory_item
+        inventory_deducted = deduct_inventory_item(
+            inventory_item_id, inventory_quantity, f"Mantenimiento: {description or part_replaced}"
+        )
+    log = _rows("asset_maintenance_log")
+    entry = {
+        "log_id": uuid4().hex[:10],
+        "asset_id": asset_id,
+        "event_date": event_date,
+        "recorded_at_utc": _now(),
+        "description": description.strip(),
+        "part_replaced": part_replaced.strip(),
+        "cost": float(cost),
+        "inventory_item_id": inventory_item_id,
+        "inventory_quantity": float(inventory_quantity),
+        "inventory_deducted": inventory_deducted,
+    }
+    log.append(entry)
+    _save_list("asset_maintenance_log", log)
+    return entry
+
+
+def _maintenance_history(asset_id: str) -> list[dict]:
+    return [entry for entry in _rows("asset_maintenance_log") if entry.get("asset_id") == asset_id]
 
 
 def _inventory_value() -> float:
@@ -452,3 +504,52 @@ def render_assets() -> None:
                         f"Fecha de compra: {asset.purchase_date or 'sin registrar'} · "
                         f"Garantía hasta: {asset.warranty_until or 'sin registrar'}"
                     )
+
+            maintenance_history = _maintenance_history(asset.asset_id)
+            with st.expander(f"Mantenimiento y repuestos instalados ({len(maintenance_history)})"):
+                st.caption(
+                    "Aquí queda el momento en que un repuesto se INSTALÓ en esta máquina (cuchilla, tapete, "
+                    "cabezal), no solo que lo tienes disponible en Inventario. Si el repuesto salía de una "
+                    "existencia registrada ahí, se descuenta real al confirmarlo aquí."
+                )
+                inventory_options = {"Ninguno / no venía de Inventario": ""}
+                try:
+                    from src import inventory_enterprise
+                    for item in inventory_enterprise._items():
+                        if item.get("active", True):
+                            inventory_options[f"{item['name']} · stock {item['available_quantity']:,.2f} {item['unit_name']}"] = item["item_id"]
+                except Exception:
+                    pass
+                with st.form(f"asset_maintenance_form_{asset.asset_id}", clear_on_submit=True):
+                    m_cols = st.columns(3)
+                    event_date = m_cols[0].date_input("Fecha del reemplazo/mantenimiento", value=None, key=f"maint_date_{asset.asset_id}")
+                    part_replaced = m_cols[1].text_input("Repuesto instalado (ej. Cuchilla, Tapete, Cabezal)", key=f"maint_part_{asset.asset_id}")
+                    cost = m_cols[2].number_input("Costo del repuesto/servicio", min_value=0.0, value=0.0, step=1.0, key=f"maint_cost_{asset.asset_id}")
+                    description = st.text_input("Descripción / motivo", key=f"maint_desc_{asset.asset_id}")
+                    inv_cols = st.columns(2)
+                    selected_inventory_label = inv_cols[0].selectbox("¿Salió de una existencia en Inventario?", tuple(inventory_options), key=f"maint_inv_{asset.asset_id}")
+                    inventory_quantity = inv_cols[1].number_input("Cantidad a descontar", min_value=0.0, value=1.0, step=1.0, key=f"maint_qty_{asset.asset_id}")
+                    maintenance_submitted = st.form_submit_button("Registrar mantenimiento", type="primary", use_container_width=True)
+                if maintenance_submitted:
+                    if not part_replaced.strip() and not description.strip():
+                        st.error("Indica al menos qué repuesto se instaló o una descripción del mantenimiento.")
+                    else:
+                        selected_item_id = inventory_options[selected_inventory_label]
+                        entry = _log_maintenance(
+                            asset.asset_id, event_date=event_date.isoformat() if event_date else "",
+                            description=description, part_replaced=part_replaced, cost=cost,
+                            inventory_item_id=selected_item_id, inventory_quantity=inventory_quantity if selected_item_id else 0.0,
+                        )
+                        if selected_item_id and not entry["inventory_deducted"]:
+                            st.warning("No se pudo descontar de Inventario; revísalo manualmente.")
+                        st.success("Mantenimiento registrado.")
+                        st.rerun()
+
+                if maintenance_history:
+                    for entry in reversed(maintenance_history[-20:]):
+                        st.write(
+                            f"**{entry.get('event_date') or entry.get('recorded_at_utc', '')[:10]}** · "
+                            f"{entry.get('part_replaced') or 'Mantenimiento'} — {entry.get('description') or 'sin descripción'} · "
+                            f"{format_money(entry.get('cost', 0.0))}"
+                            + (" · descontado de Inventario" if entry.get("inventory_deducted") else "")
+                        )

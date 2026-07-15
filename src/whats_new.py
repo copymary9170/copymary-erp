@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Historial de mantenimiento y repuestos instalados por activo",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Cada activo tiene ahora un desplegable 'Mantenimiento y repuestos instalados' para registrar el momento real en que se cambió una pieza (cuchilla, tapete, cabezal) — distinto de solo tenerla disponible en Inventario. Si el repuesto salió de una existencia registrada ahí, se descuenta de verdad al confirmar el mantenimiento, con el mismo mecanismo que ya usan Producción y los módulos de acabado. Nota: para mantenimiento preventivo con fechas de vencimiento y recordatorios ya existe el módulo 'Mantenimiento de máquinas' — este historial es para el evento puntual de reemplazo, no un calendario de mantenimiento.",
+    },
+    {
         "title": "Patrimonio total (Activos + Inventario) y categoría para accesorios",
         "target": "Activos",
         "category": "Nuevo",
