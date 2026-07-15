@@ -49,8 +49,10 @@ class Asset:
     payment_method: str = ""
     acquisition_subtotal: float = 0.0
     shipping_cost: float = 0.0
+    has_import_duties: bool = False
     import_duties: float = 0.0
     tax_amount: float = 0.0
+    no_purchase_cost: bool = False
     warranty_until: str = ""
 
     @property
@@ -108,8 +110,10 @@ def _asset_from_dict(raw_asset: dict) -> Asset:
         payment_method=str(raw_asset.get("payment_method", "") or ""),
         acquisition_subtotal=float(raw_asset.get("acquisition_subtotal", 0.0) or 0.0),
         shipping_cost=float(raw_asset.get("shipping_cost", 0.0) or 0.0),
+        has_import_duties=bool(raw_asset.get("has_import_duties", False)),
         import_duties=float(raw_asset.get("import_duties", 0.0) or 0.0),
         tax_amount=float(raw_asset.get("tax_amount", 0.0) or 0.0),
+        no_purchase_cost=bool(raw_asset.get("no_purchase_cost", False)),
         warranty_until=str(raw_asset.get("warranty_until", "") or ""),
     )
 
@@ -205,8 +209,21 @@ def render_assets() -> None:
         with cost_row[1]:
             shipping_cost = st.number_input(f"Envío / flete / aduana ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
         with cost_row[2]:
-            import_duties = st.number_input(f"Aranceles / derechos de importación ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
+            has_import_duties = st.checkbox(
+                "Pagó aranceles / derechos de importación",
+                value=False,
+                help="Márcalo solo si esta compra pagó aranceles — muchos equipos comprados localmente no tienen.",
+            )
+            import_duties = st.number_input(
+                f"Aranceles / derechos de importación ({purchase_currency})",
+                min_value=0.0, value=0.0, step=1.0, disabled=not has_import_duties,
+            )
         tax_amount = st.number_input(f"Impuestos pagados en la compra, ej. IVA ({purchase_currency})", min_value=0.0, value=0.0, step=1.0)
+        no_purchase_cost = st.checkbox(
+            "Este equipo ya se tenía / no hay costo de compra registrado (heredado, regalado, comprado hace mucho)",
+            value=False,
+            help="Si lo marcas, el costo del equipo queda en 0 y no se exige llenarlo. Puedes poner un valor estimado igual si lo quieres incluir en la depreciación.",
+        )
 
         life_row = st.columns(3)
         with life_row[0]:
@@ -235,11 +252,12 @@ def render_assets() -> None:
     if submitted:
         cleaned_name = name.strip()
         effective_rate = 1.0 if same_currency else float(exchange_rate_used)
-        landed_cost = landed_acquisition_cost(acquisition_subtotal, shipping_cost, import_duties, tax_amount, effective_rate)
+        effective_import_duties = float(import_duties) if has_import_duties else 0.0
+        landed_cost = landed_acquisition_cost(acquisition_subtotal, shipping_cost, effective_import_duties, tax_amount, effective_rate)
         if not cleaned_name:
             st.error("El nombre del equipo no puede quedar vacío.")
-        elif acquisition_subtotal <= 0:
-            st.error("El costo del equipo debe ser mayor que cero.")
+        elif acquisition_subtotal <= 0 and not no_purchase_cost:
+            st.error("El costo del equipo debe ser mayor que cero, o marca que ya se tenía sin costo registrado.")
         elif participates_in_costing and not selected_processes:
             st.error("Selecciona al menos un proceso o desactiva su uso en costos y cotizaciones.")
         else:
@@ -262,13 +280,18 @@ def render_assets() -> None:
                     payment_method=payment_method,
                     acquisition_subtotal=float(acquisition_subtotal),
                     shipping_cost=float(shipping_cost),
-                    import_duties=float(import_duties),
+                    has_import_duties=bool(has_import_duties),
+                    import_duties=effective_import_duties,
                     tax_amount=float(tax_amount),
+                    no_purchase_cost=bool(no_purchase_cost),
                     warranty_until=warranty_until.isoformat() if warranty_until else "",
                 )
             )
             _save_assets(assets)
-            st.success(f"Activo registrado. Costo real (con envío, aranceles e impuestos incluidos): {format_money(landed_cost)}.")
+            if no_purchase_cost:
+                st.success("Activo registrado como equipo ya existente, sin costo de compra.")
+            else:
+                st.success(f"Activo registrado. Costo real (con envío, aranceles e impuestos incluidos): {format_money(landed_cost)}.")
             st.rerun()
 
     st.divider()
@@ -389,8 +412,10 @@ def render_assets() -> None:
                     "COSTEO POR PROCESOS",
                 )
 
-            if asset.supplier or asset.acquisition_subtotal:
+            if asset.supplier or asset.acquisition_subtotal or asset.no_purchase_cost:
                 with st.expander("Detalle de la compra"):
+                    if asset.no_purchase_cost:
+                        st.info("Equipo ya existente: no tiene costo de compra registrado.")
                     purchase_columns = st.columns(3)
                     purchase_columns[0].metric("Proveedor", asset.supplier or "Sin registrar")
                     purchase_columns[1].metric("Método de pago", asset.payment_method or "Sin registrar")
@@ -398,7 +423,7 @@ def render_assets() -> None:
                     breakdown_columns = st.columns(4)
                     breakdown_columns[0].metric(f"Costo equipo ({asset.purchase_currency})", f"{asset.acquisition_subtotal:,.2f}")
                     breakdown_columns[1].metric(f"Envío/aduana ({asset.purchase_currency})", f"{asset.shipping_cost:,.2f}")
-                    breakdown_columns[2].metric(f"Aranceles ({asset.purchase_currency})", f"{asset.import_duties:,.2f}")
+                    breakdown_columns[2].metric(f"Aranceles ({asset.purchase_currency})", f"{asset.import_duties:,.2f}" if asset.has_import_duties else "No aplica")
                     breakdown_columns[3].metric(f"Impuestos ({asset.purchase_currency})", f"{asset.tax_amount:,.2f}")
                     st.caption(
                         f"Tasa de cambio usada: {asset.exchange_rate_used:,.4f} · "

@@ -20,6 +20,18 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Registrar equipos ya existentes, sin costo de compra",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Antes, registrar un activo exigía un costo de compra mayor que cero — imposible para un equipo que ya se tenía (heredado, regalado, comprado hace tiempo sin factura). Ahora hay una casilla 'Este equipo ya se tenía / no hay costo de compra registrado' que permite guardarlo en $0 sin bloquear el formulario, dejándolo disponible para cotizar igual (con depreciación en cero, a menos que se ponga un valor estimado).",
+    },
+    {
+        "title": "Casilla para marcar si un equipo pagó aranceles",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Al registrar un equipo, el campo de aranceles/derechos de importación ahora viene con una casilla 'Pagó aranceles' que hay que marcar explícitamente — muchos equipos comprados localmente no pagan aranceles, y antes el campo en 0 no distinguía entre 'no aplica' y 'no se llenó'. Si la casilla no está marcada, el detalle de la compra muestra 'No aplica' en vez de un 0.00 ambiguo.",
+    },
+    {
         "title": "Costo de compra detallado en Activos",
         "target": "Activos",
         "category": "Nuevo",
