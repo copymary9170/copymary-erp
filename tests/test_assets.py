@@ -144,3 +144,35 @@ def test_asset_from_dict_defaults_purchase_detail_when_missing():
 def test_purchase_total_in_purchase_currency_sums_all_components():
     asset = _make_asset(acquisition_subtotal=1000.0, shipping_cost=50.0, import_duties=30.0, tax_amount=20.0)
     assert asset.purchase_total_in_purchase_currency == 1100.0
+
+
+# ---------------------------------------------------------------------------
+# has_import_duties — marcar cuándo un equipo SÍ pagó aranceles
+# ---------------------------------------------------------------------------
+
+def test_asset_from_dict_defaults_has_import_duties_to_false():
+    """Compatibilidad con activos ya registrados antes de esta casilla: no
+    debe asumir que pagaron aranceles si nunca se especificó."""
+    raw = {"asset_id": "AST-OLD", "name": "Impresora vieja", "acquisition_cost": 300.0, "lifetime_units": 1000}
+    asset = _asset_from_dict(raw)
+    assert asset.has_import_duties is False
+    assert asset.import_duties == 0.0
+
+
+def test_asset_from_dict_reads_has_import_duties_true():
+    raw = {
+        "asset_id": "AST-1", "name": "Cameo importada", "acquisition_cost": 1000.0, "lifetime_units": 5000,
+        "has_import_duties": True, "import_duties": 150.0,
+    }
+    asset = _asset_from_dict(raw)
+    assert asset.has_import_duties is True
+    assert asset.import_duties == 150.0
+
+
+def test_landed_acquisition_cost_unaffected_by_flag_only_by_amount():
+    """El flag has_import_duties es solo para la interfaz/registro; el
+    cálculo del costo real siempre depende del monto que se le pase (0 si
+    no aplica)."""
+    with_flag_off = landed_acquisition_cost(1000.0, 0.0, 0.0, 0.0, 1.0)
+    with_flag_on_but_zero = landed_acquisition_cost(1000.0, 0.0, 0.0, 0.0, 1.0)
+    assert with_flag_off == with_flag_on_but_zero == 1000.0

@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Casilla para marcar si un equipo pagó aranceles",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Al registrar un equipo, el campo de aranceles/derechos de importación ahora viene con una casilla 'Pagó aranceles' que hay que marcar explícitamente — muchos equipos comprados localmente no pagan aranceles, y antes el campo en 0 no distinguía entre 'no aplica' y 'no se llenó'. Si la casilla no está marcada, el detalle de la compra muestra 'No aplica' en vez de un 0.00 ambiguo.",
+    },
+    {
         "title": "Costo de compra detallado en Activos",
         "target": "Activos",
         "category": "Nuevo",
