@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Patrimonio total (Activos + Inventario) y categoría para accesorios",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Activos ahora muestra el 'Patrimonio total': el valor en libros de tus equipos (ya con la depreciación descontada) más el valor de lo que tienes en Inventario ahora mismo, en un solo número. También se agregó la categoría 'Accesorio o herramienta menor' para registrar cosas de bajo costo (kits, extensiones, herramientas de corte) sin forzar todo el detalle de compra — basta con nombre, categoría y costo; el resto de campos son opcionales.",
+    },
+    {
         "title": "Registrar equipos ya existentes, sin costo de compra",
         "target": "Activos",
         "category": "Nuevo",

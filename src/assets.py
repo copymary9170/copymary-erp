@@ -18,6 +18,7 @@ ASSET_CATEGORIES = (
     "Equipo de sublimación",
     "Plastificadora o laminadora",
     "Computación",
+    "Accesorio o herramienta menor",
     "Otro",
 )
 CURRENCIES = ("USD", "VES", "EUR")
@@ -145,6 +146,18 @@ def _update_asset_units(assets: list[Asset], asset_id: str, units_to_add: int) -
         else:
             updated_assets.append(asset)
     return updated_assets
+
+
+def _inventory_value() -> float:
+    """Valor total de existencias en Inventario (cantidad disponible × costo
+    unitario de cada ítem), para sumarlo al valor de Activos y así calcular
+    el patrimonio total del negocio."""
+    try:
+        from src import inventory_enterprise
+        items = inventory_enterprise._items()
+    except Exception:
+        return 0.0
+    return sum(float(item.get("available_quantity", 0.0) or 0.0) * float(item.get("unit_cost", 0.0) or 0.0) for item in items)
 
 
 def render_assets() -> None:
@@ -305,6 +318,14 @@ def render_assets() -> None:
     summary_columns[1].metric("Disponibles para cotizar", str(available_count))
     summary_columns[2].metric("Inversión registrada", format_money(total_cost))
     summary_columns[3].metric("Valor pendiente", format_money(total_remaining))
+
+    inventory_value = _inventory_value()
+    st.markdown("#### Patrimonio total")
+    st.caption("Valor en libros de tus equipos (ya con la depreciación descontada) más el valor de lo que tienes en Inventario ahora mismo.")
+    patrimony_columns = st.columns(3)
+    patrimony_columns[0].metric("Activos (valor en libros)", format_money(total_remaining))
+    patrimony_columns[1].metric("Inventario (existencias)", format_money(inventory_value))
+    patrimony_columns[2].metric("Patrimonio total", format_money(total_remaining + inventory_value))
 
     if not assets:
         st.info("Todavía no hay activos registrados en esta sesión.")
