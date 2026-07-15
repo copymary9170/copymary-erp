@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.assets import Asset, _update_asset_units
+from src.assets import Asset, _asset_from_dict, _update_asset_units, landed_acquisition_cost
 
 
 def _make_asset(**overrides) -> Asset:
@@ -77,3 +77,70 @@ def test_update_asset_units_with_unknown_id_leaves_list_unchanged():
     assets = [_make_asset(asset_id="AST-1", current_units=10)]
     updated = _update_asset_units(assets, "NO-EXISTE", 5)
     assert updated[0].current_units == 10
+
+
+# ---------------------------------------------------------------------------
+# landed_acquisition_cost — costo real del equipo (envío, aranceles, impuestos)
+# ---------------------------------------------------------------------------
+
+def test_landed_acquisition_cost_same_currency_no_conversion():
+    # equipo 1000, envío 50, aranceles 30, impuestos 20, tasa 1 => 1100
+    cost = landed_acquisition_cost(subtotal=1000.0, shipping=50.0, import_duties=30.0, tax=20.0, exchange_rate=1.0)
+    assert cost == 1100.0
+
+
+def test_landed_acquisition_cost_converts_using_exchange_rate():
+    # Compra en VES: equipo 40000, envío 2000, aranceles 1000, impuestos 1000
+    # (total 44000 VES), tasa 40 VES por USD => 1100 USD.
+    cost = landed_acquisition_cost(subtotal=40000.0, shipping=2000.0, import_duties=1000.0, tax=1000.0, exchange_rate=40.0)
+    assert cost == 1100.0
+
+
+def test_landed_acquisition_cost_includes_all_components_not_just_subtotal():
+    only_subtotal = landed_acquisition_cost(1000.0, 0.0, 0.0, 0.0, 1.0)
+    with_extras = landed_acquisition_cost(1000.0, 50.0, 30.0, 20.0, 1.0)
+    assert with_extras > only_subtotal
+    assert with_extras - only_subtotal == 100.0
+
+
+# ---------------------------------------------------------------------------
+# _asset_from_dict — normaliza el nuevo detalle de compra con compatibilidad
+# ---------------------------------------------------------------------------
+
+def test_asset_from_dict_reads_purchase_detail_fields():
+    raw = {
+        "asset_id": "AST-1", "name": "Silhouette Cameo 5", "category": "Equipo de corte",
+        "acquisition_cost": 1100.0, "lifetime_units": 5000, "current_units": 0,
+        "supplier": "Distribuidora ABC", "purchase_currency": "VES", "exchange_rate_used": 40.0,
+        "payment_method": "Zelle", "acquisition_subtotal": 40000.0, "shipping_cost": 2000.0,
+        "import_duties": 1000.0, "tax_amount": 1000.0, "invoice_reference": "F-00123",
+        "purchase_date": "2026-07-01", "warranty_until": "2027-07-01",
+    }
+    asset = _asset_from_dict(raw)
+    assert asset.supplier == "Distribuidora ABC"
+    assert asset.purchase_currency == "VES"
+    assert asset.exchange_rate_used == 40.0
+    assert asset.payment_method == "Zelle"
+    assert asset.acquisition_subtotal == 40000.0
+    assert asset.shipping_cost == 2000.0
+    assert asset.import_duties == 1000.0
+    assert asset.tax_amount == 1000.0
+    assert asset.invoice_reference == "F-00123"
+    assert asset.purchase_date == "2026-07-01"
+    assert asset.warranty_until == "2027-07-01"
+
+
+def test_asset_from_dict_defaults_purchase_detail_when_missing():
+    """Compatibilidad con activos registrados antes de este detalle:
+    no debe fallar, y debe completar con valores por defecto sensatos."""
+    raw = {"asset_id": "AST-OLD", "name": "Impresora vieja", "acquisition_cost": 300.0, "lifetime_units": 1000}
+    asset = _asset_from_dict(raw)
+    assert asset.supplier == ""
+    assert asset.exchange_rate_used == 1.0
+    assert asset.acquisition_subtotal == 0.0
+    assert asset.purchase_total_in_purchase_currency == 0.0
+
+
+def test_purchase_total_in_purchase_currency_sums_all_components():
+    asset = _make_asset(acquisition_subtotal=1000.0, shipping_cost=50.0, import_duties=30.0, tax_amount=20.0)
+    assert asset.purchase_total_in_purchase_currency == 1100.0
