@@ -20,6 +20,18 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Historial de mantenimiento y repuestos instalados por activo",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Cada activo tiene ahora un desplegable 'Mantenimiento y repuestos instalados' para registrar el momento real en que se cambió una pieza (cuchilla, tapete, cabezal) — distinto de solo tenerla disponible en Inventario. Si el repuesto salió de una existencia registrada ahí, se descuenta de verdad al confirmar el mantenimiento, con el mismo mecanismo que ya usan Producción y los módulos de acabado. Nota: para mantenimiento preventivo con fechas de vencimiento y recordatorios ya existe el módulo 'Mantenimiento de máquinas' — este historial es para el evento puntual de reemplazo, no un calendario de mantenimiento.",
+    },
+    {
+        "title": "Patrimonio total (Activos + Inventario) y categoría para accesorios",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Activos ahora muestra el 'Patrimonio total': el valor en libros de tus equipos (ya con la depreciación descontada) más el valor de lo que tienes en Inventario ahora mismo, en un solo número. También se agregó la categoría 'Accesorio o herramienta menor' para registrar cosas de bajo costo (kits, extensiones, herramientas de corte) sin forzar todo el detalle de compra — basta con nombre, categoría y costo; el resto de campos son opcionales.",
+    },
+    {
         "title": "Registrar equipos ya existentes, sin costo de compra",
         "target": "Activos",
         "category": "Nuevo",

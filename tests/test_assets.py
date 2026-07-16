@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.assets import Asset, _asset_from_dict, _update_asset_units, landed_acquisition_cost
+import streamlit as st
+
+from src.assets import Asset, _asset_from_dict, _inventory_value, _update_asset_units, landed_acquisition_cost
 
 
 def _make_asset(**overrides) -> Asset:
@@ -205,3 +207,61 @@ def test_asset_with_zero_cost_has_zero_depreciation_not_a_crash():
     assert asset.depreciation_per_unit == 0.0
     assert asset.accumulated_depreciation == 0.0
     assert asset.remaining_value == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _inventory_value — para el Patrimonio total (Activos + Inventario)
+# ---------------------------------------------------------------------------
+
+def test_inventory_value_sums_quantity_times_unit_cost():
+    st.session_state["inventory_registry"] = [
+        {"item_id": "ITM-1", "name": "Vinil", "available_quantity": 50.0, "unit_cost": 2.0},
+        {"item_id": "ITM-2", "name": "Papel", "available_quantity": 100.0, "unit_cost": 0.05},
+    ]
+    assert _inventory_value() == 105.0
+
+
+def test_inventory_value_zero_when_no_inventory():
+    st.session_state.pop("inventory_registry", None)
+    assert _inventory_value() == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _log_maintenance / _maintenance_history — reemplazo real de repuestos,
+# distinto de solo tenerlos en existencia (Inventario)
+# ---------------------------------------------------------------------------
+
+def test_log_maintenance_records_entry_for_the_right_asset():
+    from src.assets import _log_maintenance, _maintenance_history
+    st.session_state.pop("asset_maintenance_log", None)
+    _log_maintenance("AST-1", event_date="2026-07-01", description="Cambio de cuchilla", part_replaced="Cuchilla", cost=38.0)
+    _log_maintenance("AST-2", event_date="2026-07-02", description="Otro equipo", part_replaced="Tapete", cost=12.0)
+    history = _maintenance_history("AST-1")
+    assert len(history) == 1
+    assert history[0]["part_replaced"] == "Cuchilla"
+    assert history[0]["cost"] == 38.0
+
+
+def test_log_maintenance_without_inventory_link_does_not_touch_inventory():
+    from src.assets import _log_maintenance
+    st.session_state["inventory_registry"] = [{"item_id": "ITM-1", "name": "Cuchilla", "available_quantity": 5.0, "unit_cost": 10.0}]
+    entry = _log_maintenance("AST-1", event_date="2026-07-01", description="Cambio manual", part_replaced="Cuchilla", cost=38.0)
+    assert entry["inventory_deducted"] is False
+    assert st.session_state["inventory_registry"][0]["available_quantity"] == 5.0
+
+
+def test_log_maintenance_with_inventory_link_deducts_real_stock():
+    from src.assets import _log_maintenance
+    st.session_state["inventory_registry"] = [{"item_id": "ITM-1", "name": "Cuchilla Cameo", "available_quantity": 5.0, "unit_cost": 10.0}]
+    entry = _log_maintenance(
+        "AST-1", event_date="2026-07-01", description="Reemplazo de cuchilla gastada", part_replaced="Cuchilla",
+        cost=0.0, inventory_item_id="ITM-1", inventory_quantity=1.0,
+    )
+    assert entry["inventory_deducted"] is True
+    assert st.session_state["inventory_registry"][0]["available_quantity"] == 4.0
+
+
+def test_maintenance_history_empty_for_asset_with_no_entries():
+    from src.assets import _maintenance_history
+    st.session_state.pop("asset_maintenance_log", None)
+    assert _maintenance_history("AST-SIN-HISTORIAL") == []
