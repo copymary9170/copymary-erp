@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Nivel de tinta actual por impresora, con foto",
+        "target": "Ficha técnica de impresoras",
+        "category": "Nuevo",
+        "description": "Nueva pestaña 'Nivel de tinta actual' dentro de la Ficha técnica de cada impresora: registra el porcentaje de tinta que queda por color (K/C/M/Y), con fecha y una foto opcional del panel de tanques/cartuchos (máx. 3 MB). Queda un historial para ver cómo baja el nivel con el tiempo, y avisa cuando algún color baja de 15%. Importante: las fotos se guardan dentro de la sesión igual que el resto de los datos del ERP — si haces 'Respaldar' para exportar, las fotos quedan incluidas, pero el archivo de respaldo pesa más mientras más fotos tengas guardadas.",
+    },
+    {
         "title": "Historial de mantenimiento y repuestos instalados por activo",
         "target": "Activos",
         "category": "Nuevo",
