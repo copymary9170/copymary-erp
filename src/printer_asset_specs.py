@@ -20,6 +20,7 @@ TECHNOLOGIES = (
 INK_COLORS = ("k_percent", "c_percent", "m_percent", "y_percent")
 INK_COLOR_LABELS = {"k_percent": "Negro (K)", "c_percent": "Cian (C)", "m_percent": "Magenta (M)", "y_percent": "Amarillo (Y)"}
 MAX_PHOTO_MB = 3
+PHOTO_TYPES = ("Tanque", "Software")
 
 
 def _activate_backup() -> None:
@@ -40,11 +41,12 @@ def _positive(value: float, label: str, errors: list[str]) -> None:
 
 def build_ink_reading(
     asset_id: str, recorded_date: str, k_percent: float, c_percent: float, m_percent: float, y_percent: float,
-    note: str = "", photo_bytes: bytes | None = None, photo_mime: str = "",
+    note: str = "", photo_bytes: bytes | None = None, photo_mime: str = "", photo_type: str = "",
 ) -> dict:
     """Construye un registro de lectura de nivel de tinta, con foto opcional
     codificada en base64. No persiste nada por sí sola — eso lo hace el
-    llamador con `save_list`, igual que el resto del ERP.
+    llamador con `save_ink_reading`, que reemplaza la lectura anterior del
+    mismo tipo en vez de acumular historial (para no 'llenarse' de fotos).
 
     Los porcentajes se acotan a 0-100 (una lectura inválida no debe romper
     el historial ni mostrar un dato imposible)."""
@@ -52,6 +54,7 @@ def build_ink_reading(
     return {
         "reading_id": f"INK-{uuid4().hex[:8].upper()}",
         "asset_id": asset_id,
+        "photo_type": photo_type if photo_base64 else "",
         "recorded_date": recorded_date,
         "created_at_utc": now_iso(),
         "k_percent": max(0.0, min(100.0, float(k_percent))),
@@ -64,10 +67,35 @@ def build_ink_reading(
     }
 
 
+def save_ink_reading(entry: dict) -> None:
+    """Guarda una lectura reemplazando cualquier lectura anterior del MISMO
+    activo y el mismo tipo de foto ('Tanque', 'Software', o sin foto) — a
+    propósito no se acumula historial ilimitado; solo se conserva la más
+    reciente de cada tipo por impresora."""
+    asset_id = entry["asset_id"]
+    photo_type = entry.get("photo_type", "")
+    readings = [
+        row for row in read_list("ink_level_readings")
+        if not (str(row.get("asset_id")) == str(asset_id) and row.get("photo_type", "") == photo_type)
+    ]
+    readings.append(entry)
+    save_list("ink_level_readings", readings)
+
+
 def ink_readings_for(asset_id: str) -> list[dict]:
-    """Lecturas de un activo, de la más reciente a la más antigua."""
+    """Lecturas vigentes de un activo (como mucho una por tipo de foto:
+    Tanque, Software, y una sin foto), de la más reciente a la más antigua."""
     readings = [row for row in read_list("ink_level_readings") if str(row.get("asset_id")) == str(asset_id)]
     return sorted(readings, key=lambda row: row.get("recorded_date", row.get("created_at_utc", "")), reverse=True)
+
+
+def latest_ink_reading(asset_id: str, photo_type: str = "") -> dict | None:
+    """La lectura vigente de un tipo específico ('Tanque'/'Software') para
+    un activo, o None si todavía no se ha registrado ninguna de ese tipo."""
+    for row in read_list("ink_level_readings"):
+        if str(row.get("asset_id")) == str(asset_id) and row.get("photo_type", "") == photo_type:
+            return row
+    return None
 
 
 def lowest_ink_color(reading: dict) -> tuple[str, float]:
@@ -216,73 +244,68 @@ def _render_spec_form(asset) -> None:
 
 def _render_ink_levels(asset) -> None:
     st.caption(
-        "Registra cuánta tinta queda por color (K/C/M/Y), con foto del panel de tanques o cartuchos si quieres "
-        "dejar evidencia visual. Cada lectura queda con fecha, así puedes ver cómo baja el nivel con el tiempo."
+        "Guarda solo la ÚLTIMA foto del tanque/panel y la ÚLTIMA captura del software — cada vez que subas una "
+        "nueva, reemplaza a la anterior del mismo tipo. No se acumula historial de fotos para no llenar el respaldo."
     )
-    readings = ink_readings_for(asset.asset_id)
 
     with st.form(f"ink_level_form_{asset.asset_id}", clear_on_submit=True):
-        date_col, note_col = st.columns([1, 2])
+        date_col, type_col = st.columns([1, 1])
         recorded_date = date_col.date_input("Fecha de la lectura", value=date.today())
-        note = note_col.text_input("Nota (opcional)", placeholder="Ej. amarillo con sedimento, cambiar pronto")
+        photo_type = type_col.radio("¿Qué estás registrando?", PHOTO_TYPES, horizontal=True, key=f"ink_type_{asset.asset_id}")
         level_columns = st.columns(4)
         k_percent = level_columns[0].number_input("Negro (K) %", min_value=0.0, max_value=100.0, value=100.0, step=5.0)
         c_percent = level_columns[1].number_input("Cian (C) %", min_value=0.0, max_value=100.0, value=100.0, step=5.0)
         m_percent = level_columns[2].number_input("Magenta (M) %", min_value=0.0, max_value=100.0, value=100.0, step=5.0)
         y_percent = level_columns[3].number_input("Amarillo (Y) %", min_value=0.0, max_value=100.0, value=100.0, step=5.0)
+        note = st.text_input("Nota (opcional)", placeholder="Ej. amarillo con sedimento, cambiar pronto")
         photo = st.file_uploader(
-            f"Foto del panel de tinta (opcional, máx. {MAX_PHOTO_MB} MB)",
+            f"Foto ({photo_type.lower() if photo_type else 'opcional'}, máx. {MAX_PHOTO_MB} MB) — reemplaza a la anterior de este tipo",
             type=("png", "jpg", "jpeg"), key=f"ink_photo_{asset.asset_id}",
         )
-        submitted = st.form_submit_button("Guardar lectura", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Guardar (reemplaza la anterior de este tipo)", type="primary", use_container_width=True)
 
     if submitted:
         photo_bytes = None
         photo_mime = ""
         if photo is not None:
             if photo.size > MAX_PHOTO_MB * 1024 * 1024:
-                st.error(f"La foto pesa más de {MAX_PHOTO_MB} MB; usa una más liviana (el respaldo general se vuelve pesado con fotos grandes).")
+                st.error(f"La foto pesa más de {MAX_PHOTO_MB} MB; usa una más liviana.")
                 return
             photo_bytes = photo.getvalue()
             photo_mime = photo.type or "image/jpeg"
         entry = build_ink_reading(
             asset.asset_id, recorded_date.isoformat(), k_percent, c_percent, m_percent, y_percent,
-            note=note, photo_bytes=photo_bytes, photo_mime=photo_mime,
+            note=note, photo_bytes=photo_bytes, photo_mime=photo_mime, photo_type=photo_type if photo_bytes else "",
         )
-        all_readings = read_list("ink_level_readings")
-        all_readings.append(entry)
-        save_list("ink_level_readings", all_readings)
-        st.success("Lectura de nivel de tinta guardada.")
+        save_ink_reading(entry)
+        st.success("Lectura guardada — reemplazó a la anterior de este tipo, si había una.")
         st.rerun()
 
-    if not readings:
-        st.info("Todavía no hay lecturas registradas para esta impresora.")
+    tank_reading = latest_ink_reading(asset.asset_id, "Tanque")
+    software_reading = latest_ink_reading(asset.asset_id, "Software")
+    if not tank_reading and not software_reading:
+        st.info("Todavía no hay foto guardada (ni de tanque ni de software) para esta impresora.")
         return
 
-    latest = readings[0]
-    lowest_label, lowest_value = lowest_ink_color(latest)
-    st.markdown(f"#### Última lectura ({latest.get('recorded_date', '')})")
-    level_summary = st.columns(4)
-    for column, color in zip(level_summary, INK_COLORS):
-        column.metric(INK_COLOR_LABELS[color], f"{latest.get(color, 0.0):.0f}%")
-    if lowest_value <= 15:
-        st.warning(f"{lowest_label} está en {lowest_value:.0f}% — considera reponerlo pronto.")
+    st.markdown("#### Última foto de cada tipo")
+    slot_columns = st.columns(2)
+    for column, label, reading in zip(slot_columns, PHOTO_TYPES, (tank_reading, software_reading)):
+        with column:
+            st.markdown(f"**{label}**")
+            if reading is None:
+                st.caption("Sin foto registrada todavía.")
+                continue
+            st.caption(f"{reading.get('recorded_date', '')} · K {reading.get('k_percent', 0):.0f}% · C {reading.get('c_percent', 0):.0f}% · M {reading.get('m_percent', 0):.0f}% · Y {reading.get('y_percent', 0):.0f}%")
+            if reading.get("note"):
+                st.caption(reading["note"])
+            if reading.get("photo_base64"):
+                st.image(base64.b64decode(reading["photo_base64"]), use_container_width=True)
 
-    st.markdown("#### Historial")
-    for entry in readings[:30]:
-        with st.container(border=True):
-            cols = st.columns([3, 1]) if entry.get("photo_base64") else [st]
-            with cols[0]:
-                st.write(
-                    f"**{entry.get('recorded_date', '')}** · "
-                    f"K {entry.get('k_percent', 0):.0f}% · C {entry.get('c_percent', 0):.0f}% · "
-                    f"M {entry.get('m_percent', 0):.0f}% · Y {entry.get('y_percent', 0):.0f}%"
-                )
-                if entry.get("note"):
-                    st.caption(entry["note"])
-            if entry.get("photo_base64"):
-                with cols[1]:
-                    st.image(base64.b64decode(entry["photo_base64"]), width=140)
+    most_recent = max((r for r in (tank_reading, software_reading) if r), key=lambda r: r.get("recorded_date", ""), default=None)
+    if most_recent:
+        lowest_label, lowest_value = lowest_ink_color(most_recent)
+        if lowest_value <= 15:
+            st.warning(f"{lowest_label} está en {lowest_value:.0f}% (según la lectura más reciente) — considera reponerlo pronto.")
 
 
 def activate_printer_asset_specs() -> None:

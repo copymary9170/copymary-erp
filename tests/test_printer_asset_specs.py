@@ -88,3 +88,49 @@ def test_lowest_ink_color_with_all_full():
     reading = pas.build_ink_reading("AST-1", "2026-07-15", 100.0, 100.0, 100.0, 100.0)
     label, value = pas.lowest_ink_color(reading)
     assert value == 100.0
+
+
+# ---------------------------------------------------------------------------
+# save_ink_reading / latest_ink_reading — reemplaza en vez de acumular
+# (a petición del usuario: "no deseo llenarme" de fotos)
+# ---------------------------------------------------------------------------
+
+def test_save_ink_reading_replaces_previous_of_same_type():
+    st.session_state["ink_level_readings"] = []
+    first = pas.build_ink_reading("AST-1", "2026-07-01", 100, 100, 100, 100, photo_type="Tanque", photo_bytes=b"foto1")
+    pas.save_ink_reading(first)
+    second = pas.build_ink_reading("AST-1", "2026-07-10", 50, 50, 50, 50, photo_type="Tanque", photo_bytes=b"foto2")
+    pas.save_ink_reading(second)
+    all_readings = st.session_state["ink_level_readings"]
+    assert len(all_readings) == 1
+    assert all_readings[0]["recorded_date"] == "2026-07-10"
+
+
+def test_save_ink_reading_keeps_tanque_and_software_separate():
+    st.session_state["ink_level_readings"] = []
+    tank = pas.build_ink_reading("AST-1", "2026-07-01", 90, 90, 90, 90, photo_type="Tanque", photo_bytes=b"foto-tanque")
+    software = pas.build_ink_reading("AST-1", "2026-07-02", 80, 80, 80, 80, photo_type="Software", photo_bytes=b"foto-software")
+    pas.save_ink_reading(tank)
+    pas.save_ink_reading(software)
+    all_readings = st.session_state["ink_level_readings"]
+    assert len(all_readings) == 2  # una de cada tipo, no se pisan entre sí
+
+
+def test_save_ink_reading_does_not_affect_other_assets():
+    st.session_state["ink_level_readings"] = []
+    pas.save_ink_reading(pas.build_ink_reading("AST-1", "2026-07-01", 100, 100, 100, 100, photo_type="Tanque", photo_bytes=b"x"))
+    pas.save_ink_reading(pas.build_ink_reading("AST-2", "2026-07-01", 50, 50, 50, 50, photo_type="Tanque", photo_bytes=b"y"))
+    assert len(st.session_state["ink_level_readings"]) == 2
+
+
+def test_latest_ink_reading_returns_the_stored_entry_for_that_type():
+    st.session_state["ink_level_readings"] = []
+    pas.save_ink_reading(pas.build_ink_reading("AST-1", "2026-07-10", 40, 40, 40, 40, photo_type="Software", photo_bytes=b"cap"))
+    reading = pas.latest_ink_reading("AST-1", "Software")
+    assert reading is not None
+    assert reading["k_percent"] == 40.0
+
+
+def test_latest_ink_reading_none_when_not_recorded():
+    st.session_state["ink_level_readings"] = []
+    assert pas.latest_ink_reading("AST-1", "Tanque") is None
