@@ -106,12 +106,12 @@ def test_save_ink_reading_replaces_previous_of_same_type():
     assert all_readings[0]["recorded_date"] == "2026-07-10"
 
 
-def test_save_ink_reading_keeps_tanque_and_software_separate():
+def test_save_ink_reading_keeps_tanque_and_diagnostic_separate():
     st.session_state["ink_level_readings"] = []
     tank = pas.build_ink_reading("AST-1", "2026-07-01", 90, 90, 90, 90, photo_type="Tanque", photo_bytes=b"foto-tanque")
-    software = pas.build_ink_reading("AST-1", "2026-07-02", 80, 80, 80, 80, photo_type="Software", photo_bytes=b"foto-software")
+    diagnostic = pas.build_ink_reading("AST-1", "2026-07-02", 80, 80, 80, 80, photo_type="Hoja de diagnóstico", photo_bytes=b"foto-software")
     pas.save_ink_reading(tank)
-    pas.save_ink_reading(software)
+    pas.save_ink_reading(diagnostic)
     all_readings = st.session_state["ink_level_readings"]
     assert len(all_readings) == 2  # una de cada tipo, no se pisan entre sí
 
@@ -125,8 +125,8 @@ def test_save_ink_reading_does_not_affect_other_assets():
 
 def test_latest_ink_reading_returns_the_stored_entry_for_that_type():
     st.session_state["ink_level_readings"] = []
-    pas.save_ink_reading(pas.build_ink_reading("AST-1", "2026-07-10", 40, 40, 40, 40, photo_type="Software", photo_bytes=b"cap"))
-    reading = pas.latest_ink_reading("AST-1", "Software")
+    pas.save_ink_reading(pas.build_ink_reading("AST-1", "2026-07-10", 40, 40, 40, 40, photo_type="Hoja de diagnóstico", photo_bytes=b"cap"))
+    reading = pas.latest_ink_reading("AST-1", "Hoja de diagnóstico")
     assert reading is not None
     assert reading["k_percent"] == 40.0
 

@@ -20,7 +20,7 @@ TECHNOLOGIES = (
 INK_COLORS = ("k_percent", "c_percent", "m_percent", "y_percent")
 INK_COLOR_LABELS = {"k_percent": "Negro (K)", "c_percent": "Cian (C)", "m_percent": "Magenta (M)", "y_percent": "Amarillo (Y)"}
 MAX_PHOTO_MB = 3
-PHOTO_TYPES = ("Tanque", "Software")
+PHOTO_TYPES = ("Tanque", "Hoja de diagnóstico")
 
 
 def _activate_backup() -> None:
@@ -69,7 +69,7 @@ def build_ink_reading(
 
 def save_ink_reading(entry: dict) -> None:
     """Guarda una lectura reemplazando cualquier lectura anterior del MISMO
-    activo y el mismo tipo de foto ('Tanque', 'Software', o sin foto) — a
+    activo y el mismo tipo de foto ('Tanque', 'Hoja de diagnóstico', o sin foto) — a
     propósito no se acumula historial ilimitado; solo se conserva la más
     reciente de cada tipo por impresora."""
     asset_id = entry["asset_id"]
@@ -84,13 +84,13 @@ def save_ink_reading(entry: dict) -> None:
 
 def ink_readings_for(asset_id: str) -> list[dict]:
     """Lecturas vigentes de un activo (como mucho una por tipo de foto:
-    Tanque, Software, y una sin foto), de la más reciente a la más antigua."""
+    Tanque, Hoja de diagnóstico, y una sin foto), de la más reciente a la más antigua."""
     readings = [row for row in read_list("ink_level_readings") if str(row.get("asset_id")) == str(asset_id)]
     return sorted(readings, key=lambda row: row.get("recorded_date", row.get("created_at_utc", "")), reverse=True)
 
 
 def latest_ink_reading(asset_id: str, photo_type: str = "") -> dict | None:
-    """La lectura vigente de un tipo específico ('Tanque'/'Software') para
+    """La lectura vigente de un tipo específico ('Tanque'/'Hoja de diagnóstico') para
     un activo, o None si todavía no se ha registrado ninguna de ese tipo."""
     for row in read_list("ink_level_readings"):
         if str(row.get("asset_id")) == str(asset_id) and row.get("photo_type", "") == photo_type:
@@ -244,7 +244,7 @@ def _render_spec_form(asset) -> None:
 
 def _render_ink_levels(asset) -> None:
     st.caption(
-        "Guarda solo la ÚLTIMA foto del tanque/panel y la ÚLTIMA captura del software — cada vez que subas una "
+        "Guarda solo la ÚLTIMA foto del tanque/panel y la ÚLTIMA foto de la hoja de diagnóstico — cada vez que subas una "
         "nueva, reemplaza a la anterior del mismo tipo. No se acumula historial de fotos para no llenar el respaldo."
     )
 
@@ -282,14 +282,14 @@ def _render_ink_levels(asset) -> None:
         st.rerun()
 
     tank_reading = latest_ink_reading(asset.asset_id, "Tanque")
-    software_reading = latest_ink_reading(asset.asset_id, "Software")
-    if not tank_reading and not software_reading:
+    diagnostic_reading = latest_ink_reading(asset.asset_id, "Hoja de diagnóstico")
+    if not tank_reading and not diagnostic_reading:
         st.info("Todavía no hay foto guardada (ni de tanque ni de software) para esta impresora.")
         return
 
     st.markdown("#### Última foto de cada tipo")
     slot_columns = st.columns(2)
-    for column, label, reading in zip(slot_columns, PHOTO_TYPES, (tank_reading, software_reading)):
+    for column, label, reading in zip(slot_columns, PHOTO_TYPES, (tank_reading, diagnostic_reading)):
         with column:
             st.markdown(f"**{label}**")
             if reading is None:
@@ -301,7 +301,7 @@ def _render_ink_levels(asset) -> None:
             if reading.get("photo_base64"):
                 st.image(base64.b64decode(reading["photo_base64"]), use_container_width=True)
 
-    most_recent = max((r for r in (tank_reading, software_reading) if r), key=lambda r: r.get("recorded_date", ""), default=None)
+    most_recent = max((r for r in (tank_reading, diagnostic_reading) if r), key=lambda r: r.get("recorded_date", ""), default=None)
     if most_recent:
         lowest_label, lowest_value = lowest_ink_color(most_recent)
         if lowest_value <= 15:
