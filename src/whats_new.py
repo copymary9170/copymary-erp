@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Aviso de garantía vencida/por vencer y buscador en Activos",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Cada equipo ahora muestra si su garantía está vencida (🔴) o por vencer en 30 días o menos (🟡), y arriba de la lista aparece un aviso resumido con todos los equipos afectados. También se agregó un buscador por nombre y filtros por categoría/estado en 'Equipos registrados', para no perderse entre muchos activos (impresoras, Cameo, accesorios menores, etc.).",
+    },
+    {
         "title": "Nivel de tinta actual por impresora, con foto",
         "target": "Ficha técnica de impresoras",
         "category": "Nuevo",

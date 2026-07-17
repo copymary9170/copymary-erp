@@ -265,3 +265,36 @@ def test_maintenance_history_empty_for_asset_with_no_entries():
     from src.assets import _maintenance_history
     st.session_state.pop("asset_maintenance_log", None)
     assert _maintenance_history("AST-SIN-HISTORIAL") == []
+
+
+# ---------------------------------------------------------------------------
+# warranty_status — aviso de garantía vencida o por vencer
+# ---------------------------------------------------------------------------
+
+def test_warranty_status_without_registered_date():
+    asset = _make_asset(warranty_until="")
+    assert asset.warranty_status == "Sin registrar"
+
+
+def test_warranty_status_expired():
+    asset = _make_asset(warranty_until="2020-01-01")
+    assert asset.warranty_status == "Vencida"
+
+
+def test_warranty_status_expiring_soon():
+    from datetime import date, timedelta
+    soon = (date.today() + timedelta(days=10)).isoformat()
+    asset = _make_asset(warranty_until=soon)
+    assert asset.warranty_status == "Por vencer"
+
+
+def test_warranty_status_valid_far_away():
+    from datetime import date, timedelta
+    far = (date.today() + timedelta(days=365)).isoformat()
+    asset = _make_asset(warranty_until=far)
+    assert asset.warranty_status == "Vigente"
+
+
+def test_warranty_status_handles_invalid_date_gracefully():
+    asset = _make_asset(warranty_until="fecha-invalida")
+    assert asset.warranty_status == "Sin registrar"
