@@ -38,7 +38,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Historial de comisiones", "src.commission_history_governance", "render_commission_history_governance"),
     ("Reversos de pagos", "src.payment_reversals_governance", "render_payment_reversals_governance"),
     ("Anulaciones y ajustes", "src.adjustments_postcontrol", "render_adjustments_postcontrol"),
-    ("Activos", "src.assets_governance", "render_assets_governance"),
+    ("Activos", "src.assets_control", "render_assets_control"),
     ("Usuarios y roles", "src.users_roles", "render_users_roles"),
     ("RRHH y nómina", "src.payroll", "render_payroll"),
     ("Estado de Resultados", "src.income_statement", "render_income_statement"),
