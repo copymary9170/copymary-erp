@@ -105,6 +105,16 @@ def logs_for_plan(plan_id: str) -> list[dict]:
     return _fetch_all("SELECT * FROM maintenance_logs WHERE plan_id = ? ORDER BY performed_date DESC", (plan_id,))
 
 
+def all_maintenance_logs() -> list[dict]:
+    """Todos los mantenimientos preventivos registrados (de todas las máquinas
+    y planes), para poder agregarlos en reportes como el Estado de Resultados.
+
+    Cada registro trae `performed_date` y `cost`. Es la tercera fuente de gasto
+    de mantenimiento del sistema (además de las dos bitácoras por activo en el
+    módulo de Activos) y la única respaldada en base de datos."""
+    return _fetch_all("SELECT * FROM maintenance_logs ORDER BY performed_date DESC")
+
+
 def register_maintenance(plan_id: str, machine_id: str, performed_date: str, frequency_days: int, performed_by: str = "", cost: float = 0.0, notes: str = "") -> str:
     """Registra un mantenimiento realizado y reprograma automáticamente la
     próxima fecha (performed_date + frequency_days)."""

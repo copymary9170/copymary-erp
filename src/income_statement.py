@@ -7,8 +7,9 @@ calcula una "utilidad estimada" (ventas - costo estimado), pero no resta
 gastos operativos ni nómina, así que no es un estado de resultados real.
 
 Alcance: ingresos - costo de ventas = utilidad bruta; utilidad bruta - gastos
-operativos - nómina - mantenimiento de activos = utilidad neta. Base
-caja/devengo simplificada
+operativos - nómina - mantenimiento de equipos = utilidad neta. El
+mantenimiento suma las tres fuentes del sistema (las dos bitácoras por activo
+y el Mantenimiento preventivo por máquina). Base caja/devengo simplificada
 (ingresos = ventas facturadas del mes sin cancelar, no filtra por cobradas —
 para eso está "Cuentas por cobrar"; ver PANEL FINANCIERO para liquidez real).
 
@@ -28,7 +29,7 @@ import streamlit as st
 
 from src import app_shell
 from src.components import render_info_card, render_page_header
-from src import payroll
+from src import machine_maintenance, payroll
 from src.money import format_money, get_currency
 from src.session_utils import read_list as _rows
 
@@ -106,20 +107,30 @@ def payroll_cost_for_month(entries_with_period_start: list[dict], month: str) ->
 
 
 def _maintenance_month(entry: dict) -> str:
-    """Mes (YYYY-MM) de un evento de mantenimiento de activos. Tolera las dos
-    bitácoras del sistema: la en línea usa `event_date`, la administrativa
-    `maintenance_date`; si ninguna está, cae en `created_at_utc`."""
-    raw = str(entry.get("event_date") or entry.get("maintenance_date") or entry.get("created_at_utc", ""))
+    """Mes (YYYY-MM) de un evento de mantenimiento. Tolera las tres fuentes del
+    sistema: la bitácora en línea de Activos usa `event_date`, la
+    administrativa `maintenance_date`, y el Mantenimiento preventivo (base de
+    datos, por máquina) usa `performed_date`; si ninguna está, cae en
+    `created_at_utc`."""
+    raw = str(
+        entry.get("event_date")
+        or entry.get("maintenance_date")
+        or entry.get("performed_date")
+        or entry.get("created_at_utc", "")
+    )
     return raw[:7] if len(raw) >= 7 else ""
 
 
 def asset_maintenance_for_month(maintenance_entries: list[dict], month: str) -> float:
-    """Gasto real de mantenimiento de activos del mes. Recibe los registros
-    ya combinados de ambas bitácoras (asset_maintenance_log +
-    asset_maintenance_logs), para no acoplar este módulo puro a la sesión.
+    """Gasto real de mantenimiento de equipos del mes. Recibe los registros ya
+    combinados de las tres fuentes del sistema (asset_maintenance_log +
+    asset_maintenance_logs por activo, y maintenance_logs por máquina del
+    Mantenimiento preventivo), para no acoplar este módulo puro a la sesión ni
+    a la base de datos.
 
     Es dinero gastado en sostener los equipos que antes no aparecía en el
-    Estado de Resultados: se registraba solo en el módulo de Activos."""
+    Estado de Resultados: se registraba solo en Activos y en Mantenimiento
+    preventivo."""
     return sum(_number(item.get("cost")) for item in maintenance_entries if _maintenance_month(item) == month)
 
 
@@ -193,9 +204,15 @@ def render_income_statement() -> None:
     sales = [item for item in _rows("sales_registry")]
     expenses = _rows("expense_records")
     payroll_entries = _payroll_entries_with_month()
-    # Ambas bitácoras de mantenimiento de activos, combinadas: es gasto real
-    # de operar los equipos que hasta ahora no llegaba al Estado de Resultados.
-    maintenance_entries = _rows("asset_maintenance_log") + _rows("asset_maintenance_logs")
+    # Las tres fuentes de mantenimiento del sistema, combinadas: las dos
+    # bitácoras por activo (sesión) y el Mantenimiento preventivo por máquina
+    # (base de datos). Es gasto real de operar los equipos que hasta ahora no
+    # llegaba al Estado de Resultados.
+    maintenance_entries = (
+        _rows("asset_maintenance_log")
+        + _rows("asset_maintenance_logs")
+        + machine_maintenance.all_maintenance_logs()
+    )
     currency = get_currency()
 
     available_months = sorted({_record_month(item) for item in sales if _record_month(item)}, reverse=True)
@@ -214,7 +231,7 @@ def render_income_statement() -> None:
     cols2 = st.columns(3)
     cols2[0].metric("Gastos operativos", format_money(statement.operating_expenses, currency))
     cols2[1].metric("Nómina", format_money(statement.payroll_cost, currency))
-    cols2[2].metric("Mantenimiento de activos", format_money(statement.asset_maintenance, currency))
+    cols2[2].metric("Mantenimiento de equipos", format_money(statement.asset_maintenance, currency))
 
     cols3 = st.columns(3)
     cols3[0].metric("Utilidad neta", format_money(statement.net_profit, currency))
@@ -255,7 +272,7 @@ def render_income_statement() -> None:
 
     render_info_card(
         "Alcance",
-        "Ingresos = ventas facturadas del mes (sin cancelar). Costo de ventas usa el costo estimado de cada venta cuando está disponible. Mantenimiento de activos suma ambas bitácoras (en línea y administrativa). No reemplaza un estado de resultados fiscal/contable formal.",
+        "Ingresos = ventas facturadas del mes (sin cancelar). Costo de ventas usa el costo estimado de cada venta cuando está disponible. Mantenimiento de equipos suma las tres fuentes: las dos bitácoras de Activos y el Mantenimiento preventivo por máquina. No reemplaza un estado de resultados fiscal/contable formal.",
         "P&L",
     )
 

@@ -95,6 +95,22 @@ def test_asset_maintenance_for_month_falls_back_to_created_at_when_no_explicit_d
     assert inc.asset_maintenance_for_month(entries, "2026-07") == 15.0
 
 
+def test_asset_maintenance_for_month_reads_preventive_performed_date():
+    """El Mantenimiento preventivo (por máquina, en base de datos) usa
+    `performed_date`; también debe contar en el gasto de mantenimiento del P&L."""
+    entries = [{"machine_id": "MCH-1", "cost": 25.0, "performed_date": "2026-07-14"}]
+    assert inc.asset_maintenance_for_month(entries, "2026-07") == 25.0
+
+
+def test_asset_maintenance_for_month_combines_all_three_sources():
+    entries = [
+        {"asset_id": "AST-1", "cost": 40.0, "event_date": "2026-07-03"},        # bitácora en línea
+        {"asset_id": "AST-2", "cost": 25.0, "maintenance_date": "2026-07-10"},  # bitácora administrativa
+        {"machine_id": "MCH-1", "cost": 30.0, "performed_date": "2026-07-14"},  # preventivo por máquina
+    ]
+    assert inc.asset_maintenance_for_month(entries, "2026-07") == 95.0
+
+
 # ---------------------------------------------------------------------------
 # Estado de resultados consolidado
 # ---------------------------------------------------------------------------

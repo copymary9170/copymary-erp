@@ -137,6 +137,25 @@ def test_overdue_plan_becomes_current_after_maintenance_registered(isolated_data
     assert mm.is_overdue(plans[0], date.today()) is False
 
 
+def test_all_maintenance_logs_returns_every_registered_maintenance(isolated_database):
+    """all_maintenance_logs() agrega los mantenimientos de todas las máquinas y
+    planes, para poder sumarlos en reportes como el Estado de Resultados."""
+    _create_machine("MCH-1", "Sublimadora")
+    plan_a = mm.create_plan("MCH-1", "Limpieza de cabezales", frequency_days=15)
+    plan_b = mm.create_plan("MCH-1", "Calibración", frequency_days=30)
+    mm.register_maintenance(plan_a, "MCH-1", "2026-07-05", frequency_days=15, cost=10.0)
+    mm.register_maintenance(plan_b, "MCH-1", "2026-07-08", frequency_days=30, cost=25.0)
+
+    logs = mm.all_maintenance_logs()
+    assert len(logs) == 2
+    assert sum(float(log["cost"]) for log in logs) == 35.0
+    assert {log["performed_date"] for log in logs} == {"2026-07-05", "2026-07-08"}
+
+
+def test_all_maintenance_logs_empty_when_none_registered(isolated_database):
+    assert mm.all_maintenance_logs() == []
+
+
 def test_list_machines_excludes_inactive(isolated_database):
     _create_machine("MCH-1", "Activa")
     with connect() as conn:
