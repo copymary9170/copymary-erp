@@ -81,6 +81,114 @@ def test_next_due_date_after_adds_frequency_days():
 
 
 # ---------------------------------------------------------------------------
+# Presets por tipo de equipo del taller (Cameo, sublimación, prensa, laminadora)
+# ---------------------------------------------------------------------------
+
+def test_preset_group_recognizes_cameo_plotter():
+    assert mm.preset_group_for_machine("Silhouette Cameo 4", "Corte") == "Plotter de corte (Cameo / Silhouette)"
+
+
+def test_preset_group_recognizes_sublimation_printer():
+    assert mm.preset_group_for_machine("Epson EcoTank L3210", "Sublimación") == "Impresora de sublimación (tanque / EcoTank)"
+
+
+def test_preset_group_recognizes_heat_press():
+    assert mm.preset_group_for_machine("Prensa plana 40x60", "Sublimación por calor") == "Prensa / plancha térmica"
+
+
+def test_preset_group_unknown_returns_empty():
+    assert mm.preset_group_for_machine("Máquina rara XYZ", "Otro") == ""
+
+
+def test_presets_for_cameo_include_blade_change_by_usage():
+    presets = mm.presets_for_machine("Cameo 4", "Corte")
+    blade = next(p for p in presets if "cuchilla" in p["task_name"].casefold())
+    assert blade["usage_metric"] == "Metros de corte"
+    assert blade["usage_frequency"] > 0
+    assert blade["frequency_days"] == 0  # la cuchilla se gasta por uso, no por calendario
+    assert blade["wear_part"] == "Cuchilla"
+
+
+def test_presets_for_unknown_machine_offer_full_catalog():
+    presets = mm.presets_for_machine("Desconocida", "Otro")
+    total = sum(len(group) for group in mm.EQUIPMENT_PRESETS.values())
+    assert len(presets) == total
+
+
+# ---------------------------------------------------------------------------
+# Desgaste por USO (además de por tiempo)
+# ---------------------------------------------------------------------------
+
+def _usage_plan(**overrides) -> dict:
+    base = {
+        "plan_id": "MNT-U", "active": 1, "next_due_date": (TODAY + timedelta(days=90)).isoformat(),
+        "frequency_days": 0, "usage_metric": "Metros de corte", "usage_frequency": 500.0,
+        "current_usage": 0.0, "next_due_usage": 500.0,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_usage_until_due_returns_remaining_units():
+    plan = _usage_plan(current_usage=480.0, next_due_usage=500.0)
+    assert mm.usage_until_due(plan) == 20.0
+
+
+def test_usage_until_due_none_when_no_usage_trigger():
+    plan = _usage_plan(usage_frequency=0.0)
+    assert mm.usage_until_due(plan) is None
+
+
+def test_is_overdue_by_usage_true_when_reading_reaches_target():
+    plan = _usage_plan(current_usage=520.0, next_due_usage=500.0)
+    assert mm.is_overdue_by_usage(plan) is True
+
+
+def test_is_due_soon_by_usage_within_last_10_percent():
+    plan = _usage_plan(current_usage=460.0, next_due_usage=500.0)  # faltan 40 de 500 (8%)
+    assert mm.is_due_soon_by_usage(plan) is True
+
+
+def test_is_due_soon_by_usage_false_when_plenty_left():
+    plan = _usage_plan(current_usage=100.0, next_due_usage=500.0)
+    assert mm.is_due_soon_by_usage(plan) is False
+
+
+def test_next_due_usage_after_adds_frequency():
+    assert mm.next_due_usage_after(480.0, 500.0) == 980.0
+
+
+# ---------------------------------------------------------------------------
+# Estado combinado: lo que ocurra primero (tiempo o uso)
+# ---------------------------------------------------------------------------
+
+def test_is_overdue_combined_triggers_on_usage_even_if_time_is_fine():
+    """Un plan con fecha lejana pero contador pasado debe salir atrasado."""
+    plan = _usage_plan(next_due_date=(TODAY + timedelta(days=80)).isoformat(), current_usage=600.0, next_due_usage=500.0)
+    assert mm.is_overdue(plan, TODAY) is False
+    assert mm.is_overdue_combined(plan, TODAY) is True
+
+
+def test_is_overdue_combined_triggers_on_time_even_if_usage_is_fine():
+    plan = _usage_plan(next_due_date=(TODAY - timedelta(days=1)).isoformat(), current_usage=10.0, next_due_usage=500.0)
+    assert mm.is_overdue_by_usage(plan) is False
+    assert mm.is_overdue_combined(plan, TODAY) is True
+
+
+def test_plan_alert_reports_usage_reason_when_usage_overdue():
+    plan = _usage_plan(next_due_date=(TODAY + timedelta(days=80)).isoformat(), current_usage=600.0, next_due_usage=500.0)
+    level, reason = mm.plan_alert(plan, TODAY)
+    assert level == "overdue"
+    assert "uso" in reason.casefold()
+
+
+def test_plan_alert_ok_when_nothing_pending():
+    plan = _usage_plan(next_due_date=(TODAY + timedelta(days=80)).isoformat(), current_usage=100.0, next_due_usage=500.0)
+    level, _reason = mm.plan_alert(plan, TODAY)
+    assert level == "ok"
+
+
+# ---------------------------------------------------------------------------
 # Flujo completo con base de datos
 # ---------------------------------------------------------------------------
 
@@ -135,6 +243,42 @@ def test_overdue_plan_becomes_current_after_maintenance_registered(isolated_data
 
     plans = mm.list_plans()
     assert mm.is_overdue(plans[0], date.today()) is False
+
+
+def test_create_usage_based_plan_sets_next_due_usage(isolated_database):
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan(
+        "MCH-1", "Cambiar cuchilla", frequency_days=0,
+        usage_metric="Metros de corte", usage_frequency=500.0, current_usage=120.0,
+    )
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["usage_metric"] == "Metros de corte"
+    assert plan["current_usage"] == 120.0
+    assert plan["next_due_usage"] == 620.0  # 120 + 500
+
+
+def test_update_usage_reading_moves_plan_toward_due(isolated_database):
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan("MCH-1", "Cambiar cuchilla", frequency_days=0, usage_metric="Metros de corte", usage_frequency=500.0)
+    mm.update_usage_reading(plan_id, 490.0)
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["current_usage"] == 490.0
+    assert mm.is_due_soon_by_usage(plan) is True  # faltan 10 de 500
+
+
+def test_register_maintenance_reschedules_usage_from_service_reading(isolated_database):
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan("MCH-1", "Cambiar cuchilla", frequency_days=0, usage_metric="Metros de corte", usage_frequency=500.0)
+    mm.update_usage_reading(plan_id, 510.0)  # ya vencido por uso
+
+    mm.register_maintenance(plan_id, "MCH-1", "2026-07-11", frequency_days=0, cost=8.0, usage_at_service=510.0)
+
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["last_done_usage"] == 510.0
+    assert plan["next_due_usage"] == 1010.0  # 510 + 500
+    assert mm.is_overdue_by_usage(plan) is False  # ya no está vencido tras el servicio
+    logs = mm.logs_for_plan(plan_id)
+    assert logs[0]["usage_at_service"] == 510.0
 
 
 def test_all_maintenance_logs_returns_every_registered_maintenance(isolated_database):
