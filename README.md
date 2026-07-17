@@ -43,7 +43,10 @@ Incluye:
   - Gastos y presupuesto
   - Comisiones de equipo e historial de comisiones
   - Reversos de pago, anulaciones y ajustes
-  - Activos con depreciación
+  - Activos con depreciación, gobierno (mantenimiento, incidencias,
+    garantías, reposición) y análisis de costo total de propiedad (TCO):
+    costo de compra + mantenimiento unificado de ambas bitácoras, costo
+    real por unidad y señal de reponer-vs-reparar
   - Usuarios y roles
   - RRHH y nómina (empleados, períodos, recibos de pago)
   - Estado de Resultados (P&L consolidado, tendencia de 6 meses)
