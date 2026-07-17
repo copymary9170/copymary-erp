@@ -20,6 +20,12 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Nivel de tinta actual por impresora, con foto",
+        "target": "Ficha técnica de impresoras",
+        "category": "Nuevo",
+        "description": "Nueva pestaña 'Nivel de tinta actual' dentro de la Ficha técnica de cada impresora: registra el porcentaje de tinta por color (K/C/M/Y), con una foto del tanque/panel o una foto de la hoja de diagnóstico impresa. A propósito NO se acumula historial: cada foto nueva reemplaza a la anterior del mismo tipo (Tanque u Hoja de diagnóstico), así el respaldo general nunca se llena de fotos viejas. Avisa cuando algún color baja de 15% según la lectura más reciente.",
+    },
+    {
         "title": "Historial de mantenimiento y repuestos instalados por activo",
         "target": "Activos",
         "category": "Nuevo",
