@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 11
 
 
 @dataclass(frozen=True)
@@ -371,6 +371,40 @@ def _migrate_maintenance_usage_v9(connection: Any) -> None:
     })
 
 
+def _migrate_maintenance_inventory_v10(connection: Any) -> None:
+    """Migración v10: descuento real de Inventario al registrar mantenimiento.
+
+    Otra vez pensando como el reparador del taller: la bitácora de
+    mantenimiento por activo (assets.py) ya descontaba el repuesto real de
+    Inventario cuando salía de una existencia registrada, pero el
+    Mantenimiento preventivo por máquina (esta tabla) no tenía esa conexión —
+    se podía anotar 'cambié la cuchilla' sin que el conteo de cuchillas en
+    Inventario se moviera un centímetro. Eso deja el inventario de repuestos
+    mintiendo sobre cuánto queda realmente.
+    """
+    _ensure_columns(connection, "maintenance_logs", {
+        "inventory_item_id": "TEXT NOT NULL DEFAULT ''",
+        "inventory_quantity": "REAL NOT NULL DEFAULT 0",
+        "inventory_deducted": "INTEGER NOT NULL DEFAULT 0",
+    })
+
+
+def _migrate_maintenance_spare_part_v11(connection: Any) -> None:
+    """Migración v11: repuesto habitual planeado por adelantado en cada plan.
+
+    La migración v10 solo sabe qué repuesto se usó DESPUÉS de hacer el
+    mantenimiento. Pero el reparador necesita saberlo ANTES: si la cuchilla
+    de la Cameo vence en 3 días y el stock de cuchillas en Inventario ya está
+    en cero, hace falta comprar antes de que llegue el momento, no enterarse
+    al ir a registrar el servicio. `default_inventory_item_id` es el repuesto
+    que normalmente usa ese plan, para poder cruzarlo contra el stock actual
+    y avisar con antelación.
+    """
+    _ensure_columns(connection, "maintenance_plans", {
+        "default_inventory_item_id": "TEXT NOT NULL DEFAULT ''",
+    })
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -550,6 +584,16 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (9, "maintenance_usage_triggers", _now()),
+        )
+        _migrate_maintenance_inventory_v10(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (10, "maintenance_inventory_deduction", _now()),
+        )
+        _migrate_maintenance_spare_part_v11(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (11, "maintenance_spare_part_planning", _now()),
         )
     return get_database_status()
 
