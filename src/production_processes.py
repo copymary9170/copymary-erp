@@ -21,6 +21,11 @@ PROCESS_OPTIONS: tuple[tuple[str, str], ...] = (
     ("heat_press", "Prensado o termofijado"),
     ("engraving", "Grabado"),
     ("finishing", "Acabado manual"),
+    ("printing_3d", "Impresión 3D"),
+    ("laser_engraving", "Grabado o corte láser"),
+    ("pvc_card_print", "Impresión de carnets PVC"),
+    ("thermal_print", "Impresión térmica (tickets/etiquetas)"),
+    ("tattoo_stencil", "Esténcil de tatuaje"),
 )
 
 PROCESS_LABELS = dict(PROCESS_OPTIONS)

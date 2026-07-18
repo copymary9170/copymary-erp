@@ -117,6 +117,91 @@ def test_presets_for_unknown_machine_offer_full_catalog():
     assert len(presets) == total
 
 
+# --- Catálogo ampliado del taller: 3D, láser, PVC, térmica, tatuajes, etc. ---
+
+def test_preset_group_recognizes_3d_printer():
+    assert mm.preset_group_for_machine("Creality Ender 3 V2", "Impresión 3D") == "Impresora 3D (filamento / resina)"
+
+
+def test_preset_group_recognizes_laser_engraver():
+    assert mm.preset_group_for_machine("Láser CO2 60W", "Grabado") == "Láser de grabado / corte (CO2 / diodo)"
+
+
+def test_preset_group_laser_engraver_wins_over_laser_printer():
+    """'Láser de grabado' contiene 'láser' (palabra de impresora láser); el
+    grabador debe ganar por orden de prioridad."""
+    assert mm.preset_group_for_machine("Impresora láser de grabado", "Otro") == "Láser de grabado / corte (CO2 / diodo)"
+
+
+def test_preset_group_recognizes_laser_printer():
+    assert mm.preset_group_for_machine("HP LaserJet M111w", "Impresora láser") == "Impresora láser (tóner)"
+
+
+def test_preset_group_recognizes_cartridge_printer():
+    assert mm.preset_group_for_machine("HP DeskJet de cartuchos", "Impresora") == "Impresora de cartuchos (inyección)"
+
+
+def test_preset_group_recognizes_pvc_card_printer():
+    assert mm.preset_group_for_machine("Zebra ZC100", "Impresora de carnets PVC") == "Impresora de carnets / tarjetas PVC"
+
+
+def test_preset_group_thermal_printer_wins_over_heat_press():
+    """'Impresora térmica' contiene 'térmic' (palabra de la prensa); la
+    impresora térmica debe ganar por orden de prioridad."""
+    assert mm.preset_group_for_machine("Impresora térmica de tickets", "Otro") == "Impresora térmica (tickets / etiquetas)"
+
+
+def test_preset_group_recognizes_tattoo_stencil_printer():
+    assert mm.preset_group_for_machine("Impresora de esténciles para tatuajes", "Otro") == "Impresora de esténciles de tatuaje"
+
+
+def test_preset_group_guillotine_wins_over_cutting_plotter():
+    """'Guillotina de corte' contiene 'corte' (palabra del plotter); la
+    guillotina debe ganar por orden de prioridad."""
+    assert mm.preset_group_for_machine("Guillotina de corte A4", "Otro") == "Guillotina / cizalla"
+
+
+def test_preset_group_recognizes_binding_machine():
+    assert mm.preset_group_for_machine("Anilladora doble anillo", "Encuadernación") == "Anilladora / encuadernadora"
+
+
+def test_presets_for_3d_printer_include_nozzle_change_by_hours():
+    presets = mm.presets_for_machine("Ender 3", "Impresión 3D")
+    nozzle = next(p for p in presets if "boquilla" in p["task_name"].casefold())
+    assert nozzle["usage_metric"] == "Horas de uso"
+    assert nozzle["wear_part"] == "Boquilla (nozzle)"
+
+
+def test_presets_for_laser_engraver_include_co2_tube_by_hours():
+    presets = mm.presets_for_machine("Láser CO2", "Grabado")
+    tube = next(p for p in presets if "tubo" in p["task_name"].casefold())
+    assert tube["usage_metric"] == "Horas de uso"
+    assert tube["usage_frequency"] > 0
+    assert tube["wear_part"] == "Tubo CO2"
+
+
+def test_presets_for_pvc_printer_include_ribbon_by_cards():
+    presets = mm.presets_for_machine("Zebra ZC100", "Impresora de carnets PVC")
+    ribbon = next(p for p in presets if "ribbon" in p["task_name"].casefold())
+    assert ribbon["usage_metric"] == "Tarjetas impresas"
+    assert ribbon["wear_part"] == "Ribbon YMCKO"
+
+
+def test_all_preset_usage_metrics_exist_in_usage_metrics_catalog():
+    """Cada métrica usada por un preset debe existir en USAGE_METRICS, o el
+    selector de la interfaz no podría preseleccionarla."""
+    for group, presets in mm.EQUIPMENT_PRESETS.items():
+        for preset in presets:
+            assert preset["usage_metric"] in mm.USAGE_METRICS, f"{group}: {preset['task_name']} usa métrica desconocida {preset['usage_metric']!r}"
+
+
+def test_every_preset_group_is_reachable_by_keywords():
+    """Cada grupo del catálogo debe tener al menos una palabra clave que lo
+    active — un grupo inalcanzable jamás se sugeriría a nadie."""
+    reachable = {group for group, _keywords in mm._PRESET_KEYWORDS}
+    assert reachable == set(mm.EQUIPMENT_PRESETS)
+
+
 # ---------------------------------------------------------------------------
 # Desgaste por USO (además de por tiempo)
 # ---------------------------------------------------------------------------
