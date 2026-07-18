@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import streamlit as st
 
-from src import app_shell
+from src import app_shell, payroll_legal_ve as legal_ve
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, initialize_database, record_audit_event
 from src.money import format_money, get_currency
@@ -72,6 +72,15 @@ def time_off_days(start_date: str, end_date: str) -> int:
 def salary_change_amount(previous_salary: float, new_salary: float) -> float:
     """Diferencia del cambio de salario (positiva = aumento, negativa = recorte)."""
     return new_salary - previous_salary
+
+
+def years_of_service(hire_date: str, as_of: str | None = None) -> float:
+    """Antigüedad en años (fraccionaria) entre la fecha de ingreso y una
+    fecha de corte (hoy por defecto). Usa 365.25 días/año para no perder
+    precisión por años bisiestos en antigüedades largas."""
+    start = date.fromisoformat(hire_date)
+    end = date.fromisoformat(as_of) if as_of else date.today()
+    return max((end - start).days / 365.25, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +375,8 @@ def render_payroll() -> None:
     periods = list_periods()
     currency = get_currency()
 
-    employees_tab, periods_tab, time_off_tab, salary_history_tab = st.tabs(
-        ("Empleados", "Períodos de nómina", "Vacaciones y permisos", "Historial salarial")
+    employees_tab, periods_tab, time_off_tab, salary_history_tab, legal_ve_tab = st.tabs(
+        ("Empleados", "Períodos de nómina", "Vacaciones y permisos", "Historial salarial", "Estimaciones legales (VE)")
     )
 
     with employees_tab:
@@ -562,6 +571,81 @@ def render_payroll() -> None:
                         st.caption(f"Vigente desde {change.get('effective_date')}" + (f" · {change.get('reason')}" if change.get("reason") else ""))
             else:
                 st.info("Todavía no hay cambios de salario registrados.")
+
+    with legal_ve_tab:
+        st.error(
+            "⚠️ Estimador, no cálculo legal certificado. Las FÓRMULAS (días exigidos por la LOTTT) "
+            "están fijas, pero el salario mínimo, los topes de cotización y la tasa patronal de IVSS "
+            "cambian por Gaceta Oficial y debes actualizarlos abajo tú mismo — este ERP no los conoce. "
+            "Antes de liquidar a alguien, pagar prestaciones reales o declarar aportes ante el "
+            "IVSS/BANAVIH/INCES, valida estos montos con un contador o abogado laboral."
+        )
+        if not employees:
+            st.info("Registra empleados para ver sus estimaciones.")
+        else:
+            st.markdown("##### Parámetros vigentes (actualízalos según la Gaceta Oficial)")
+            params_col1, params_col2, params_col3 = st.columns(3)
+            ivss_employer_rate = params_col1.number_input(
+                "Tasa patronal IVSS (%)", min_value=0.0, max_value=100.0, value=10.0, step=0.5,
+                help="Varía 9%-11% según la clasificación de riesgo de la empresa ante el INPSASEL.",
+            )
+            ivss_employee_rate = params_col2.number_input("Tasa trabajador IVSS (%)", min_value=0.0, max_value=100.0, value=4.0, step=0.5)
+            contribution_cap = params_col3.number_input(
+                "Tope de cotización mensual (IVSS/RPE)", min_value=0.0, value=0.0, step=10.0,
+                help="0 = sin tope. Normalmente un múltiplo del salario mínimo vigente — confírmalo en la Gaceta Oficial.",
+            )
+
+            employee_options = {f"{row['full_name']} · {row.get('position', '')}": row for row in active_employees(employees)}
+            if not employee_options:
+                st.info("No hay empleados activos.")
+            else:
+                selected_label = st.selectbox("Empleado", tuple(employee_options.keys()), key="legal_ve_employee")
+                employee = employee_options[selected_label]
+                salary = float(employee.get("base_salary") or 0)
+                daily_salary = salary / 30.0
+                emp_currency = employee.get("salary_currency", "USD")
+                tenure = years_of_service(employee["hire_date"])
+
+                st.caption(f"Antigüedad estimada: {tenure:.2f} años · salario diario de referencia: {format_money(daily_salary, emp_currency)}")
+
+                st.markdown("##### Prestaciones sociales (Art. 142 LOTTT)")
+                st.caption(
+                    "Estimación simplificada: usa el salario ACTUAL para toda la antigüedad, no el "
+                    "salario histórico real de cada trimestre. Para una liquidación real, un contador "
+                    "debe recalcular con el historial salarial completo del empleado."
+                )
+                severance = legal_ve.severance_estimate(tenure, daily_salary)
+                sev_cols = st.columns(3)
+                sev_cols[0].metric("Garantía acumulada (aprox.)", format_money(severance["accumulated_guarantee"], emp_currency))
+                sev_cols[1].metric("Cálculo retroactivo (30 días/año)", format_money(severance["retroactive_calculation"], emp_currency))
+                sev_cols[2].metric("Pagaría el mayor de los dos", format_money(severance["final_payment"], emp_currency))
+
+                st.markdown("##### Utilidades / aguinaldos (Art. 131-133 LOTTT)")
+                months_col, days_col = st.columns(2)
+                months_worked = months_col.number_input("Meses trabajados este año", min_value=0, max_value=12, value=12, key="legal_ve_months")
+                utilities_days_requested = days_col.number_input(
+                    "Días a pagar (mínimo legal 15, tope 120)", min_value=15.0, max_value=120.0, value=15.0, step=1.0, key="legal_ve_util_days",
+                )
+                utilities = legal_ve.utilities_amount(daily_salary, utilities_days_requested, int(months_worked))
+                st.metric("Utilidades estimadas", format_money(utilities, emp_currency))
+
+                st.markdown("##### Vacaciones y bono vacacional (Art. 190 y 192 LOTTT)")
+                years_int = max(int(tenure), 1)
+                vac_cols = st.columns(3)
+                vac_cols[0].metric("Días de disfrute", str(legal_ve.vacation_days(years_int)))
+                vac_cols[1].metric("Días de bono vacacional", str(legal_ve.vacation_bonus_days(years_int)))
+                vac_cols[2].metric("Monto del bono vacacional", format_money(legal_ve.vacation_bonus_amount(daily_salary, years_int), emp_currency))
+
+                st.markdown("##### Aportes mensuales estimados (IVSS / FAOV / RPE)")
+                ivss_employer, ivss_employee = legal_ve.ivss_contribution(salary, ivss_employer_rate, ivss_employee_rate, contribution_cap or None)
+                faov_employer, faov_employee = legal_ve.faov_contribution(salary)
+                rpe_employer, rpe_employee = legal_ve.rpe_contribution(salary, cap=contribution_cap or None)
+                contrib_rows = [
+                    {"Concepto": "IVSS", "Aporte patronal": format_money(ivss_employer, emp_currency), "Aporte trabajador": format_money(ivss_employee, emp_currency)},
+                    {"Concepto": "FAOV", "Aporte patronal": format_money(faov_employer, emp_currency), "Aporte trabajador": format_money(faov_employee, emp_currency)},
+                    {"Concepto": "RPE", "Aporte patronal": format_money(rpe_employer, emp_currency), "Aporte trabajador": format_money(rpe_employee, emp_currency)},
+                ]
+                st.dataframe(contrib_rows, use_container_width=True, hide_index=True)
 
     render_info_card("Alcance", "RRHH básico: empleados, períodos, recibos de pago con neto calculado, vacaciones/permisos, historial salarial y pago conectado a Caja. No sustituye asesoría contable o legal-laboral.", "RRHH")
 

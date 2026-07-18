@@ -74,6 +74,24 @@ def test_salary_change_amount_negative_for_cut():
     assert payroll.salary_change_amount(previous_salary=400.0, new_salary=350.0) == -50.0
 
 
+def test_years_of_service_computes_fractional_years():
+    # 2026-01-01 a 2026-07-01 son 181 días => 181/365.25 ≈ 0.4956 años.
+    result = payroll.years_of_service("2026-01-01", as_of="2026-07-01")
+    assert round(result, 4) == round(181 / 365.25, 4)
+
+
+def test_years_of_service_exactly_one_year():
+    result = payroll.years_of_service("2025-07-01", as_of="2026-07-01")
+    assert 0.99 < result < 1.01
+
+
+def test_years_of_service_never_negative_for_future_hire_date():
+    """Una fecha de ingreso en el futuro (dato mal capturado) no debe dar
+    antigüedad negativa."""
+    result = payroll.years_of_service("2027-01-01", as_of="2026-07-01")
+    assert result == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Flujo completo con base de datos
 # ---------------------------------------------------------------------------
