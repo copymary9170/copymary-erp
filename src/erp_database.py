@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 @dataclass(frozen=True)
@@ -342,6 +342,35 @@ def _migrate_quick_sale_v8(connection: Any) -> None:
     )
 
 
+def _migrate_maintenance_usage_v9(connection: Any) -> None:
+    """Migración v9: mantenimiento preventivo por USO además de por tiempo.
+
+    Pensado como el reparador del taller: en CopyMary el equipo no se
+    desgasta por calendario sino por trabajo. Una cuchilla de la Cameo se
+    gasta por metros cortados; un cabezal de la impresora de sublimación se
+    obstruye por páginas impresas (y por inactividad); una prensa térmica se
+    descalibra por número de planchados. El módulo original solo permitía
+    'cada N días', lo que obliga a inventar un calendario para algo que en
+    realidad depende del uso.
+
+    Estas columnas permiten definir, además de la frecuencia en días, una
+    frecuencia por uso (con su unidad: páginas, metros de corte, planchados,
+    horas) y llevar la lectura actual del contador, para avisar por lo que
+    ocurra primero. `usage_at_service` en la bitácora guarda la lectura de uso
+    al momento de cada mantenimiento, para reprogramar el próximo por uso.
+    """
+    _ensure_columns(connection, "maintenance_plans", {
+        "usage_metric": "TEXT NOT NULL DEFAULT ''",
+        "usage_frequency": "REAL NOT NULL DEFAULT 0",
+        "last_done_usage": "REAL NOT NULL DEFAULT 0",
+        "next_due_usage": "REAL NOT NULL DEFAULT 0",
+        "current_usage": "REAL NOT NULL DEFAULT 0",
+    })
+    _ensure_columns(connection, "maintenance_logs", {
+        "usage_at_service": "REAL NOT NULL DEFAULT 0",
+    })
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -516,6 +545,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (8, "quick_sale_prices", _now()),
+        )
+        _migrate_maintenance_usage_v9(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (9, "maintenance_usage_triggers", _now()),
         )
     return get_database_status()
 

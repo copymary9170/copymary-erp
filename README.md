@@ -51,7 +51,11 @@ Incluye:
   - RRHH y nómina (empleados, períodos, recibos de pago)
   - Estado de Resultados (P&L consolidado, tendencia de 6 meses)
   - Flujo de caja proyectado (posición de efectivo a 30/60/90 días)
-  - Mantenimiento preventivo (calendario y bitácora por máquina)
+  - Mantenimiento preventivo por tiempo y por uso (avisa por lo que ocurra
+    primero: p. ej. cuchilla Cameo por metros cortados, cabezal por páginas,
+    prensa por planchados), con tareas sugeridas por tipo de equipo, bitácora
+    de costo por máquina, y contador de horas alimentado automáticamente por
+    los trabajos reales confirmados en Costeo por procesos
   - Venta rápida de mostrador (tarifario configurable, sin cliente obligatorio)
   - Análisis y costeo de impresión: confirma trabajos reales (descuenta papel
     de Inventario y suma uso a la impresora en Activos) y los envía a

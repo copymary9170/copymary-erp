@@ -61,6 +61,11 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# CopyMary ERP: base de datos SQLite generada en runtime/pruebas (no versionar)
+copymary_erp.sqlite3
+copymary_erp.sqlite3-journal
+*.sqlite3
+
 # Flask stuff:
 instance/
 .webassets-cache

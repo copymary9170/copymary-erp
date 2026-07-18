@@ -6,7 +6,7 @@ import json
 
 import streamlit as st
 
-from src import app_shell
+from src import app_shell, machine_maintenance
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, initialize_database, latest_exchange_rate
 from src.money import format_money, get_currency
@@ -150,6 +150,30 @@ def _recipe_total(recipe_id: str) -> tuple[float, list[dict]]:
             detail["pressure_level"] = step.get("pressure_level")
         details.append(detail)
     return total, details
+
+
+def _accumulate_machine_usage_from_job(recipe_id: str, quantity: float) -> None:
+    """Alimenta el contador de uso del Mantenimiento preventivo con las horas
+    de máquina de un trabajo REAL confirmado ('Guardar trabajo costeado').
+
+    Antes había que actualizar la lectura del contador a mano en Mantenimiento
+    preventivo; ahora cada trabajo costeado que usa una máquina con horas
+    (`machine_minutes`) suma esas horas automáticamente a cualquier plan
+    activo de esa máquina con disparador 'Horas de uso' — el mismo criterio
+    con el que el reparador del taller decide cuándo toca un servicio: por lo
+    que realmente se trabajó, no por una lectura que alguien tuvo que anotar.
+
+    Silencioso si la máquina del paso no tiene ningún plan con ese disparador
+    (no todo el mundo usa horas — muchos planes van por metros o páginas).
+    """
+    steps = [row for row in _rows(TABLES["steps"]) if row.get("recipe_id") == recipe_id]
+    for step in steps:
+        machine_id = str(step.get("machine_id") or "")
+        minutes = float(step.get("machine_minutes") or 0)
+        if not machine_id or minutes <= 0:
+            continue
+        hours = minutes / 60.0 * float(quantity)
+        machine_maintenance.accumulate_usage_for_machine(machine_id, "Horas de uso", hours)
 
 
 def _duplicate_recipe_as_new_version(recipe: dict) -> None:
@@ -383,7 +407,8 @@ def render_bom_costing() -> None:
                 st.write(f"**{item['process']}** · total {_money(item['total'])} · material {_money(item['material'])} · máquina {_money(item['machine'])} · consumible {_money(item['consumable'])} · mano de obra {_money(item['labor'])} · luz {_money(item['energy'])}")
             if st.button("Guardar trabajo costeado", type="primary", use_container_width=True, disabled=unit_cost <= 0):
                 _insert(TABLES["jobs"], {"job_id": f"JOB-{uuid4().hex[:8].upper()}", "recipe_id": recipe.get("recipe_id"), "job_date": date.today().isoformat(), "quantity": float(qty), "currency": currency, "cost_total": float(total_cost), "price_total": float(price), "details_json": json.dumps(details, ensure_ascii=False), "exchange_rate_id": rate.get("rate_id") if rate else None, "created_at_utc": date.today().isoformat()})
-                st.success("Trabajo costeado guardado.")
+                _accumulate_machine_usage_from_job(recipe.get("recipe_id"), float(qty))
+                st.success("Trabajo costeado guardado. El uso de máquina se sumó a Mantenimiento preventivo.")
 
     render_info_card("Costeo por receta", "El costo final sale de pasos acumulados: material, máquina, consumible, mano de obra y electricidad.", "BOM")
 
