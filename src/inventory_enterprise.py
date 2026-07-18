@@ -64,6 +64,29 @@ def _landed_unit_cost(subtotal: float, shipping: float, tax: float, exchange_rat
     return unit_cost, total_base
 
 
+def allocate_shared_costs(line_subtotals: list[float], shipping: float, tax: float) -> list[tuple[float, float]]:
+    """Reparte el envío y los impuestos de UNA factura entre varias líneas de
+    compra, proporcional al subtotal de cada línea — el mismo criterio que ya
+    usa el registro de un solo artículo (`_landed_unit_cost`), aplicado ahora
+    a una factura con varios artículos que comparten un mismo flete y un
+    mismo impuesto.
+
+    Quien compró más en la factura absorbe más del flete y el impuesto,
+    en vez de que cada línea tenga que adivinar cuánto le toca. Si todas las
+    líneas suman 0 (por ejemplo, artículos sin precio aún), reparte en partes
+    iguales para no dividir entre cero.
+
+    Devuelve una lista paralela de `(envío_asignado, impuesto_asignado)`.
+    """
+    count = len(line_subtotals)
+    if count == 0:
+        return []
+    total = sum(line_subtotals)
+    if total <= 0:
+        return [(shipping / count, tax / count) for _ in line_subtotals]
+    return [(shipping * (subtotal / total), tax * (subtotal / total)) for subtotal in line_subtotals]
+
+
 def _purchase_inputs(prefix: str, *, default_supplier: str = "") -> dict:
     """Campos compartidos de "cómo se adquirió este material": proveedor,
     moneda, tasa de cambio usada, método de pago, costo del material, envío
@@ -199,6 +222,7 @@ def _movement(item: dict, movement_type: str, quantity: float, reason: str, unit
             "material_subtotal": purchase_detail.get("material_subtotal", 0.0),
             "shipping_cost": purchase_detail.get("shipping_cost", 0.0),
             "tax_amount": purchase_detail.get("tax_amount", 0.0),
+            "invoice_number": purchase_detail.get("invoice_number", ""),
         })
     movements.append(movement_record)
     save_list("inventory_movements", movements)
@@ -229,6 +253,121 @@ def _dashboard(rows: list[dict]) -> None:
     if categories:
         st.markdown("#### Valor por categoría")
         st.dataframe([{"Categoría": k, "Valor ($)": round(v, 2)} for k, v in sorted(categories.items(), key=lambda x: x[1], reverse=True)], use_container_width=True, hide_index=True)
+
+
+def _purchase_invoice(rows: list[dict]) -> None:
+    """Registra una factura de compra con varias líneas que comparten un
+    mismo envío y un mismo impuesto — el caso real de comprar varios
+    materiales en un solo pedido al proveedor. Antes había que registrar
+    cada artículo por separado y adivinar cuánto del flete/impuesto le tocaba
+    a cada uno; aquí se reparte proporcionalmente al subtotal de cada línea y
+    se actualiza el costo real (landed) de cada artículo en un solo paso."""
+    st.caption(
+        "Para cuando compras varios materiales de una vez y todos comparten el mismo "
+        "envío y el mismo impuesto: agrega una línea por artículo, y el sistema reparte "
+        "el envío y el impuesto entre ellas según cuánto pesa cada una en la factura."
+    )
+    active_items = {
+        f"{r['name']} · {r['sku'] or r['item_id']} · stock {r['available_quantity']:,.2f} {r['unit_name']}": r
+        for r in rows if r.get("active", True)
+    }
+    if not active_items:
+        st.info("Registra artículos en la pestaña 'Registrar' antes de crear una factura de compra.")
+        return
+
+    draft_lines: list[dict] = st.session_state.get("purchase_invoice_draft_lines", [])
+
+    base_currency = get_currency()
+    currency = st.selectbox(
+        "Moneda de la factura", CURRENCIES,
+        index=CURRENCIES.index(base_currency) if base_currency in CURRENCIES else 0,
+        key="pinv_currency",
+    )
+
+    with st.form("purchase_invoice_add_line", clear_on_submit=True):
+        line_cols = st.columns([3, 1, 1])
+        item_label = line_cols[0].selectbox("Artículo", tuple(active_items), key="pinv_item")
+        quantity = line_cols[1].number_input("Cantidad", min_value=0.0, value=0.0, step=1.0, key="pinv_qty")
+        unit_price = line_cols[2].number_input(f"Precio unitario ({currency})", min_value=0.0, value=0.0, step=0.1, format="%.4f", key="pinv_price")
+        add_line = st.form_submit_button("Agregar línea a la factura", use_container_width=True)
+    if add_line:
+        if quantity <= 0 or unit_price <= 0:
+            st.error("Cantidad y precio unitario deben ser mayores que cero.")
+        else:
+            item = active_items[item_label]
+            draft_lines.append({
+                "item_id": item["item_id"], "name": item["name"], "unit_name": item["unit_name"],
+                "quantity": float(quantity), "unit_price": float(unit_price),
+            })
+            st.session_state["purchase_invoice_draft_lines"] = draft_lines
+            st.rerun()
+
+    if not draft_lines:
+        st.info("Agrega al menos una línea para poder registrar la factura.")
+        return
+
+    st.markdown("#### Líneas de esta factura")
+    for index, line in enumerate(draft_lines):
+        with st.container(border=True):
+            item_cols = st.columns([3, 1, 1, 1])
+            subtotal = line["quantity"] * line["unit_price"]
+            item_cols[0].write(f"**{line['name']}**")
+            item_cols[1].write(f"{line['quantity']:,.2f} {line['unit_name']}")
+            item_cols[2].write(f"{subtotal:,.2f} {currency}")
+            if item_cols[3].button("Quitar", key=f"pinv_remove_{index}"):
+                draft_lines.pop(index)
+                st.session_state["purchase_invoice_draft_lines"] = draft_lines
+                st.rerun()
+
+    lines_subtotal = sum(line["quantity"] * line["unit_price"] for line in draft_lines)
+    st.metric("Subtotal de artículos (sin envío ni impuestos)", f"{lines_subtotal:,.2f} {currency}")
+
+    st.markdown("##### Datos compartidos de la factura")
+    same_currency = currency == base_currency
+    with st.form("purchase_invoice_header"):
+        header_cols = st.columns(3)
+        supplier = header_cols[0].text_input("Proveedor")
+        invoice_number = header_cols[1].text_input("N° de factura / control")
+        payment_method = header_cols[2].selectbox("Método de pago", PAYMENT_METHODS)
+        rate_cols = st.columns(2)
+        exchange_rate = rate_cols[0].number_input(
+            f"Tasa de cambio usada (1 {base_currency} = ? {currency})",
+            min_value=0.0001, value=1.0 if same_currency else _default_exchange_rate(currency, base_currency),
+            step=0.01, format="%.4f", disabled=same_currency,
+        )
+        invoice_date = rate_cols[1].date_input("Fecha de la factura", value=date.today())
+        shared_cols = st.columns(2)
+        shipping_cost = shared_cols[0].number_input(f"Envío / flete TOTAL de la factura ({currency})", min_value=0.0, value=0.0, step=1.0)
+        tax_amount = shared_cols[1].number_input(f"Impuestos TOTALES de la factura ({currency})", min_value=0.0, value=0.0, step=1.0)
+        submit_invoice = st.form_submit_button("Registrar factura completa", type="primary", use_container_width=True)
+
+    if submit_invoice:
+        effective_rate = 1.0 if same_currency else float(exchange_rate)
+        subtotals = [line["quantity"] * line["unit_price"] for line in draft_lines]
+        allocations = allocate_shared_costs(subtotals, float(shipping_cost), float(tax_amount))
+        by_id = {row["item_id"]: row for row in rows}
+        updated_lines = 0
+        for line, subtotal, (allocated_shipping, allocated_tax) in zip(draft_lines, subtotals, allocations):
+            item = by_id.get(line["item_id"])
+            if item is None:
+                continue
+            unit_cost, _total = _landed_unit_cost(subtotal, allocated_shipping, allocated_tax, effective_rate, line["quantity"])
+            purchase_detail = {
+                "currency": currency, "exchange_rate": effective_rate, "payment_method": payment_method,
+                "supplier": supplier.strip(), "material_subtotal": subtotal,
+                "shipping_cost": allocated_shipping, "tax_amount": allocated_tax,
+                "invoice_number": invoice_number.strip(),
+            }
+            reason = f"Factura {invoice_number.strip()}" if invoice_number.strip() else f"Factura de compra {invoice_date.isoformat()}"
+            _movement(item, "Entrada", line["quantity"], reason, unit_cost, purchase_detail=purchase_detail)
+            updated_lines += 1
+        _save(rows)
+        st.session_state["purchase_invoice_draft_lines"] = []
+        st.success(
+            f"Factura registrada: {updated_lines} artículo(s) actualizados, con el envío y los impuestos "
+            "repartidos proporcionalmente entre las líneas — no hace falta adivinar cuánto le tocaba a cada uno."
+        )
+        st.rerun()
 
 
 def _register(rows: list[dict]) -> None:
@@ -489,12 +628,13 @@ def _reservations(rows: list[dict]) -> None:
 def render_inventory_enterprise() -> None:
     render_page_header("Inventario empresarial", "Controla existencias, costos, movimientos, conteos, lotes y reposición desde una sola área.")
     rows = _items()
-    tabs = st.tabs(("Panel", "Registrar", "Catálogo", "Movimientos", "Reservas", "Conteo físico", "Reposición"))
+    tabs = st.tabs(("Panel", "Registrar", "Factura de compra", "Catálogo", "Movimientos", "Reservas", "Conteo físico", "Reposición"))
     with tabs[0]: _dashboard(rows)
     with tabs[1]: _register(rows)
-    with tabs[2]: _catalog(rows)
-    with tabs[3]: _movements(rows)
-    with tabs[4]: _reservations(rows)
-    with tabs[5]: _counts(rows)
-    with tabs[6]: _replenishment(rows)
+    with tabs[2]: _purchase_invoice(rows)
+    with tabs[3]: _catalog(rows)
+    with tabs[4]: _movements(rows)
+    with tabs[5]: _reservations(rows)
+    with tabs[6]: _counts(rows)
+    with tabs[7]: _replenishment(rows)
     st.caption("Los papeles, blancos de sublimación, materiales de Cameo y plastificación registrados aquí son reutilizados automáticamente por Producción y Costeo.")

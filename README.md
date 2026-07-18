@@ -34,7 +34,9 @@ Incluye:
 - **Módulos operativos activos**, entre ellos:
   - Centro de control, panel comercial y panel financiero
   - Clientes y seguimiento comercial, comprobantes
-  - Inventario, movimientos de inventario, alertas de stock
+  - Inventario, movimientos de inventario, alertas de stock, factura de
+    compra con varias líneas que comparten un mismo envío/impuesto (se
+    reparte proporcionalmente entre los artículos, no hay que adivinar)
   - Costeo (simple y por procesos/BOM multinivel, con margen de reventa
     propio para materiales que se venden tal cual), tasas de cambio
   - Órdenes de producción
