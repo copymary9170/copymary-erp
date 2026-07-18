@@ -50,7 +50,9 @@ Incluye:
     costo de compra + mantenimiento unificado de ambas bitácoras, costo
     real por unidad y señal de reponer-vs-reparar
   - Usuarios y roles
-  - RRHH y nómina (empleados, períodos, recibos de pago)
+  - RRHH y nómina (empleados, períodos, recibos de pago con descarga
+    imprimible, pago conectado a Caja como egreso real, vacaciones/permisos,
+    historial de aumentos salariales)
   - Estado de Resultados (P&L consolidado, tendencia de 6 meses)
   - Flujo de caja proyectado (posición de efectivo a 30/60/90 días)
   - Mantenimiento preventivo por tiempo y por uso (avisa por lo que ocurra
