@@ -35,6 +35,7 @@ TASK_SUGGESTIONS = ("Limpieza de cabezales", "Cambio de cuchilla", "Lubricación
 USAGE_METRICS = (
     "", "Páginas impresas", "Metros de corte", "Cortes", "Planchados", "Horas de uso", "Metros laminados",
     "Metros impresos", "Tarjetas impresas", "Esténciles impresos", "Grabados", "Perforaciones",
+    "Estampados de foil",
 )
 
 # Tareas estándar por tipo de equipo de CopyMary, con la frecuencia típica y,
@@ -103,6 +104,12 @@ EQUIPMENT_PRESETS: dict[str, tuple[dict, ...]] = {
         {"task_name": "Cambiar cabezal térmico", "frequency_days": 0, "usage_metric": "Esténciles impresos", "usage_frequency": 10000.0, "wear_part": "Cabezal térmico"},
         {"task_name": "Revisar rodillo de arrastre", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
     ),
+    "Estampadora / aplicadora de foil": (
+        {"task_name": "Calibrar temperatura de estampado", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Limpiar residuos de foil en rodillos/plancha", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Revisar rodillo de silicona / goma de presión", "frequency_days": 0, "usage_metric": "Estampados de foil", "usage_frequency": 3000.0, "wear_part": "Rodillo de silicona"},
+        {"task_name": "Revisar resistencia y termostato", "frequency_days": 0, "usage_metric": "Estampados de foil", "usage_frequency": 5000.0, "wear_part": "Resistencia"},
+    ),
     "Guillotina / cizalla": (
         {"task_name": "Afilar o voltear cuchilla", "frequency_days": 0, "usage_metric": "Cortes", "usage_frequency": 5000.0, "wear_part": "Cuchilla de guillotina"},
         {"task_name": "Lubricar guías y revisar apriete", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
@@ -128,6 +135,7 @@ _PRESET_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Impresora térmica (tickets / etiquetas)", ("impresora térmica", "impresora termica", "ticket", "tiquet", "etiqueta", "recibo", "pos ")),
     ("Impresora 3D (filamento / resina)", ("3d", "filamento", "resina", "fdm", "ender", "creality", "prusa", "anycubic")),
     ("Láser de grabado / corte (CO2 / diodo)", ("grabado", "grabar", "grabador", "co2", "diodo", "fibra", "engrav")),
+    ("Estampadora / aplicadora de foil", ("foil", "estampad", "hot stamp")),
     ("Prensa / plancha térmica", ("prensa", "plancha", "termofij", "térmic", "termic", "calor")),
     ("Laminadora / plastificadora", ("lamin", "plastific", "rodillo")),
     ("Guillotina / cizalla", ("guillotina", "cizalla")),

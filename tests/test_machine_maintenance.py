@@ -155,6 +155,25 @@ def test_preset_group_recognizes_tattoo_stencil_printer():
     assert mm.preset_group_for_machine("Impresora de esténciles para tatuajes", "Otro") == "Impresora de esténciles de tatuaje"
 
 
+def test_preset_group_recognizes_foil_applicator():
+    assert mm.preset_group_for_machine("Estampadora de foil en caliente", "Acabado") == "Estampadora / aplicadora de foil"
+
+
+def test_preset_group_foil_wins_over_heat_press_and_laminator():
+    """'Plancha de foil' contiene 'plancha' (palabra de la prensa) y
+    'Laminadora de foil' contiene 'lamin' (palabra de la laminadora); el
+    grupo de foil debe ganar en ambos casos por orden de prioridad."""
+    assert mm.preset_group_for_machine("Plancha de foil", "Otro") == "Estampadora / aplicadora de foil"
+    assert mm.preset_group_for_machine("Laminadora de foil", "Otro") == "Estampadora / aplicadora de foil"
+
+
+def test_presets_for_foil_applicator_include_silicone_roller_by_stamps():
+    presets = mm.presets_for_machine("Estampadora de foil", "Acabado")
+    roller = next(p for p in presets if "silicona" in p["task_name"].casefold())
+    assert roller["usage_metric"] == "Estampados de foil"
+    assert roller["wear_part"] == "Rodillo de silicona"
+
+
 def test_preset_group_guillotine_wins_over_cutting_plotter():
     """'Guillotina de corte' contiene 'corte' (palabra del plotter); la
     guillotina debe ganar por orden de prioridad."""

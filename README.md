@@ -53,11 +53,11 @@ Incluye:
   - Flujo de caja proyectado (posición de efectivo a 30/60/90 días)
   - Mantenimiento preventivo por tiempo y por uso (avisa por lo que ocurra
     primero: p. ej. cuchilla Cameo por metros cortados, cabezal por páginas,
-    prensa por planchados), con tareas sugeridas para 13 tipos de equipo del
+    prensa por planchados), con tareas sugeridas para 14 tipos de equipo del
     taller (impresoras de cartuchos/tanque/láser/sublimación, plotter de
     corte, láser de grabado, impresora 3D, carnets PVC, térmica de tickets,
-    esténciles de tatuaje, prensa térmica, laminadora, guillotina,
-    anilladora), bitácora
+    esténciles de tatuaje, prensa térmica, estampadora de foil, laminadora,
+    guillotina, anilladora), bitácora
     de costo por máquina, contador de horas alimentado automáticamente por
     los trabajos reales confirmados en Costeo por procesos, descuento real
     de Inventario cuando el repuesto instalado salía de una existencia, y

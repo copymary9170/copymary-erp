@@ -25,6 +25,7 @@ ASSET_CATEGORIES = (
     "Láser de grabado o corte",
     "Equipo de sublimación",
     "Prensa o plancha térmica",
+    "Estampadora o aplicadora de foil",
     "Plastificadora o laminadora",
     "Guillotina o cizalla",
     "Anilladora o encuadernadora",
