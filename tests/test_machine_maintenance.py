@@ -191,6 +191,78 @@ def test_plan_alert_ok_when_nothing_pending():
 
 
 # ---------------------------------------------------------------------------
+# Repuesto planeado: avisar ANTES de quedarse sin él
+# ---------------------------------------------------------------------------
+
+def _plan_with_spare_part(**overrides) -> dict:
+    base = {
+        "plan_id": "MNT-S", "active": 1, "frequency_days": 0,
+        "next_due_date": (TODAY + timedelta(days=90)).isoformat(),
+        "usage_metric": "", "usage_frequency": 0.0, "current_usage": 0.0, "next_due_usage": 0.0,
+        "default_inventory_item_id": "ITM-1",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_spare_part_stock_for_returns_available_quantity():
+    plan = _plan_with_spare_part()
+    items = [{"item_id": "ITM-1", "available_quantity": 3.0}]
+    assert mm.spare_part_stock_for(plan, items) == 3.0
+
+
+def test_spare_part_stock_for_none_when_plan_has_no_spare_part():
+    plan = _plan_with_spare_part(default_inventory_item_id="")
+    assert mm.spare_part_stock_for(plan, [{"item_id": "ITM-1", "available_quantity": 3.0}]) is None
+
+
+def test_spare_part_stock_for_none_when_item_not_found_in_inventory():
+    plan = _plan_with_spare_part()
+    assert mm.spare_part_stock_for(plan, []) is None
+
+
+def test_spare_part_shortage_false_when_maintenance_not_due_soon():
+    """Aunque no haya stock, si el mantenimiento está lejos no urge avisar."""
+    plan = _plan_with_spare_part(next_due_date=(TODAY + timedelta(days=90)).isoformat())
+    items = [{"item_id": "ITM-1", "available_quantity": 0.0}]
+    assert mm.spare_part_shortage(plan, items, TODAY) is False
+
+
+def test_spare_part_shortage_true_when_due_soon_and_no_stock():
+    plan = _plan_with_spare_part(next_due_date=(TODAY + timedelta(days=3)).isoformat())
+    items = [{"item_id": "ITM-1", "available_quantity": 0.0}]
+    assert mm.spare_part_shortage(plan, items, TODAY) is True
+
+
+def test_spare_part_shortage_true_when_overdue_and_no_stock():
+    plan = _plan_with_spare_part(next_due_date=(TODAY - timedelta(days=1)).isoformat())
+    items = [{"item_id": "ITM-1", "available_quantity": 0.0}]
+    assert mm.spare_part_shortage(plan, items, TODAY) is True
+
+
+def test_spare_part_shortage_false_when_due_soon_but_stock_available():
+    plan = _plan_with_spare_part(next_due_date=(TODAY + timedelta(days=3)).isoformat())
+    items = [{"item_id": "ITM-1", "available_quantity": 5.0}]
+    assert mm.spare_part_shortage(plan, items, TODAY) is False
+
+
+def test_spare_part_shortage_false_when_no_spare_part_assigned():
+    plan = _plan_with_spare_part(default_inventory_item_id="", next_due_date=(TODAY - timedelta(days=1)).isoformat())
+    assert mm.spare_part_shortage(plan, [], TODAY) is False
+
+
+def test_plans_with_spare_part_shortage_filters_inactive():
+    plans = [
+        _plan_with_spare_part(plan_id="MNT-A", active=1, next_due_date=(TODAY - timedelta(days=1)).isoformat()),
+        _plan_with_spare_part(plan_id="MNT-B", active=0, next_due_date=(TODAY - timedelta(days=1)).isoformat()),
+    ]
+    items = [{"item_id": "ITM-1", "available_quantity": 0.0}]
+    shortages = mm.plans_with_spare_part_shortage(plans, items, TODAY)
+    assert len(shortages) == 1
+    assert shortages[0]["plan_id"] == "MNT-A"
+
+
+# ---------------------------------------------------------------------------
 # Flujo completo con base de datos
 # ---------------------------------------------------------------------------
 
@@ -308,6 +380,24 @@ def test_overdue_plan_becomes_current_after_maintenance_registered(isolated_data
 
     plans = mm.list_plans()
     assert mm.is_overdue(plans[0], date.today()) is False
+
+
+def test_create_plan_stores_default_inventory_item_id(isolated_database):
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan(
+        "MCH-1", "Cambiar cuchilla", frequency_days=0,
+        usage_metric="Metros de corte", usage_frequency=500.0,
+        default_inventory_item_id="ITM-1",
+    )
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["default_inventory_item_id"] == "ITM-1"
+
+
+def test_create_plan_default_inventory_item_id_defaults_to_empty(isolated_database):
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan("MCH-1", "Limpieza de cabezales", frequency_days=15)
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["default_inventory_item_id"] == ""
 
 
 def test_create_usage_based_plan_sets_next_due_usage(isolated_database):

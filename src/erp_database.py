@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 @dataclass(frozen=True)
@@ -389,6 +389,22 @@ def _migrate_maintenance_inventory_v10(connection: Any) -> None:
     })
 
 
+def _migrate_maintenance_spare_part_v11(connection: Any) -> None:
+    """Migración v11: repuesto habitual planeado por adelantado en cada plan.
+
+    La migración v10 solo sabe qué repuesto se usó DESPUÉS de hacer el
+    mantenimiento. Pero el reparador necesita saberlo ANTES: si la cuchilla
+    de la Cameo vence en 3 días y el stock de cuchillas en Inventario ya está
+    en cero, hace falta comprar antes de que llegue el momento, no enterarse
+    al ir a registrar el servicio. `default_inventory_item_id` es el repuesto
+    que normalmente usa ese plan, para poder cruzarlo contra el stock actual
+    y avisar con antelación.
+    """
+    _ensure_columns(connection, "maintenance_plans", {
+        "default_inventory_item_id": "TEXT NOT NULL DEFAULT ''",
+    })
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -573,6 +589,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (10, "maintenance_inventory_deduction", _now()),
+        )
+        _migrate_maintenance_spare_part_v11(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (11, "maintenance_spare_part_planning", _now()),
         )
     return get_database_status()
 
