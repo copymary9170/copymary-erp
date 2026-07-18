@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+import streamlit as st
+
 from src import machine_maintenance as mm
 from src.erp_database import connect, initialize_database
 
@@ -226,6 +228,69 @@ def test_register_maintenance_creates_log_entry(isolated_database):
     assert logs[0]["performed_by"] == "Ana"
     assert logs[0]["cost"] == 25.0
     assert logs[0]["notes"] == "Cuchilla 45°"
+
+
+def test_register_maintenance_returns_log_dict_with_defaults(isolated_database):
+    """register_maintenance() devuelve el registro creado (no solo el id),
+    igual que _log_maintenance de assets.py, para que el llamador pueda
+    revisar si el descuento de Inventario funcionó."""
+    _create_machine()
+    plan_id = mm.create_plan("MCH-1", "Limpieza de cabezales", frequency_days=15)
+
+    entry = mm.register_maintenance(plan_id, "MCH-1", "2026-07-11", frequency_days=15, cost=10.0)
+
+    assert entry["plan_id"] == plan_id
+    assert entry["cost"] == 10.0
+    assert entry["inventory_item_id"] == ""
+    assert entry["inventory_deducted"] is False
+
+
+def test_register_maintenance_without_inventory_link_does_not_touch_inventory(isolated_database):
+    _create_machine()
+    plan_id = mm.create_plan("MCH-1", "Limpieza de cabezales", frequency_days=15)
+    st.session_state["inventory_registry"] = [{"item_id": "ITM-1", "name": "Cuchilla", "available_quantity": 5.0, "unit_cost": 10.0}]
+
+    entry = mm.register_maintenance(plan_id, "MCH-1", "2026-07-11", frequency_days=15, cost=8.0)
+
+    assert entry["inventory_deducted"] is False
+    assert st.session_state["inventory_registry"][0]["available_quantity"] == 5.0
+
+
+def test_register_maintenance_with_inventory_link_deducts_real_stock(isolated_database):
+    """El repuesto real (p. ej. la cuchilla de la Cameo) debe descontarse de
+    Inventario al registrar el mantenimiento — antes esta conexión no
+    existía en Mantenimiento preventivo (solo en la bitácora de Activos)."""
+    _create_machine("MCH-1", "Cameo 4")
+    plan_id = mm.create_plan("MCH-1", "Cambiar cuchilla", frequency_days=0, usage_metric="Metros de corte", usage_frequency=500.0)
+    st.session_state["inventory_registry"] = [{"item_id": "ITM-1", "name": "Cuchilla Cameo", "available_quantity": 5.0, "unit_cost": 10.0}]
+
+    entry = mm.register_maintenance(
+        plan_id, "MCH-1", "2026-07-11", frequency_days=0, cost=0.0,
+        inventory_item_id="ITM-1", inventory_quantity=1.0,
+    )
+
+    assert entry["inventory_deducted"] is True
+    assert st.session_state["inventory_registry"][0]["available_quantity"] == 4.0
+    log = mm.logs_for_plan(plan_id)[0]
+    assert log["inventory_item_id"] == "ITM-1"
+    assert log["inventory_quantity"] == 1.0
+    assert log["inventory_deducted"] == 1
+
+
+def test_register_maintenance_inventory_link_but_item_missing_reports_not_deducted(isolated_database):
+    """Si el ítem indicado no existe en ninguna lista de Inventario conocida,
+    debe quedar claro que NO se descontó (para poder avisar al usuario),
+    sin romper el registro del mantenimiento."""
+    _create_machine()
+    plan_id = mm.create_plan("MCH-1", "Limpieza de cabezales", frequency_days=15)
+    st.session_state.pop("inventory_registry", None)
+
+    entry = mm.register_maintenance(
+        plan_id, "MCH-1", "2026-07-11", frequency_days=15, cost=0.0,
+        inventory_item_id="NO-EXISTE", inventory_quantity=1.0,
+    )
+
+    assert entry["inventory_deducted"] is False
 
 
 def test_overdue_plan_becomes_current_after_maintenance_registered(isolated_database):

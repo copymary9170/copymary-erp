@@ -319,20 +319,40 @@ def register_maintenance(
     cost: float = 0.0,
     notes: str = "",
     usage_at_service: float | None = None,
-) -> str:
+    inventory_item_id: str = "",
+    inventory_quantity: float = 0.0,
+) -> dict:
     """Registra un mantenimiento realizado y reprograma automáticamente el
     próximo, tanto por tiempo (performed_date + frequency_days) como por uso
     (lectura del contador al hacer el servicio + frecuencia por uso del plan).
 
     `usage_at_service` es la lectura del contador (páginas, metros, planchados)
     al momento del servicio; si no se indica, se conserva la lectura actual
-    del plan."""
+    del plan.
+
+    Si el repuesto usado salía de una existencia registrada en Inventario
+    (`inventory_item_id` + `inventory_quantity` > 0), se descuenta el stock
+    real y queda trazado en el movimiento de inventario — el mismo criterio
+    que ya usa la bitácora de mantenimiento por activo en `assets.py`. Antes
+    esta conexión no existía aquí: se podía anotar 'cambié la cuchilla' sin
+    que el conteo de cuchillas en Inventario se moviera.
+
+    Devuelve el registro del mantenimiento creado (incluye `inventory_deducted`,
+    para que el llamador pueda avisar si el descuento falló)."""
     initialize_database()
     log_id = f"LOG-{uuid4().hex[:8].upper()}"
     if frequency_days and frequency_days > 0:
         next_due = next_due_date_after(date.fromisoformat(performed_date), frequency_days).isoformat()
     else:
         next_due = _NO_TIME_TRIGGER_DATE
+
+    inventory_deducted = False
+    if inventory_item_id and inventory_quantity > 0:
+        from src.print_jobs import deduct_inventory_item
+        inventory_deducted = deduct_inventory_item(
+            inventory_item_id, inventory_quantity, f"Mantenimiento preventivo: {notes.strip() or 'repuesto reemplazado'}"
+        )
+
     with connect() as conn:
         plan_row = conn.execute(
             "SELECT usage_frequency, current_usage FROM maintenance_plans WHERE plan_id = ?", (plan_id,)
@@ -344,15 +364,37 @@ def register_maintenance(
             service_usage = float(plan_row["current_usage"]) if plan_row else 0.0
         next_due_usage = next_due_usage_after(service_usage, usage_frequency) if usage_frequency > 0 else 0.0
         conn.execute(
-            "INSERT INTO maintenance_logs(log_id, plan_id, machine_id, performed_date, performed_by, cost, notes, usage_at_service, created_at_utc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (log_id, plan_id, machine_id, performed_date, performed_by.strip(), cost, notes.strip(), service_usage, date.today().isoformat()),
+            """
+            INSERT INTO maintenance_logs(
+                log_id, plan_id, machine_id, performed_date, performed_by, cost, notes, usage_at_service,
+                inventory_item_id, inventory_quantity, inventory_deducted, created_at_utc
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                log_id, plan_id, machine_id, performed_date, performed_by.strip(), cost, notes.strip(), service_usage,
+                inventory_item_id, float(inventory_quantity), int(inventory_deducted), date.today().isoformat(),
+            ),
         )
         conn.execute(
             "UPDATE maintenance_plans SET last_done_date = ?, next_due_date = ?, last_done_usage = ?, next_due_usage = ?, current_usage = ? WHERE plan_id = ?",
             (performed_date, next_due, service_usage, next_due_usage, service_usage, plan_id),
         )
-    record_audit_event("produccion", "maintenance_plans", plan_id, "maintenance_done", after={"performed_date": performed_date, "cost": cost, "usage_at_service": service_usage})
-    return log_id
+    record_audit_event(
+        "produccion", "maintenance_plans", plan_id, "maintenance_done",
+        after={"performed_date": performed_date, "cost": cost, "usage_at_service": service_usage, "inventory_deducted": inventory_deducted},
+    )
+    return {
+        "log_id": log_id,
+        "plan_id": plan_id,
+        "machine_id": machine_id,
+        "performed_date": performed_date,
+        "cost": cost,
+        "usage_at_service": service_usage,
+        "inventory_item_id": inventory_item_id,
+        "inventory_quantity": float(inventory_quantity),
+        "inventory_deducted": inventory_deducted,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +546,16 @@ def render_machine_maintenance() -> None:
                         if st.form_submit_button("Actualizar lectura"):
                             update_usage_reading(plan["plan_id"], new_reading)
                             st.rerun()
+
+                inventory_options = {"Ninguno / no venía de Inventario": ""}
+                try:
+                    from src import inventory_enterprise
+                    for item in inventory_enterprise._items():
+                        if item.get("active", True):
+                            inventory_options[f"{item['name']} · stock {item['available_quantity']:,.2f} {item['unit_name']}"] = item["item_id"]
+                except Exception:
+                    pass
+
                 with st.form(f"log_form_{plan['plan_id']}", clear_on_submit=True):
                     performed_date = st.date_input("Fecha realizada", value=today, key=f"date_{plan['plan_id']}")
                     performed_by = st.text_input("Realizado por", key=f"by_{plan['plan_id']}")
@@ -514,20 +566,29 @@ def render_machine_maintenance() -> None:
                             f"Lectura de uso al hacer el servicio ({plan.get('usage_metric', 'uso')})",
                             min_value=0.0, value=float(plan.get("current_usage") or 0), step=10.0, key=f"usvc_{plan['plan_id']}",
                         )
-                    log_notes = st.text_input("Notas", key=f"notes_{plan['plan_id']}")
+                    inv_cols = st.columns(2)
+                    selected_inventory_label = inv_cols[0].selectbox("¿El repuesto salió de Inventario?", tuple(inventory_options), key=f"minv_{plan['plan_id']}")
+                    inventory_quantity = inv_cols[1].number_input("Cantidad a descontar", min_value=0.0, value=1.0, step=1.0, key=f"mqty_{plan['plan_id']}")
+                    log_notes = st.text_input("Notas (ej. repuesto instalado)", key=f"notes_{plan['plan_id']}")
                     log_submitted = st.form_submit_button("Registrar mantenimiento", type="primary")
                 if log_submitted:
-                    register_maintenance(
+                    selected_item_id = inventory_options[selected_inventory_label]
+                    entry = register_maintenance(
                         plan["plan_id"], plan["machine_id"], performed_date.isoformat(), int(plan.get("frequency_days") or 0),
                         performed_by, cost, log_notes, usage_at_service=usage_at_service,
+                        inventory_item_id=selected_item_id, inventory_quantity=inventory_quantity if selected_item_id else 0.0,
                     )
+                    if selected_item_id and not entry["inventory_deducted"]:
+                        st.warning("No se pudo descontar de Inventario; revísalo manualmente.")
                     st.success("Mantenimiento registrado. Próximo servicio reprogramado por tiempo y por uso.")
                     st.rerun()
 
             logs = logs_for_plan(plan["plan_id"])
             if logs:
                 total_cost = sum(float(log.get("cost", 0.0)) for log in logs)
-                st.caption(f"Último: {logs[0]['performed_date']} · {len(logs)} mantenimiento(s) registrados · {format_money(total_cost)} acumulado")
+                deducted_count = sum(1 for log in logs if log.get("inventory_deducted"))
+                extra = f" · {deducted_count} con repuesto descontado de Inventario" if deducted_count else ""
+                st.caption(f"Último: {logs[0]['performed_date']} · {len(logs)} mantenimiento(s) registrados · {format_money(total_cost)} acumulado{extra}")
 
     render_info_card(
         "Alcance",

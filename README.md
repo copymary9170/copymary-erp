@@ -54,8 +54,9 @@ Incluye:
   - Mantenimiento preventivo por tiempo y por uso (avisa por lo que ocurra
     primero: p. ej. cuchilla Cameo por metros cortados, cabezal por páginas,
     prensa por planchados), con tareas sugeridas por tipo de equipo, bitácora
-    de costo por máquina, y contador de horas alimentado automáticamente por
-    los trabajos reales confirmados en Costeo por procesos
+    de costo por máquina, contador de horas alimentado automáticamente por
+    los trabajos reales confirmados en Costeo por procesos, y descuento real
+    de Inventario cuando el repuesto instalado salía de una existencia
   - Venta rápida de mostrador (tarifario configurable, sin cliente obligatorio)
   - Análisis y costeo de impresión: confirma trabajos reales (descuenta papel
     de Inventario y suma uso a la impresora en Activos) y los envía a
