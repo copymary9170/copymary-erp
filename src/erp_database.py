@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 13
 
 
 @dataclass(frozen=True)
@@ -405,6 +405,57 @@ def _migrate_maintenance_spare_part_v11(connection: Any) -> None:
     })
 
 
+def _migrate_payroll_cash_link_v12(connection: Any) -> None:
+    """Migración v12: pagar un recibo de nómina ahora mueve Caja de verdad.
+
+    Antes, marcar un recibo como "Pagado" solo cambiaba `payment_status` —
+    el dinero desaparecía del rastro contable, sin quedar ningún egreso real
+    en Caja. `payment_method` guarda cómo se pagó (efectivo, transferencia,
+    etc.) y `cash_movement_id` enlaza el recibo con el movimiento de Caja que
+    generó, para poder rastrear el pago en ambos sentidos.
+    """
+    _ensure_columns(connection, "payroll_entries", {
+        "payment_method": "TEXT NOT NULL DEFAULT ''",
+        "cash_movement_id": "TEXT NOT NULL DEFAULT ''",
+    })
+
+
+def _migrate_payroll_hr_v13(connection: Any) -> None:
+    """Migración v13: vacaciones/permisos e historial de aumentos salariales.
+
+    Gaps reales de RRHH detectados: no había forma de registrar que un
+    empleado tomó vacaciones o un permiso, ni de dejar constancia de cuándo y
+    por qué se le subió el sueldo a alguien — solo se veía el salario actual,
+    sin historia.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS employee_time_off (
+            time_off_id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL,
+            leave_type TEXT NOT NULL DEFAULT 'Vacaciones',
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            days REAL NOT NULL DEFAULT 0,
+            paid INTEGER NOT NULL DEFAULT 1,
+            notes TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS employee_salary_history (
+            change_id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL,
+            previous_salary REAL NOT NULL DEFAULT 0,
+            new_salary REAL NOT NULL DEFAULT 0,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            effective_date TEXT NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -594,6 +645,16 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (11, "maintenance_spare_part_planning", _now()),
+        )
+        _migrate_payroll_cash_link_v12(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (12, "payroll_cash_link", _now()),
+        )
+        _migrate_payroll_hr_v13(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (13, "payroll_time_off_and_salary_history", _now()),
         )
     return get_database_status()
 
