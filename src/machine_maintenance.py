@@ -31,8 +31,12 @@ TASK_SUGGESTIONS = ("Limpieza de cabezales", "Cambio de cuchilla", "Lubricación
 
 # Unidades de uso típicas del taller (el desgaste real es por trabajo, no por
 # calendario): una cuchilla se gasta por metros cortados, un cabezal por
-# páginas, una prensa por planchados.
-USAGE_METRICS = ("", "Páginas impresas", "Metros de corte", "Cortes", "Planchados", "Horas de uso", "Metros laminados")
+# páginas, una prensa por planchados, un tubo CO2 por horas de grabado.
+USAGE_METRICS = (
+    "", "Páginas impresas", "Metros de corte", "Cortes", "Planchados", "Horas de uso", "Metros laminados",
+    "Metros impresos", "Tarjetas impresas", "Esténciles impresos", "Grabados", "Perforaciones",
+    "Estampados de foil",
+)
 
 # Tareas estándar por tipo de equipo de CopyMary, con la frecuencia típica y,
 # cuando el desgaste es por uso, la unidad, cada cuánto y el repuesto que se
@@ -50,25 +54,96 @@ EQUIPMENT_PRESETS: dict[str, tuple[dict, ...]] = {
         {"task_name": "Purga y agitación de tinta de sublimación", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
         {"task_name": "Cambiar almohadilla de tinta residual (waste pad)", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 15000.0, "wear_part": "Almohadilla de tinta residual"},
     ),
+    "Impresora de cartuchos (inyección)": (
+        {"task_name": "Test de inyectores / limpieza de cabezales", "frequency_days": 14, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Cambiar cartucho negro", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 300.0, "wear_part": "Cartucho negro"},
+        {"task_name": "Cambiar cartucho tricolor", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 200.0, "wear_part": "Cartucho tricolor"},
+        {"task_name": "Limpiar rodillos de arrastre de papel", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
+    "Impresora láser (tóner)": (
+        {"task_name": "Cambiar tóner", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 1500.0, "wear_part": "Tóner"},
+        {"task_name": "Cambiar tambor (drum)", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 12000.0, "wear_part": "Tambor"},
+        {"task_name": "Cambiar fusor", "frequency_days": 0, "usage_metric": "Páginas impresas", "usage_frequency": 50000.0, "wear_part": "Fusor"},
+        {"task_name": "Limpiar tóner residual del interior", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
     "Prensa / plancha térmica": (
         {"task_name": "Calibrar temperatura", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
         {"task_name": "Revisar presión y resistencia", "frequency_days": 0, "usage_metric": "Planchados", "usage_frequency": 2000.0, "wear_part": "Resistencia"},
+        {"task_name": "Revisar teflón / lámina protectora", "frequency_days": 0, "usage_metric": "Planchados", "usage_frequency": 500.0, "wear_part": "Lámina de teflón"},
     ),
     "Laminadora / plastificadora": (
         {"task_name": "Limpiar rodillos", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
         {"task_name": "Revisar rodillos y temperatura", "frequency_days": 0, "usage_metric": "Metros laminados", "usage_frequency": 3000.0, "wear_part": "Rodillos"},
     ),
+    "Impresora 3D (filamento / resina)": (
+        {"task_name": "Limpiar y lubricar ejes y rieles", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Cambiar boquilla (nozzle)", "frequency_days": 0, "usage_metric": "Horas de uso", "usage_frequency": 300.0, "wear_part": "Boquilla (nozzle)"},
+        {"task_name": "Revisar y tensar correas", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Nivelar cama de impresión", "frequency_days": 15, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Cambiar film FEP (resina)", "frequency_days": 0, "usage_metric": "Horas de uso", "usage_frequency": 50.0, "wear_part": "Film FEP"},
+    ),
+    "Láser de grabado / corte (CO2 / diodo)": (
+        {"task_name": "Limpiar lente y espejos", "frequency_days": 0, "usage_metric": "Horas de uso", "usage_frequency": 40.0, "wear_part": ""},
+        {"task_name": "Revisar alineación de espejos", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Limpiar/cambiar filtro de extracción de humo", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": "Filtro de extracción"},
+        {"task_name": "Cambiar tubo CO2", "frequency_days": 0, "usage_metric": "Horas de uso", "usage_frequency": 3000.0, "wear_part": "Tubo CO2"},
+        {"task_name": "Lubricar rieles", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
+    "Impresora de carnets / tarjetas PVC": (
+        {"task_name": "Limpiar rodillos con tarjeta de limpieza", "frequency_days": 0, "usage_metric": "Tarjetas impresas", "usage_frequency": 1000.0, "wear_part": "Kit de limpieza"},
+        {"task_name": "Cambiar cinta / ribbon", "frequency_days": 0, "usage_metric": "Tarjetas impresas", "usage_frequency": 250.0, "wear_part": "Ribbon YMCKO"},
+        {"task_name": "Cambiar cabezal de impresión", "frequency_days": 0, "usage_metric": "Tarjetas impresas", "usage_frequency": 50000.0, "wear_part": "Cabezal de impresión"},
+    ),
+    "Impresora térmica (tickets / etiquetas)": (
+        {"task_name": "Limpiar cabezal térmico con alcohol isopropílico", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Cambiar cabezal térmico", "frequency_days": 0, "usage_metric": "Metros impresos", "usage_frequency": 50000.0, "wear_part": "Cabezal térmico"},
+        {"task_name": "Revisar rodillo de arrastre (platen)", "frequency_days": 180, "usage_metric": "", "usage_frequency": 0.0, "wear_part": "Rodillo platen"},
+    ),
+    "Impresora de esténciles de tatuaje": (
+        {"task_name": "Limpiar cabezal térmico con alcohol isopropílico", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Cambiar cabezal térmico", "frequency_days": 0, "usage_metric": "Esténciles impresos", "usage_frequency": 10000.0, "wear_part": "Cabezal térmico"},
+        {"task_name": "Revisar rodillo de arrastre", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
+    "Estampadora / aplicadora de foil": (
+        {"task_name": "Calibrar temperatura de estampado", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Limpiar residuos de foil en rodillos/plancha", "frequency_days": 30, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+        {"task_name": "Revisar rodillo de silicona / goma de presión", "frequency_days": 0, "usage_metric": "Estampados de foil", "usage_frequency": 3000.0, "wear_part": "Rodillo de silicona"},
+        {"task_name": "Revisar resistencia y termostato", "frequency_days": 0, "usage_metric": "Estampados de foil", "usage_frequency": 5000.0, "wear_part": "Resistencia"},
+    ),
+    "Guillotina / cizalla": (
+        {"task_name": "Afilar o voltear cuchilla", "frequency_days": 0, "usage_metric": "Cortes", "usage_frequency": 5000.0, "wear_part": "Cuchilla de guillotina"},
+        {"task_name": "Lubricar guías y revisar apriete", "frequency_days": 90, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
+    "Anilladora / encuadernadora": (
+        {"task_name": "Revisar punzones", "frequency_days": 0, "usage_metric": "Perforaciones", "usage_frequency": 3000.0, "wear_part": "Punzones"},
+        {"task_name": "Limpiar y lubricar mecanismo", "frequency_days": 60, "usage_metric": "", "usage_frequency": 0.0, "wear_part": ""},
+    ),
 }
 
-# El orden importa: las palabras específicas del dispositivo (prensa,
-# laminadora, cameo/corte) se evalúan antes que "sublimación", que es una
-# palabra amplia del proceso y aparece también en la categoría de una prensa
-# o una laminadora del taller.
+# El orden importa: las palabras específicas del dispositivo se evalúan antes
+# que las amplias del proceso. Ejemplos de conflictos resueltos por orden:
+# - "Impresora térmica" contiene "térmic" (palabra de la prensa) => el grupo de
+#   impresora térmica va ANTES que la prensa;
+# - "Láser de grabado CO2" contiene "láser" (palabra de la impresora láser) =>
+#   el grabador va ANTES que la impresora láser;
+# - "Guillotina de corte" contiene "corte" (palabra del plotter) => la
+#   guillotina va ANTES que el plotter;
+# - "sublim"/"impres" son las más amplias y van de últimas como comodín.
 _PRESET_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Prensa / plancha térmica", ("prensa", "plancha", "térmic", "termic", "calor")),
+    ("Impresora de esténciles de tatuaje", ("tatu", "stencil", "esténcil", "estencil")),
+    ("Impresora de carnets / tarjetas PVC", ("pvc", "carnet", "credencial", "cr80", "zebra", "fargo", "evolis")),
+    ("Impresora térmica (tickets / etiquetas)", ("impresora térmica", "impresora termica", "ticket", "tiquet", "etiqueta", "recibo", "pos ")),
+    ("Impresora 3D (filamento / resina)", ("3d", "filamento", "resina", "fdm", "ender", "creality", "prusa", "anycubic")),
+    ("Láser de grabado / corte (CO2 / diodo)", ("grabado", "grabar", "grabador", "co2", "diodo", "fibra", "engrav")),
+    ("Estampadora / aplicadora de foil", ("foil", "estampad", "hot stamp")),
+    ("Prensa / plancha térmica", ("prensa", "plancha", "termofij", "térmic", "termic", "calor")),
     ("Laminadora / plastificadora", ("lamin", "plastific", "rodillo")),
+    ("Guillotina / cizalla", ("guillotina", "cizalla")),
+    ("Anilladora / encuadernadora", ("anillad", "encuadernad", "espiral", "wire")),
     ("Plotter de corte (Cameo / Silhouette)", ("cameo", "silhouette", "plotter", "corte", "vinil")),
-    ("Impresora de sublimación (tanque / EcoTank)", ("sublim", "impres", "ecotank", "tanque", "epson")),
+    ("Impresora láser (tóner)", ("láser", "laser", "tóner", "toner")),
+    ("Impresora de cartuchos (inyección)", ("cartucho", "deskjet")),
+    ("Impresora de sublimación (tanque / EcoTank)", ("sublim", "ecotank", "tanque", "epson", "impres")),
 )
 
 
