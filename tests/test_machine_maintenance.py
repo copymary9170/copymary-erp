@@ -281,6 +281,44 @@ def test_register_maintenance_reschedules_usage_from_service_reading(isolated_da
     assert logs[0]["usage_at_service"] == 510.0
 
 
+def test_accumulate_usage_for_machine_adds_to_matching_active_plan(isolated_database):
+    """El contador de uso puede alimentarse automáticamente (p. ej. desde un
+    trabajo costeado confirmado en Costeo por procesos), no solo a mano."""
+    _create_machine("MCH-1", "Prensa térmica")
+    plan_id = mm.create_plan("MCH-1", "Revisar presión", frequency_days=0, usage_metric="Horas de uso", usage_frequency=100.0, current_usage=10.0)
+
+    updated = mm.accumulate_usage_for_machine("MCH-1", "Horas de uso", 2.5)
+
+    assert updated == 1
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["current_usage"] == 12.5
+
+
+def test_accumulate_usage_for_machine_ignores_plans_with_different_metric(isolated_database):
+    _create_machine("MCH-1", "Cameo")
+    mm.create_plan("MCH-1", "Cambiar cuchilla", frequency_days=0, usage_metric="Metros de corte", usage_frequency=500.0)
+
+    updated = mm.accumulate_usage_for_machine("MCH-1", "Horas de uso", 5.0)
+
+    assert updated == 0
+
+
+def test_accumulate_usage_for_machine_ignores_inactive_plans(isolated_database):
+    _create_machine("MCH-1", "Prensa térmica")
+    plan_id = mm.create_plan("MCH-1", "Revisar presión", frequency_days=0, usage_metric="Horas de uso", usage_frequency=100.0)
+    with connect() as conn:
+        conn.execute("UPDATE maintenance_plans SET active = 0 WHERE plan_id = ?", (plan_id,))
+
+    updated = mm.accumulate_usage_for_machine("MCH-1", "Horas de uso", 5.0)
+    assert updated == 0
+
+
+def test_accumulate_usage_for_machine_zero_amount_is_noop(isolated_database):
+    _create_machine("MCH-1", "Prensa térmica")
+    mm.create_plan("MCH-1", "Revisar presión", frequency_days=0, usage_metric="Horas de uso", usage_frequency=100.0)
+    assert mm.accumulate_usage_for_machine("MCH-1", "Horas de uso", 0.0) == 0
+
+
 def test_all_maintenance_logs_returns_every_registered_maintenance(isolated_database):
     """all_maintenance_logs() agrega los mantenimientos de todas las máquinas y
     planes, para poder sumarlos en reportes como el Estado de Resultados."""

@@ -183,3 +183,48 @@ def test_recipe_total_ignores_steps_from_other_recipes(isolated_database):
 
     total, _ = bom_costing._recipe_total("REC-1")
     assert total == 2.0
+
+
+# ---------------------------------------------------------------------------
+# _accumulate_machine_usage_from_job — un trabajo real confirmado alimenta el
+# contador de uso de Mantenimiento preventivo, sin actualizarlo a mano.
+# ---------------------------------------------------------------------------
+
+def _insert_machine_step(recipe_id: str, step_order: int, machine_id: str, machine_minutes: float) -> None:
+    with db.connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO recipe_steps(step_id, recipe_id, step_order, process_type, machine_id, machine_minutes, created_at_utc)
+            VALUES (?, ?, ?, 'Sublimación', ?, ?, ?)
+            """,
+            (f"STEP-{recipe_id}-{step_order}", recipe_id, step_order, machine_id, machine_minutes, db._now()),
+        )
+
+
+def test_accumulate_machine_usage_feeds_hours_into_maintenance_plan(isolated_database):
+    from src import machine_maintenance as mm
+
+    db.initialize_database()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO production_machines(machine_id, name, category, acquisition_cost, useful_life_hours, power_kw, maintenance_cost_per_hour, active, created_at_utc) VALUES ('MAC-1', 'Prensa', 'Sublimación', 300, 5000, 0.5, 0.1, 1, '2026-01-01')"
+        )
+    plan_id = mm.create_plan("MAC-1", "Revisar presión", frequency_days=0, usage_metric="Horas de uso", usage_frequency=100.0, current_usage=0.0)
+    _insert_machine_step("REC-1", step_order=1, machine_id="MAC-1", machine_minutes=30.0)
+
+    # 30 minutos por unidad * 4 unidades = 120 min = 2 horas
+    bom_costing._accumulate_machine_usage_from_job("REC-1", quantity=4.0)
+
+    plan = next(p for p in mm.list_plans() if p["plan_id"] == plan_id)
+    assert plan["current_usage"] == 2.0
+
+
+def test_accumulate_machine_usage_ignores_steps_without_machine(isolated_database):
+    db.initialize_database()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO recipe_steps(step_id, recipe_id, step_order, process_type, created_at_utc) VALUES ('STEP-X', 'REC-2', 1, 'Impresión', ?)",
+            (db._now(),),
+        )
+    # No debe lanzar excepción aunque el paso no tenga máquina ni minutos.
+    bom_costing._accumulate_machine_usage_from_job("REC-2", quantity=3.0)

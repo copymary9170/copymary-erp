@@ -270,6 +270,32 @@ def update_usage_reading(plan_id: str, current_usage: float) -> None:
         )
 
 
+def accumulate_usage_for_machine(machine_id: str, metric: str, amount: float) -> int:
+    """Suma `amount` unidades de uso a todos los planes ACTIVOS de esa máquina
+    cuyo `usage_metric` coincida — el mismo contador que antes solo se movía a
+    mano desde 'Actualizar lectura', ahora alimentado automáticamente por el
+    trabajo real (p. ej. horas de máquina de un trabajo costeado confirmado en
+    Costeo por procesos).
+
+    Sin efecto si `amount` <= 0 o no hay `metric` (nada que acumular). Devuelve
+    cuántos planes se actualizaron, para que el llamador pueda decidir si
+    avisar al usuario cuando ninguno coincidió."""
+    if amount <= 0 or not metric:
+        return 0
+    initialize_database()
+    updated = 0
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT plan_id, current_usage FROM maintenance_plans WHERE machine_id = ? AND active = 1 AND usage_metric = ?",
+            (machine_id, metric),
+        ).fetchall()
+        for row in rows:
+            new_usage = float(row["current_usage"]) + amount
+            conn.execute("UPDATE maintenance_plans SET current_usage = ? WHERE plan_id = ?", (new_usage, row["plan_id"]))
+            updated += 1
+    return updated
+
+
 def logs_for_plan(plan_id: str) -> list[dict]:
     return _fetch_all("SELECT * FROM maintenance_logs WHERE plan_id = ? ORDER BY performed_date DESC", (plan_id,))
 
