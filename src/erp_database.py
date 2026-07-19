@@ -42,9 +42,38 @@ class DatabaseStatus:
     message: str
 
 
+def _secret_database_url() -> str:
+    """Lee la URL de la base de datos desde los Secrets de Streamlit Cloud si
+    está disponible. Streamlit Cloud expone los secrets en `st.secrets`, no
+    como variables de entorno, así que sin este puente un secret configurado
+    en la nube nunca sería visto por el ERP. Se envuelve en try/except para
+    que el código siga funcionando fuera de Streamlit (por ejemplo, en los
+    tests o en un script suelto), donde `st.secrets` no existe o está vacío."""
+    try:
+        import streamlit as st
+        for key in ("COPYMARY_DATABASE_URL", "COPYMARY_DB_PATH"):
+            if key in st.secrets:
+                value = str(st.secrets[key]).strip()
+                if value:
+                    return value
+    except Exception:
+        pass
+    return ""
+
+
 def database_url() -> str:
-    """Devuelve la ubicación configurada de datos persistentes."""
-    return os.getenv("COPYMARY_DATABASE_URL") or os.getenv("COPYMARY_DB_PATH") or DEFAULT_SQLITE_PATH
+    """Devuelve la ubicación configurada de datos persistentes.
+
+    Orden de prioridad: variables de entorno primero (útil en local o
+    servidores propios), luego los Secrets de Streamlit Cloud, y como último
+    recurso el archivo SQLite local por defecto (que en Streamlit Cloud es
+    efímero: se borra al reiniciar la app)."""
+    return (
+        os.getenv("COPYMARY_DATABASE_URL")
+        or os.getenv("COPYMARY_DB_PATH")
+        or _secret_database_url()
+        or DEFAULT_SQLITE_PATH
+    )
 
 
 def is_sqlite_url(url: str) -> bool:
