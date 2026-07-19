@@ -3,10 +3,17 @@
 import json
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
+from src.erp_database import connect, get_database_status, initialize_database
+
+# Cuántos respaldos automáticos conservar en la base de datos. Se guarda
+# historial acotado (no solo el último) para poder recuperar una versión
+# anterior si un guardado automático capturó un estado a medio llenar.
+MAX_CLOUD_SNAPSHOTS = 10
 
 # NOTA: `GeneralSettings` se importa de forma perezosa dentro de `_settings()`
 # en vez de aquí arriba. El import a nivel de módulo creaba un ciclo latente:
@@ -85,14 +92,108 @@ def _serialize(value):
     return value
 
 
-def _build_backup() -> bytes:
-    payload = {
+def _backup_payload() -> dict:
+    return {
         "backup_version": BACKUP_VERSION,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "application": "CopyMary ERP",
         "data": {key: _serialize(st.session_state.get(key)) for key in SESSION_KEYS},
     }
-    return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _build_backup() -> bytes:
+    return json.dumps(_backup_payload(), ensure_ascii=False, indent=2).encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Respaldo automático en base de datos ("en la nube")
+#
+# El botón "Descargar respaldo" de abajo sigue existiendo, pero depende de
+# que alguien se acuerde de usarlo justo antes de que la app se reinicie. Lo
+# de aquí guarda el MISMO snapshot en la base de datos, para poder
+# restaurarlo automáticamente al arrancar sin que nadie tenga que hacer nada
+# — siempre que `COPYMARY_DATABASE_URL` apunte a un PostgreSQL real (con
+# SQLite por defecto, la base de datos también es efímera en la mayoría de
+# hostings, así que esto no protege más que la sesión misma).
+# ---------------------------------------------------------------------------
+
+def save_snapshot_to_database() -> dict:
+    """Guarda el estado actual de la sesión como un nuevo respaldo en la
+    base de datos, y elimina los más antiguos más allá de
+    `MAX_CLOUD_SNAPSHOTS`. Devuelve el registro guardado (con su tamaño)."""
+    payload = _backup_payload()
+    data_json = json.dumps(payload, ensure_ascii=False)
+    sections_included = sum(1 for value in payload["data"].values() if value)
+    snapshot_id = f"SNAP-{uuid4().hex[:10].upper()}"
+    created_at = payload["created_at_utc"]
+
+    initialize_database()
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO session_snapshots(snapshot_id, data_json, sections_included, size_bytes, created_at_utc) VALUES (?, ?, ?, ?, ?)",
+            (snapshot_id, data_json, sections_included, len(data_json.encode("utf-8")), created_at),
+        )
+        old_ids = [
+            row["snapshot_id"] for row in conn.execute(
+                "SELECT snapshot_id FROM session_snapshots ORDER BY created_at_utc DESC"
+            ).fetchall()
+        ][MAX_CLOUD_SNAPSHOTS:]
+        for old_id in old_ids:
+            conn.execute("DELETE FROM session_snapshots WHERE snapshot_id = ?", (old_id,))
+
+    return {
+        "snapshot_id": snapshot_id, "sections_included": sections_included,
+        "size_bytes": len(data_json.encode("utf-8")), "created_at_utc": created_at,
+    }
+
+
+def latest_snapshot_info() -> dict | None:
+    """Metadatos del respaldo automático más reciente (sin el JSON completo,
+    para no cargar el contenido cuando solo se necesita mostrar el estado)."""
+    initialize_database()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT snapshot_id, sections_included, size_bytes, created_at_utc FROM session_snapshots ORDER BY created_at_utc DESC LIMIT 1"
+        ).fetchall()
+    return dict(rows[0]) if rows else None
+
+
+def restore_latest_snapshot_from_database() -> dict | None:
+    """Restaura en `st.session_state` el respaldo automático más reciente.
+    Devuelve sus metadatos, o None si no hay ninguno guardado todavía."""
+    initialize_database()
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM session_snapshots ORDER BY created_at_utc DESC LIMIT 1"
+        ).fetchall()
+    if not rows:
+        return None
+    row = dict(rows[0])
+    restored = _parse_backup(row["data_json"].encode("utf-8"))
+    _restore(restored, [key for key in SESSION_KEYS if key in restored["present_sections"]])
+    return row
+
+
+def session_has_data() -> bool:
+    """True si la sesión actual ya tiene algo cargado en cualquiera de las
+    secciones respaldables — para decidir si vale la pena restaurar
+    automáticamente al arrancar (no pisar una sesión que ya está en uso)."""
+    return any(st.session_state.get(key) for key in SESSION_KEYS)
+
+
+def restore_latest_snapshot_on_startup() -> None:
+    """Restauración automática al arrancar la app: si la sesión actual está
+    vacía (primera vez que se abre desde este arranque del servidor) y hay
+    un respaldo guardado en la base de datos, lo carga solo. No hace nada si
+    la sesión ya tiene datos (para no pisar trabajo en curso) ni si no hay
+    ningún respaldo todavía. Cualquier error de conexión se ignora en
+    silencio — no debe impedir que la app arranque."""
+    if session_has_data():
+        return
+    try:
+        restore_latest_snapshot_from_database()
+    except Exception:
+        pass
 
 
 def _settings(raw: dict | None):
@@ -216,6 +317,44 @@ def render_session_backup() -> None:
         render_page_header("Respaldo general", "Guarda o recupera toda la información temporal principal del ERP.")
         st.caption("Incluye metas, equipo, pagos internos, ajustes, ventas, compras, caja, producción e inventario.")
 
+    db_status = get_database_status()
+    is_durable = db_status.engine == "postgresql"
+
+    st.markdown("### Respaldo automático en la nube")
+    if is_durable:
+        st.caption("Guarda toda la sesión en tu base de datos PostgreSQL. Al reabrir la app, se restaura sola si la sesión llegó vacía.")
+    else:
+        st.warning(
+            "Todavía usas SQLite, que también se borra al reiniciar en la mayoría de hostings — el respaldo automático "
+            "se guardará, pero no protege más que la sesión actual. Configura `COPYMARY_DATABASE_URL` con PostgreSQL "
+            "para que este respaldo sí sobreviva a un reinicio."
+        )
+
+    latest = latest_snapshot_info()
+    if latest:
+        st.caption(
+            f"Último respaldo en la nube: {latest['created_at_utc'][:16].replace('T', ' ')} UTC · "
+            f"{latest['sections_included']} sección(es) con datos · {latest['size_bytes'] / 1024:,.1f} KB"
+        )
+    else:
+        st.caption("Todavía no se ha guardado ningún respaldo en la nube.")
+
+    cloud_cols = st.columns(2)
+    if cloud_cols[0].button("Guardar respaldo en la nube ahora", type="primary", use_container_width=True):
+        saved = save_snapshot_to_database()
+        st.success(f"Respaldo guardado ({saved['sections_included']} sección(es) con datos).")
+        st.rerun()
+    if cloud_cols[1].button(
+        "Restaurar el más reciente de la nube", use_container_width=True,
+        disabled=latest is None, help="Reemplaza los datos de esta sesión con el último respaldo guardado en la nube.",
+    ):
+        restored = restore_latest_snapshot_from_database()
+        if restored:
+            st.success("Sesión restaurada desde el respaldo en la nube.")
+            st.rerun()
+
+    st.divider()
+    st.markdown("### Respaldo manual (archivo)")
     st.warning("Descarga este respaldo antes de cerrar la sesión para evitar perder datos.")
     _metrics({SECTION_LABELS[key]: _count(st.session_state.get(key)) for key in SESSION_KEYS})
 
