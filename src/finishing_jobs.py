@@ -32,7 +32,11 @@ from src.session_utils import now_iso as _now, read_list as _rows, save_list as 
 STAGE_LAMINATING = "Plastificado"
 STAGE_CUTTING = "Corte en Cameo"
 STAGE_SUBLIMATION = "Sublimado"
-STAGES = (STAGE_LAMINATING, STAGE_CUTTING, STAGE_SUBLIMATION)
+STAGE_FOIL = "Aplicación de foil"
+STAGE_BINDING = "Encuadernación"
+STAGE_ASSEMBLY = "Ensamblaje"
+STAGE_DTF_VINYL = "DTF / Vinil textil"
+STAGES = (STAGE_LAMINATING, STAGE_CUTTING, STAGE_SUBLIMATION, STAGE_FOIL, STAGE_BINDING, STAGE_ASSEMBLY, STAGE_DTF_VINYL)
 
 STATUSES = ("Pendiente", "En proceso", "Completado", "Cancelado")
 

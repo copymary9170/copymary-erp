@@ -40,6 +40,32 @@ def test_create_job_rejects_unknown_stage():
         pass
 
 
+def test_new_workshop_stages_exist_and_accept_jobs():
+    """Las etapas nuevas del taller (foil, encuadernación, ensamblaje,
+    DTF/vinil) deben estar en STAGES y aceptar trabajos como las originales."""
+    for stage in (
+        finishing_jobs.STAGE_FOIL,
+        finishing_jobs.STAGE_BINDING,
+        finishing_jobs.STAGE_ASSEMBLY,
+        finishing_jobs.STAGE_DTF_VINYL,
+    ):
+        assert stage in finishing_jobs.STAGES
+        job = finishing_jobs.create_job(stage, description=f"Prueba {stage}", quantity=2)
+        assert job["stage"] == stage
+        assert job["status"] == "Pendiente"
+
+
+def test_every_stage_has_a_registered_finishing_module():
+    """Cada etapa de STAGES debe tener su página registrada en el loader —
+    una etapa sin módulo dejaría trabajos atrapados sin forma de completarlos
+    desde la interfaz."""
+    from src import finishing_loader
+
+    module_names = {name for name, _renderer, _description in finishing_loader.MODULES}
+    for stage in finishing_jobs.STAGES:
+        assert stage in module_names, f"La etapa '{stage}' no tiene módulo registrado"
+
+
 def test_jobs_for_stage_excludes_completed_by_default():
     job = finishing_jobs.create_job(finishing_jobs.STAGE_LAMINATING)
     finishing_jobs.complete_job(job["finishing_id"])

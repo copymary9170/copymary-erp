@@ -11,11 +11,35 @@ from src.print_cost_data_bridge import business_defaults, paper_inventory, print
 from src.print_jobs import confirm_print_job
 
 
+# Tecnologías de inyección de tinta: usan cabezales que se desgastan y purgas
+# de limpieza. Sublimación y DTF son inyección con tintas especiales.
+INKJET_TECHNOLOGIES = ("Inyección con tanque", "Inyección con cartuchos", "Sublimación con tanque", "DTF (tinta + polvo)")
+
+# Tecnologías térmicas: no gastan tinta — el costo variable es el soporte
+# (papel térmico, desde Inventario) y el desgaste del cabezal térmico.
+THERMAL_TECHNOLOGIES = ("Térmica directa (sin tinta)", "Esténcil térmico (tatuajes)")
+
+
 def _consumable_costs(p: dict, pages: int, coverages: dict[str, float], ink_factor: float) -> tuple[dict[str, float], dict[str, float]]:
     """Calcula consumibles según la tecnología real del equipo."""
     tech = p["technology"]
     costs: dict[str, float] = {}
     components: dict[str, float] = {}
+
+    if tech in THERMAL_TECHNOLOGIES:
+        # Sin tinta: el % de cobertura CMYK no afecta el costo. Cada página
+        # (o esténcil) consume solo papel térmico y vida del cabezal.
+        if p["head_cost"] > 0:
+            components["Desgaste de cabezal térmico"] = pages * p["head_cost"] / max(1, p["head_life"])
+        return costs, components
+
+    if tech == "Tarjetas PVC (ribbon)":
+        # El ribbon YMCKO rinde N tarjetas FIJAS sin importar la cobertura del
+        # diseño: cada impresión gasta un panel completo de cada color.
+        costs["Ribbon"] = pages / max(1, p["black_yield"]) * p["black_cost"]
+        if p["head_cost"] > 0:
+            components["Desgaste de cabezal de impresión"] = pages * p["head_cost"] / max(1, p["head_life"])
+        return costs, components
 
     if tech == "Inyección con cartuchos" and p["cartridge_layout"] == "tricolor":
         costs["Cartucho negro"] = pages * (coverages["K"] / 5) * ink_factor / max(1, p["black_yield"]) * p["black_cost"]
@@ -36,7 +60,17 @@ def _consumable_costs(p: dict, pages: int, coverages: dict[str, float], ink_fact
             cost, yield_pages = channel_data[channel]
             costs[f"{prefix} {channel}"] = pages * (coverage / 5) * ink_factor / max(1, yield_pages) * cost
 
-    if tech.startswith("Inyección") and p["head_cost"] > 0:
+    if tech == "DTF (tinta + polvo)":
+        # La tinta blanca imprime DEBAJO de todas las áreas con color (suele
+        # ser el mayor consumo en DTF): su cobertura se aproxima como la suma
+        # de los canales CMYK, topada al 100% de la página.
+        white_coverage = min(100.0, coverages["C"] + coverages["M"] + coverages["Y"] + coverages["K"])
+        if p.get("white_cost", 0.0) > 0:
+            costs["Tinta blanca"] = pages * (white_coverage / 5) * ink_factor / max(1, p.get("white_yield", 1)) * p["white_cost"]
+        if p.get("powder_page", 0.0) > 0:
+            costs["Polvo adhesivo DTF"] = pages * p["powder_page"]
+
+    if tech in INKJET_TECHNOLOGIES and p["head_cost"] > 0:
         components["Desgaste de cabezales"] = pages * p["head_cost"] / max(1, p["head_life"])
     if tech.startswith("Láser"):
         components["Desgaste de tambor"] = pages * p["drum_cost"] / max(1, p["drum_life"])
@@ -95,7 +129,14 @@ def render_print_cost_analyzer_v3() -> None:
         copies = a.number_input("Copias", 1, 10000, 1)
         sides = b.selectbox("Caras", ["Una cara", "Doble cara"])
         quality = c.selectbox("Calidad", list(QUALITY_FACTORS))
-        allowed_modes = ["Automático", "Solo negro"] if p["technology"] == "Láser monocromática" else ["Automático", "Solo negro", "Color"]
+        if p["technology"] == "Láser monocromática":
+            allowed_modes = ["Automático", "Solo negro"]
+        elif p["technology"] in THERMAL_TECHNOLOGIES or p["technology"] == "Tarjetas PVC (ribbon)":
+            # Térmicas: no hay tinta que ahorrar. PVC: el ribbon gasta panel
+            # completo por tarjeta, el modo de color no cambia el costo.
+            allowed_modes = ["Automático"]
+        else:
+            allowed_modes = ["Automático", "Solo negro", "Color"]
         color_mode = d.selectbox("Modo", allowed_modes)
         a, b, c = st.columns(3)
         selected_paper_label = a.selectbox("Papel de Inventario", tuple(paper_labels))
@@ -126,10 +167,12 @@ def render_print_cost_analyzer_v3() -> None:
         overhead_pct = c.number_input("Gastos indirectos (%)", 0.0, 300.0, float(defaults["overhead_pct"]))
         margin_pct = d.number_input("Margen sobre venta (%)", 0.0, 95.0, float(defaults["margin_pct"]))
         cleaning_pct = 0.0
-        if p["technology"].startswith("Inyección"):
+        if p["technology"] in INKJET_TECHNOLOGIES:
             cleaning_pct = st.number_input("Reserva de limpiezas y purgas (%)", 0.0, 50.0, 5.0)
-        else:
+        elif p["technology"].startswith("Láser"):
             st.caption("En tecnología láser no se aplica reserva de purgas; se costean tambor y fusor.")
+        else:
+            st.caption("Esta tecnología no usa tinta líquida: no aplica reserva de purgas.")
 
     if not st.button("Analizar y calcular", type="primary", use_container_width=True):
         return

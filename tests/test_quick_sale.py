@@ -193,6 +193,61 @@ def test_seed_does_not_overwrite_edited_prices(isolated_database):
     assert services[0]["name"] == "Servicio manual"
 
 
+# ---------------------------------------------------------------------------
+# Servicios sugeridos de papelería (cartas de trabajo, transcripción, DTF...)
+# ---------------------------------------------------------------------------
+
+def test_missing_suggested_services_lists_everything_on_empty_catalog(isolated_database):
+    missing = quick_sale.missing_suggested_services()
+    assert len(missing) == len(quick_sale.SUGGESTED_SERVICES)
+
+
+def test_missing_suggested_services_excludes_already_existing_by_name(isolated_database):
+    quick_sale.create_service("Carta de trabajo / constancia", "Redacción y trámites", 4.50, "por documento")
+    missing_names = {service[0] for service in quick_sale.missing_suggested_services()}
+    assert "Carta de trabajo / constancia" not in missing_names
+    assert "Transcripción de documento" in missing_names
+
+
+def test_missing_suggested_services_name_match_is_case_insensitive(isolated_database):
+    quick_sale.create_service("CARTA DE TRABAJO / CONSTANCIA", "Otro", 1.0, "por documento")
+    missing_names = {service[0] for service in quick_sale.missing_suggested_services()}
+    assert "Carta de trabajo / constancia" not in missing_names
+
+
+def test_add_missing_suggested_services_adds_only_the_missing_ones(isolated_database):
+    quick_sale.create_service("Sublimación de taza", "Personalizados", 7.0, "por taza")
+    added = quick_sale.add_missing_suggested_services()
+    assert added == len(quick_sale.SUGGESTED_SERVICES) - 1
+    # El precio del servicio ya configurado NO se toca.
+    tazas = [s for s in quick_sale.list_services() if s["name"] == "Sublimación de taza"]
+    assert len(tazas) == 1
+    assert tazas[0]["unit_price"] == 7.0
+
+
+def test_add_missing_suggested_services_is_idempotent(isolated_database):
+    quick_sale.add_missing_suggested_services()
+    first_count = len(quick_sale.list_services())
+    assert quick_sale.add_missing_suggested_services() == 0
+    assert len(quick_sale.list_services()) == first_count
+
+
+def test_suggested_services_cover_key_workshop_offerings(isolated_database):
+    names = {service[0] for service in quick_sale.SUGGESTED_SERVICES}
+    for expected in (
+        "Carta de trabajo / constancia", "Transcripción de documento",
+        "Impresión de esténcil (tatuaje)", "Impresión de carnet PVC",
+        "Sublimación de taza", "DTF en prenda", "Corte de vinil (Cameo)",
+        "Aplicación de foil", "Grabado láser", "Impresión 3D",
+    ):
+        assert expected in names, f"Falta el servicio sugerido: {expected}"
+
+
+def test_suggested_services_use_valid_categories(isolated_database):
+    for name, category, _price, _unit in quick_sale.SUGGESTED_SERVICES:
+        assert category in quick_sale.SERVICE_CATEGORIES, f"{name} usa categoría desconocida {category!r}"
+
+
 def test_create_service_persists_all_fields(isolated_database):
     quick_sale.create_service("Escaneo doble faz", "Escaneo", 0.15, "por página")
     services = quick_sale.list_services()
