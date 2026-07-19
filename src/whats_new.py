@@ -20,6 +20,18 @@ from src.components import render_info_card, render_page_header
 
 WHATS_NEW = (
     {
+        "title": "Soporte para base de datos externa vía Secrets de Streamlit",
+        "target": "Todo el sistema",
+        "category": "Nuevo",
+        "description": "El ERP ahora lee la dirección de la base de datos (COPYMARY_DATABASE_URL) también desde los Secrets de Streamlit Cloud, no solo desde variables de entorno. Esto permite conectar una base de datos PostgreSQL externa gratuita (Neon, Supabase) para que los datos NO se pierdan cuando la app se reinicia o se duerme en Streamlit Cloud — el disco de Streamlit Cloud es efímero, así que sin una base externa todo lo cargado se borra. Con el secret configurado, los módulos que ya usan base de datos (Activos, Inventario, ventas rápidas, usuarios, tasas) persisten de verdad.",
+    },
+    {
+        "title": "Aviso de garantía vencida/por vencer y buscador en Activos",
+        "target": "Activos",
+        "category": "Nuevo",
+        "description": "Cada equipo ahora muestra si su garantía está vencida (🔴) o por vencer en 30 días o menos (🟡), y arriba de la lista aparece un aviso resumido con todos los equipos afectados. También se agregó un buscador por nombre y filtros por categoría/estado en 'Equipos registrados', para no perderse entre muchos activos (impresoras, Cameo, accesorios menores, etc.).",
+    },
+    {
         "title": "Nivel de tinta actual por impresora, con foto",
         "target": "Ficha técnica de impresoras",
         "category": "Nuevo",

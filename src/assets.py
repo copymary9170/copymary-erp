@@ -93,6 +93,25 @@ class Asset:
     def purchase_total_in_purchase_currency(self) -> float:
         return self.acquisition_subtotal + self.shipping_cost + self.import_duties + self.tax_amount
 
+    @property
+    def warranty_status(self) -> str:
+        """'Sin registrar', 'Vencida', 'Por vencer' (30 días o menos) o
+        'Vigente' — para poder avisar antes de que se te pase, en vez de
+        enterarte cuando ya necesitas usarla."""
+        if not self.warranty_until:
+            return "Sin registrar"
+        try:
+            from datetime import date
+            until = date.fromisoformat(self.warranty_until)
+        except ValueError:
+            return "Sin registrar"
+        days_left = (until - date.today()).days
+        if days_left < 0:
+            return "Vencida"
+        if days_left <= 30:
+            return "Por vencer"
+        return "Vigente"
+
 
 def landed_acquisition_cost(subtotal: float, shipping: float, import_duties: float, tax: float, exchange_rate: float) -> float:
     """Convierte costo del equipo + envío/flete + aranceles + impuestos (en
@@ -394,14 +413,48 @@ def render_assets() -> None:
         st.info("Todavía no hay activos registrados en esta sesión.")
         return
 
+    expired_warranties = [asset for asset in assets if asset.warranty_status == "Vencida"]
+    expiring_warranties = [asset for asset in assets if asset.warranty_status == "Por vencer"]
+    if expired_warranties or expiring_warranties:
+        parts = []
+        if expired_warranties:
+            parts.append(f"{len(expired_warranties)} con garantía vencida")
+        if expiring_warranties:
+            parts.append(f"{len(expiring_warranties)} por vencer en 30 días o menos")
+        st.warning("⚠️ " + " · ".join(parts) + ": " + ", ".join(asset.name for asset in (*expired_warranties, *expiring_warranties)))
+
     st.subheader("Equipos registrados")
-    for asset in assets:
+    filter_columns = st.columns([2, 1, 1])
+    with filter_columns[0]:
+        search_text = st.text_input("Buscar por nombre", placeholder="Ej. Cameo, Smart Tank, tijeras...")
+    with filter_columns[1]:
+        category_filter = st.selectbox("Categoría", ("Todas",) + ASSET_CATEGORIES)
+    with filter_columns[2]:
+        status_filter = st.selectbox("Estado", ("Todos",) + ASSET_STATUSES)
+
+    filtered_assets = [
+        asset for asset in assets
+        if (not search_text or search_text.strip().casefold() in asset.name.casefold())
+        and (category_filter == "Todas" or asset.category == category_filter)
+        and (status_filter == "Todos" or asset.status == status_filter)
+    ]
+    if not filtered_assets:
+        st.info("Ningún equipo coincide con ese filtro.")
+        return
+    if len(filtered_assets) != len(assets):
+        st.caption(f"Mostrando {len(filtered_assets)} de {len(assets)} equipos.")
+
+    for asset in filtered_assets:
         with st.container(border=True):
             title_columns = st.columns([3, 1])
             with title_columns[0]:
                 st.markdown(f"### {asset.name}")
                 state_text = "Disponible para cotizar" if asset.available_for_quoting else "No usado automáticamente"
                 st.caption(f"{asset.category} · {asset.status} · {state_text} · ID {asset.asset_id}")
+                if asset.warranty_status == "Vencida":
+                    st.caption("🔴 Garantía vencida")
+                elif asset.warranty_status == "Por vencer":
+                    st.caption("🟡 Garantía por vencer pronto")
             with title_columns[1]:
                 if st.button("Eliminar", key=f"delete_asset_{asset.asset_id}", use_container_width=True):
                     _save_assets([item for item in assets if item.asset_id != asset.asset_id])
