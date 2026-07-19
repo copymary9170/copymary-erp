@@ -1,2 +1,5 @@
 -r requirements.txt
-psycopg[binary]>=3,<4
+# psycopg ya viene incluido en requirements.txt (ver comentario ahí). Este
+# archivo se conserva por compatibilidad con la documentación existente y
+# como instalación explícita para quien prefiera dejar claro que instaló
+# soporte de PostgreSQL a propósito.

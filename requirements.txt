@@ -4,3 +4,8 @@ PyMuPDF>=1.24,<2
 python-docx>=1.1,<2
 openpyxl>=3.1,<4
 python-pptx>=1.0,<2
+# Driver de PostgreSQL, incluido aquí (no solo en requirements-postgres.txt)
+# porque Streamlit Community Cloud solo instala este archivo — sin esto,
+# COPYMARY_DATABASE_URL apuntando a Postgres (Neon, etc.) fallaría al
+# conectar por falta del driver, aunque la URL esté bien puesta.
+psycopg[binary]>=3,<4
