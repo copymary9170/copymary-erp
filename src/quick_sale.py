@@ -36,7 +36,10 @@ from src.payment_fees import sale_breakdown, should_apply_igtf
 from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
 
 WALK_IN_CLIENT_NAME = "Cliente ocasional"
-SERVICE_CATEGORIES = ("Fotocopiado", "Impresión", "Escaneo", "Acabados", "Otro")
+SERVICE_CATEGORIES = (
+    "Fotocopiado", "Impresión", "Escaneo", "Acabados",
+    "Redacción y trámites", "Personalizados", "Otro",
+)
 PAYMENT_METHODS = ("Efectivo", "Pago móvil", "Transferencia", "Zelle", "Otro")
 
 DEFAULT_SERVICES = (
@@ -47,6 +50,30 @@ DEFAULT_SERVICES = (
     ("Escaneo", "Escaneo", 0.10, "por página"),
     ("Plastificado carta", "Acabados", 0.50, "por unidad"),
     ("Anillado", "Acabados", 1.50, "por unidad"),
+)
+
+# Servicios sugeridos adicionales del día a día de una papelería: redacción de
+# documentos, trámites y personalizados. Son solo un punto de partida — los
+# precios se ajustan a la realidad del negocio desde el Tarifario. Se agregan
+# con un botón (los que falten), nunca sobreescriben los ya cargados.
+SUGGESTED_SERVICES = (
+    *DEFAULT_SERVICES,
+    ("Carta de trabajo / constancia", "Redacción y trámites", 3.00, "por documento"),
+    ("Transcripción de documento", "Redacción y trámites", 1.00, "por página"),
+    ("Redacción de currículum", "Redacción y trámites", 5.00, "por documento"),
+    ("Redacción de carta / oficio", "Redacción y trámites", 3.00, "por documento"),
+    ("Llenado de planilla / formulario", "Redacción y trámites", 2.00, "por planilla"),
+    ("Impresión de foto tipo carnet", "Impresión", 1.50, "por plancha"),
+    ("Impresión de esténcil (tatuaje)", "Impresión", 2.00, "por esténcil"),
+    ("Impresión de carnet PVC", "Personalizados", 4.00, "por carnet"),
+    ("Sublimación de taza", "Personalizados", 6.00, "por taza"),
+    ("Sublimación de franela", "Personalizados", 8.00, "por prenda"),
+    ("DTF en prenda", "Personalizados", 7.00, "por prenda"),
+    ("Corte de vinil (Cameo)", "Personalizados", 3.00, "por diseño"),
+    ("Aplicación de foil", "Acabados", 2.00, "por hoja"),
+    ("Encuadernado empastado", "Acabados", 6.00, "por unidad"),
+    ("Grabado láser", "Personalizados", 5.00, "por pieza"),
+    ("Impresión 3D", "Personalizados", 10.00, "por pieza"),
 )
 
 
@@ -151,6 +178,24 @@ def seed_default_services_if_empty() -> None:
         create_service(name, category, unit_price, unit_label)
 
 
+def missing_suggested_services() -> list[tuple[str, str, float, str]]:
+    """Servicios del catálogo sugerido que todavía NO existen en el tarifario
+    (comparando por nombre, insensible a mayúsculas). Permite ofrecerle al
+    usuario cargar solo los que faltan, sin duplicar ni tocar los precios de
+    los que ya configuró."""
+    existing_names = {str(row.get("name", "")).casefold() for row in list_services(active_only=False)}
+    return [service for service in SUGGESTED_SERVICES if service[0].casefold() not in existing_names]
+
+
+def add_missing_suggested_services() -> int:
+    """Agrega al tarifario los servicios sugeridos que falten. Devuelve
+    cuántos se agregaron."""
+    missing = missing_suggested_services()
+    for name, category, unit_price, unit_label in missing:
+        create_service(name, category, unit_price, unit_label)
+    return len(missing)
+
+
 def set_service_active(service_id: str, active: bool) -> None:
     initialize_database()
     with connect() as conn:
@@ -252,6 +297,18 @@ def render_quick_sale() -> None:
 
     with prices_tab:
         st.caption("Los precios se cargan una vez con valores típicos de papelería/centro de copiado; edítalos según tu negocio.")
+        missing = missing_suggested_services()
+        if missing:
+            st.info(
+                f"Hay {len(missing)} servicio(s) sugeridos de papelería que aún no están en tu tarifario "
+                "(cartas de trabajo, transcripción, sublimación, DTF, carnets PVC, esténciles...). "
+                "Los precios son solo de partida — ajústalos a tu realidad después de cargarlos."
+            )
+            if st.button("Cargar servicios sugeridos que faltan", use_container_width=True):
+                added = add_missing_suggested_services()
+                st.success(f"{added} servicio(s) agregados al tarifario.")
+                st.rerun()
+
         with st.expander("Agregar servicio al tarifario"):
             with st.form("service_form", clear_on_submit=True):
                 cols = st.columns(4)

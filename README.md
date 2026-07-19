@@ -71,10 +71,17 @@ Incluye:
     aviso anticipado si el repuesto habitual de un mantenimiento próximo ya
     no tiene stock
   - Venta rápida de mostrador (tarifario configurable, sin cliente obligatorio)
-  - Análisis y costeo de impresión: confirma trabajos reales (descuenta papel
-    de Inventario y suma uso a la impresora en Activos) y los envía a
-    Plastificado, Corte en Cameo o Sublimado, que a su vez descuentan su
-    propio material y registran uso de máquina
+  - Análisis y costeo de impresión con 9 tecnologías (tanque, cartuchos,
+    láser mono/color, sublimación, DTF con tinta blanca + polvo, térmica,
+    esténcil de tatuajes, tarjetas PVC por ribbon), con % de cobertura CMYK
+    donde aplica: confirma trabajos reales (descuenta papel/film/tarjetas de
+    Inventario y suma uso a la impresora en Activos) y los envía a acabado
+  - Siete etapas de acabado: Plastificado, Corte en Cameo, Sublimado,
+    Aplicación de foil, Encuadernación, Ensamblaje y DTF/Vinil textil — cada
+    una descuenta su material real y registra uso de máquina
+  - Venta rápida con catálogo de servicios sugeridos de papelería (cartas de
+    trabajo, transcripción, currículum, esténciles, carnets PVC, sublimación,
+    DTF, grabado láser, impresión 3D...) cargables con un clic
 - **Pruebas automáticas** con `pytest` (241 tests, 6 de ellos específicos de
   PostgreSQL) cubriendo autenticación, base de datos (SQLite y PostgreSQL),
   costeo, inventario, producción, comisiones, caja, conciliación financiera y

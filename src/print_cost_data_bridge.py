@@ -43,6 +43,9 @@ def _consumable_profile(spec: dict) -> dict:
         "drum_life": int(_num(spec.get("drum_life"), 1)),
         "fuser_cost": _num(spec.get("fuser_cost"), 0.0),
         "fuser_life": int(_num(spec.get("fuser_life"), 1)),
+        "white_cost": _num(spec.get("white_cost"), 0.0),
+        "white_yield": int(_num(spec.get("white_yield"), 1)),
+        "powder_page": _num(spec.get("powder_page"), 0.0),
     }
 
 
@@ -88,6 +91,11 @@ def paper_inventory() -> list[dict]:
     paper_tokens = (
         "papel", "bond", "oficio", "carta", "fotograf", "opalina", "adhesivo",
         "sticker", "cartulina", "acetato", "imantado", "lustrillo", "construccion",
+        # Soportes de las tecnologías nuevas: la impresora de carnets consume
+        # tarjetas PVC, la térmica papel térmico en rollo, la DTF film/película
+        # transfer, y la de sublimación papel de sublimación.
+        "pvc", "tarjeta", "carnet", "termic", "térmic", "film", "pelicula", "película",
+        "dtf", "transfer", "sublimac", "estencil", "esténcil",
     )
     result: list[dict] = []
     seen: set[str] = set()

@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from src.components import render_info_card, render_page_header
-from src.general_settings import GeneralSettings
+
+# NOTA: `GeneralSettings` se importa de forma perezosa dentro de `_settings()`
+# en vez de aquí arriba. El import a nivel de módulo creaba un ciclo latente:
+# session_backup → general_settings → assets → session_backup (assets registra
+# su sección de respaldo al importarse). El ciclo solo explotaba cuando
+# session_backup era el PRIMER módulo de la cadena en importarse (p. ej. al
+# correr un subconjunto de pruebas donde test_finishing_jobs.py se recolecta
+# primero) — con otros órdenes de importación funcionaba de casualidad.
 
 BACKUP_VERSION = 2
 LIST_SECTIONS = (
@@ -88,7 +95,9 @@ def _build_backup() -> bytes:
     return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
 
 
-def _settings(raw: dict | None) -> GeneralSettings | None:
+def _settings(raw: dict | None):
+    from src.general_settings import GeneralSettings
+
     if raw is None:
         return None
     # Bug real encontrado: `GeneralSettings` cambió hace poco (equipment_name/

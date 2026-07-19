@@ -8,6 +8,12 @@ superior.
 
 from src import app_shell
 from src.finishing_cutting_cameo import render_finishing_cutting_cameo
+from src.finishing_extra_stages import (
+    render_finishing_assembly,
+    render_finishing_binding,
+    render_finishing_dtf_vinyl,
+    render_finishing_foil,
+)
 from src.finishing_laminating import render_finishing_laminating
 from src.finishing_sublimation import render_finishing_sublimation
 
@@ -15,6 +21,10 @@ MODULES = (
     ("Plastificado", render_finishing_laminating, "Descuenta laminado/bolsa de Inventario y suma uso de la plastificadora."),
     ("Corte en Cameo", render_finishing_cutting_cameo, "Cotiza cortes, valida materiales y calcula cuchilla, tapete, pasadas, depilado y producción."),
     ("Sublimado", render_finishing_sublimation, "Cotiza sublimación, valida blancos y consumibles de Inventario, controla parámetros, prensa y calidad."),
+    ("Aplicación de foil", render_finishing_foil, "Estampado de foil: descuenta el rollo de Inventario y suma uso de la estampadora o laminadora."),
+    ("Encuadernación", render_finishing_binding, "Anillado y encuadernado: espirales, tapas y portadas de Inventario, uso de la anilladora."),
+    ("Ensamblaje", render_finishing_assembly, "Armado final: descuenta empaques e insumos de armado de Inventario."),
+    ("DTF / Vinil textil", render_finishing_dtf_vinyl, "Planchado final de DTF o vinil textil sobre la prenda, con uso de la prensa."),
 )
 
 

@@ -15,7 +15,21 @@ TECHNOLOGIES = (
     "Inyección con cartuchos",
     "Láser monocromática",
     "Láser color",
+    "Sublimación con tanque",
+    "DTF (tinta + polvo)",
+    "Térmica directa (sin tinta)",
+    "Esténcil térmico (tatuajes)",
+    "Tarjetas PVC (ribbon)",
 )
+
+# Tecnologías de inyección de tinta (usan botellas CMYK, cabezales que se
+# desgastan y purgas de limpieza). La sublimación y el DTF son inyección con
+# tintas especiales, así que comparten el mismo modelo de costos por CMYK.
+INKJET_TECHNOLOGIES = ("Inyección con tanque", "Inyección con cartuchos", "Sublimación con tanque", "DTF (tinta + polvo)")
+
+# Tecnologías térmicas: no gastan tinta — el costo variable es el papel
+# térmico (Inventario) y el desgaste del cabezal térmico.
+THERMAL_TECHNOLOGIES = ("Térmica directa (sin tinta)", "Esténcil térmico (tatuajes)")
 
 INK_COLORS = ("k_percent", "c_percent", "m_percent", "y_percent")
 INK_COLOR_LABELS = {"k_percent": "Negro (K)", "c_percent": "Cian (C)", "m_percent": "Magenta (M)", "y_percent": "Amarillo (Y)"}
@@ -141,9 +155,11 @@ def _render_spec_form(asset) -> None:
         head_cost = head_life = drum_cost = drum_life = fuser_cost = fuser_life = 0.0
         black_cost = black_yield = color_cost = color_yield = 0.0
         c_cost = c_yield = m_cost = m_yield = y_cost = y_yield = 0.0
+        white_cost = white_yield = powder_page = 0.0
 
-        if technology == "Inyección con tanque":
-            st.markdown("#### Botellas y cabezales")
+        if technology in ("Inyección con tanque", "Sublimación con tanque", "DTF (tinta + polvo)"):
+            ink_word = "sublimación" if technology == "Sublimación con tanque" else ("DTF" if technology.startswith("DTF") else "tinta")
+            st.markdown(f"#### Botellas de {ink_word} y cabezales")
             a, b = st.columns(2)
             head_cost = a.number_input("Costo cabezales ($)", min_value=0.0, value=float(current.get("head_cost", 100.0)))
             head_life = b.number_input("Vida cabezales (páginas)", min_value=1.0, value=float(current.get("head_life", 30000)))
@@ -156,6 +172,37 @@ def _render_spec_form(asset) -> None:
             color_yield = a.number_input("Rendimiento color al 5%", min_value=1.0, value=float(current.get("color_yield", 6000)))
             black_yield = b.number_input("Rendimiento negro al 5%", min_value=1.0, value=float(current.get("black_yield", 12000)))
             c_yield = m_yield = y_yield = color_yield
+            if technology == "DTF (tinta + polvo)":
+                st.markdown("#### Tinta blanca y polvo DTF")
+                st.caption("La tinta blanca imprime debajo de todo el diseño (suele ser el mayor consumo en DTF) y el polvo adhesivo se aplica por página.")
+                a, b, c = st.columns(3)
+                white_cost = a.number_input("Botella de tinta blanca ($)", min_value=0.01, value=float(current.get("white_cost", 30.0)))
+                white_yield = b.number_input("Rendimiento blanco al 5%", min_value=1.0, value=float(current.get("white_yield", 4000)))
+                powder_page = c.number_input("Polvo adhesivo por página ($)", min_value=0.0, value=float(current.get("powder_page", 0.05)), format="%.4f")
+
+        elif technology in THERMAL_TECHNOLOGIES:
+            item_word = "esténcil" if "tatu" in technology.casefold() else "página"
+            st.markdown("#### Cabezal térmico")
+            st.caption(
+                f"Esta tecnología no gasta tinta: cada {item_word} cuesta solo el papel térmico "
+                "(desde Inventario) y el desgaste del cabezal."
+            )
+            a, b = st.columns(2)
+            head_cost = a.number_input("Costo del cabezal térmico ($)", min_value=0.0, value=float(current.get("head_cost", 60.0)))
+            head_life = b.number_input(f"Vida del cabezal ({item_word}s)", min_value=1.0, value=float(current.get("head_life", 30000)))
+
+        elif technology == "Tarjetas PVC (ribbon)":
+            st.markdown("#### Ribbon y cabezal")
+            st.caption(
+                "El ribbon YMCKO rinde un número fijo de tarjetas sin importar cuánta tinta lleve el "
+                "diseño — el costo por tarjeta es ribbon ÷ rendimiento, más el desgaste del cabezal."
+            )
+            a, b = st.columns(2)
+            black_cost = a.number_input("Costo del ribbon ($)", min_value=0.01, value=float(current.get("black_cost", 25.0)))
+            black_yield = b.number_input("Tarjetas por ribbon", min_value=1.0, value=float(current.get("black_yield", 250)))
+            a, b = st.columns(2)
+            head_cost = a.number_input("Costo del cabezal ($)", min_value=0.0, value=float(current.get("head_cost", 200.0)))
+            head_life = b.number_input("Vida del cabezal (tarjetas)", min_value=1.0, value=float(current.get("head_life", 50000)))
 
         elif technology == "Inyección con cartuchos":
             st.markdown("#### Cartuchos")
@@ -203,11 +250,18 @@ def _render_spec_form(asset) -> None:
         errors: list[str] = []
         _positive(ppm, "Velocidad", errors)
         _positive(watts, "Consumo eléctrico", errors)
-        _positive(black_cost, "Consumible negro", errors)
-        _positive(black_yield, "Rendimiento negro", errors)
-        if technology == "Inyección con tanque":
+        if technology in THERMAL_TECHNOLOGIES:
+            # Sin tinta: lo único obligatorio del consumible es el cabezal térmico.
+            _positive(head_cost, "Costo del cabezal térmico", errors)
+        else:
+            _positive(black_cost, "Consumible negro", errors)
+            _positive(black_yield, "Rendimiento negro", errors)
+        if technology in ("Inyección con tanque", "Sublimación con tanque", "DTF (tinta + polvo)"):
             for value, label in ((c_cost, "Botella C"), (m_cost, "Botella M"), (y_cost, "Botella Y"), (color_yield, "Rendimiento color")):
                 _positive(value, label, errors)
+            if technology == "DTF (tinta + polvo)":
+                _positive(white_cost, "Tinta blanca", errors)
+                _positive(white_yield, "Rendimiento blanco", errors)
         elif technology == "Inyección con cartuchos" and cartridge_layout == "Negro + tricolor":
             _positive(color_cost, "Cartucho tricolor", errors)
             _positive(color_yield, "Rendimiento tricolor", errors)
@@ -229,11 +283,13 @@ def _render_spec_form(asset) -> None:
             "head_cost": head_cost, "head_life": int(head_life or 1),
             "drum_cost": drum_cost, "drum_life": int(drum_life or 1),
             "fuser_cost": fuser_cost, "fuser_life": int(fuser_life or 1),
-            "black_cost": black_cost, "black_yield": int(black_yield),
+            "black_cost": black_cost, "black_yield": int(black_yield or 1),
             "color_cost": color_cost, "color_yield": int(color_yield or 1),
             "c_cost": c_cost, "c_yield": int(c_yield or 1),
             "m_cost": m_cost, "m_yield": int(m_yield or 1),
             "y_cost": y_cost, "y_yield": int(y_yield or 1),
+            "white_cost": white_cost, "white_yield": int(white_yield or 1),
+            "powder_page": powder_page,
             "ppm": ppm, "watts": watts, "maintenance_page": maintenance_page,
             "active": True, "created_at_utc": now_iso(),
         })
