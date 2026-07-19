@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 @dataclass(frozen=True)
@@ -456,6 +456,39 @@ def _migrate_payroll_hr_v13(connection: Any) -> None:
     )
 
 
+def _migrate_session_snapshots_v14(connection: Any) -> None:
+    """Migración v14: respaldo automático de la sesión en base de datos.
+
+    Bloqueante real detectado: la mayoría de los módulos del ERP (Activos,
+    Inventario, Ventas, Clientes, Caja, Gastos...) todavía viven en
+    `st.session_state`, que se borra por completo cada vez que la app se
+    reinicia (redeploy, inactividad, caída). La única protección que existía
+    era el botón manual "Descargar respaldo" en Respaldo general — si nadie
+    se acuerda de usarlo justo antes de que la app se reinicie, se pierde
+    todo lo capturado en los formularios desde el último respaldo descargado.
+
+    Esta tabla guarda el mismo snapshot JSON que ya arma
+    `session_backup._build_backup()`, pero en la base de datos en vez de en
+    un archivo que hay que descargar y guardar a mano. Con esto, `app.py`
+    puede restaurar automáticamente la sesión más reciente al arrancar, sin
+    que nadie tenga que acordarse de nada — aunque de nada sirve si la base
+    de datos sigue siendo el SQLite por defecto (también efímero en la
+    mayoría de hostings): esto solo protege de verdad cuando
+    `COPYMARY_DATABASE_URL` apunta a un PostgreSQL real.
+    """
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS session_snapshots (
+            snapshot_id TEXT PRIMARY KEY,
+            data_json TEXT NOT NULL,
+            sections_included INTEGER NOT NULL DEFAULT 0,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            created_at_utc TEXT NOT NULL
+        );
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
     """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
@@ -655,6 +688,11 @@ def initialize_database() -> DatabaseStatus:
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
             (13, "payroll_time_off_and_salary_history", _now()),
+        )
+        _migrate_session_snapshots_v14(connection)
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
+            (14, "session_snapshots", _now()),
         )
     return get_database_status()
 

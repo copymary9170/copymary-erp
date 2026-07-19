@@ -31,6 +31,13 @@ Incluye:
   (`audit_events`) con registro de antes/después por cada cambio relevante.
   **PostgreSQL también soportado** para producción multiusuario — se activa
   con `COPYMARY_DATABASE_URL` (ver sección de instalación más abajo).
+- **Respaldo automático en la nube**: la mayoría de los módulos (Activos,
+  Inventario, Ventas, Clientes, Caja, Gastos...) aún viven en la sesión del
+  navegador y se pierden al reiniciar la app. El módulo "Respaldo general"
+  ahora guarda ese estado completo en la base de datos con un botón, y lo
+  restaura solo al arrancar si la sesión llegó vacía — protección real solo
+  cuando `COPYMARY_DATABASE_URL` apunta a un PostgreSQL de verdad (con
+  SQLite por defecto sigue siendo efímero en la mayoría de hostings).
 - **Módulos operativos activos**, entre ellos:
   - Centro de control, panel comercial y panel financiero
   - Clientes y seguimiento comercial, comprobantes
