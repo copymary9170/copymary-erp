@@ -101,3 +101,38 @@ def test_latest_exchange_rate_returns_most_recent(isolated_database):
     assert latest is not None
     assert latest["rate"] == 40.5
     assert latest["rate_date"] == "2026-07-08"
+
+
+# ---------------------------------------------------------------------------
+# database_url — prioridad entre variables de entorno, secrets y default
+# ---------------------------------------------------------------------------
+
+def test_database_url_prefers_env_var(monkeypatch):
+    monkeypatch.setenv("COPYMARY_DATABASE_URL", "postgresql://env/db")
+    assert db.database_url() == "postgresql://env/db"
+
+
+def test_database_url_falls_back_to_default_when_nothing_set(monkeypatch):
+    monkeypatch.delenv("COPYMARY_DATABASE_URL", raising=False)
+    monkeypatch.delenv("COPYMARY_DB_PATH", raising=False)
+    # Sin entorno ni secrets accesibles, debe devolver el SQLite por defecto.
+    assert db.database_url() == db.DEFAULT_SQLITE_PATH
+
+
+def test_secret_database_url_returns_empty_when_streamlit_secrets_unavailable(monkeypatch):
+    """El puente a st.secrets no debe romper fuera de Streamlit (tests,
+    scripts sueltos): si algo falla, devuelve cadena vacía."""
+    assert db._secret_database_url() == ""
+
+
+def test_database_url_reads_from_streamlit_secrets(monkeypatch):
+    monkeypatch.delenv("COPYMARY_DATABASE_URL", raising=False)
+    monkeypatch.delenv("COPYMARY_DB_PATH", raising=False)
+    monkeypatch.setattr(db, "_secret_database_url", lambda: "postgresql://secret/db")
+    assert db.database_url() == "postgresql://secret/db"
+
+
+def test_env_var_takes_priority_over_secret(monkeypatch):
+    monkeypatch.setenv("COPYMARY_DATABASE_URL", "postgresql://env/db")
+    monkeypatch.setattr(db, "_secret_database_url", lambda: "postgresql://secret/db")
+    assert db.database_url() == "postgresql://env/db"
