@@ -10,17 +10,12 @@ import streamlit as st
 from src.components import render_info_card, render_page_header
 from src.money import format_money
 
-
-CSV_HEADERS = [
-    "ID",
-    "Nombre",
-    "Categoría",
-    "Costo total de compra",
-    "Cantidad comprada",
-    "Existencia disponible",
-    "Unidad",
-    "Existencia mínima",
+BASE_CSV_HEADERS = [
+    "ID", "Nombre", "Categoría", "Costo total de compra", "Cantidad comprada",
+    "Existencia disponible", "Unidad", "Existencia mínima",
 ]
+DIMENSION_CSV_HEADERS = ["Mililitros (ml)", "Longitud (cm)", "Área (m²)"]
+CSV_HEADERS = [*BASE_CSV_HEADERS, *DIMENSION_CSV_HEADERS]
 
 
 @dataclass(frozen=True)
@@ -33,6 +28,9 @@ class InventoryItem:
     available_quantity: float
     unit_name: str
     minimum_stock: float
+    milliliters: float = 0.0
+    centimeters: float = 0.0
+    square_meters: float = 0.0
 
     @property
     def unit_cost(self) -> float:
@@ -46,6 +44,26 @@ class InventoryItem:
     def is_low_stock(self) -> bool:
         return self.available_quantity <= self.minimum_stock
 
+    @property
+    def dimensions_summary(self) -> str:
+        parts = []
+        if self.milliliters > 0:
+            parts.append(f"{self.milliliters:,.2f} ml")
+        if self.centimeters > 0:
+            parts.append(f"{self.centimeters:,.2f} cm")
+        if self.square_meters > 0:
+            parts.append(f"{self.square_meters:,.4f} m²")
+        return " · ".join(parts) if parts else "Sin dimensiones registradas"
+
+
+def _item_from_dict(raw_item: dict) -> InventoryItem:
+    """Adapta respaldos antiguos que todavía no contienen dimensiones."""
+    compatible = dict(raw_item)
+    compatible.setdefault("milliliters", 0.0)
+    compatible.setdefault("centimeters", 0.0)
+    compatible.setdefault("square_meters", 0.0)
+    return InventoryItem(**compatible)
+
 
 def _get_items() -> list[InventoryItem]:
     raw_items = st.session_state.get("inventory_registry", [])
@@ -54,7 +72,7 @@ def _get_items() -> list[InventoryItem]:
         if isinstance(raw_item, InventoryItem):
             items.append(raw_item)
         elif isinstance(raw_item, dict):
-            items.append(InventoryItem(**raw_item))
+            items.append(_item_from_dict(raw_item))
     return items
 
 
@@ -62,19 +80,17 @@ def _save_items(items: list[InventoryItem]) -> None:
     st.session_state.inventory_registry = [asdict(item) for item in items]
 
 
-def _adjust_stock(
-    items: list[InventoryItem], item_id: str, movement: str, quantity: float
-) -> list[InventoryItem]:
+def _adjust_stock(items: list[InventoryItem], item_id: str, movement: str, quantity: float) -> list[InventoryItem]:
     updated_items: list[InventoryItem] = []
     for item in items:
         if item.item_id != item_id:
             updated_items.append(item)
             continue
-
-        if movement == "Entrada":
-            new_quantity = item.available_quantity + quantity
-        else:
-            new_quantity = max(item.available_quantity - quantity, 0.0)
+        new_quantity = (
+            item.available_quantity + quantity
+            if movement == "Entrada"
+            else max(item.available_quantity - quantity, 0.0)
+        )
         updated_items.append(replace(item, available_quantity=new_quantity))
     return updated_items
 
@@ -84,18 +100,12 @@ def _build_inventory_csv(items: list[InventoryItem]) -> bytes:
     writer = csv.writer(buffer, delimiter=";", lineterminator="\n")
     writer.writerow(CSV_HEADERS)
     for item in items:
-        writer.writerow(
-            [
-                item.item_id,
-                item.name,
-                item.category,
-                f"{item.purchase_cost:.4f}",
-                f"{item.purchased_quantity:.4f}",
-                f"{item.available_quantity:.4f}",
-                item.unit_name,
-                f"{item.minimum_stock:.4f}",
-            ]
-        )
+        writer.writerow([
+            item.item_id, item.name, item.category, f"{item.purchase_cost:.4f}",
+            f"{item.purchased_quantity:.4f}", f"{item.available_quantity:.4f}",
+            item.unit_name, f"{item.minimum_stock:.4f}", f"{item.milliliters:.4f}",
+            f"{item.centimeters:.4f}", f"{item.square_meters:.6f}",
+        ])
     return ("\ufeff" + buffer.getvalue()).encode("utf-8")
 
 
@@ -104,15 +114,10 @@ def _parse_number(value: str, field_name: str, row_number: int, allow_zero: bool
     try:
         number = float(cleaned_value)
     except ValueError as exc:
-        raise ValueError(
-            f"Fila {row_number}: el campo '{field_name}' debe contener un número válido."
-        ) from exc
-
+        raise ValueError(f"Fila {row_number}: el campo '{field_name}' debe contener un número válido.") from exc
     if number < 0 or (not allow_zero and number == 0):
         condition = "mayor que cero" if not allow_zero else "igual o mayor que cero"
-        raise ValueError(
-            f"Fila {row_number}: el campo '{field_name}' debe ser {condition}."
-        )
+        raise ValueError(f"Fila {row_number}: el campo '{field_name}' debe ser {condition}.")
     return number
 
 
@@ -123,7 +128,7 @@ def _parse_inventory_csv(file_bytes: bytes) -> list[InventoryItem]:
         raise ValueError("El archivo debe estar guardado con codificación UTF-8.") from exc
 
     reader = csv.DictReader(StringIO(decoded), delimiter=";")
-    if reader.fieldnames != CSV_HEADERS:
+    if reader.fieldnames not in (BASE_CSV_HEADERS, CSV_HEADERS):
         raise ValueError(
             "El archivo no tiene las columnas esperadas. Usa un CSV exportado desde el módulo Inventario."
         )
@@ -133,7 +138,6 @@ def _parse_inventory_csv(file_bytes: bytes) -> list[InventoryItem]:
         name = (row.get("Nombre") or "").strip()
         category = (row.get("Categoría") or "").strip()
         unit_name = (row.get("Unidad") or "").strip()
-
         if not name:
             raise ValueError(f"Fila {row_number}: falta el nombre del material.")
         if not category:
@@ -141,50 +145,26 @@ def _parse_inventory_csv(file_bytes: bytes) -> list[InventoryItem]:
         if not unit_name:
             raise ValueError(f"Fila {row_number}: falta la unidad de control.")
 
-        purchase_cost = _parse_number(
-            row.get("Costo total de compra") or "0",
-            "Costo total de compra",
-            row_number,
-            allow_zero=False,
-        )
-        purchased_quantity = _parse_number(
-            row.get("Cantidad comprada") or "0",
-            "Cantidad comprada",
-            row_number,
-            allow_zero=False,
-        )
-        available_quantity = _parse_number(
-            row.get("Existencia disponible") or "0",
-            "Existencia disponible",
-            row_number,
-        )
-        minimum_stock = _parse_number(
-            row.get("Existencia mínima") or "0",
-            "Existencia mínima",
-            row_number,
-        )
-
-        imported_items.append(
-            InventoryItem(
-                item_id=(row.get("ID") or "").strip() or uuid4().hex[:8],
-                name=name,
-                category=category,
-                purchase_cost=purchase_cost,
-                purchased_quantity=purchased_quantity,
-                available_quantity=available_quantity,
-                unit_name=unit_name,
-                minimum_stock=minimum_stock,
-            )
-        )
+        imported_items.append(InventoryItem(
+            item_id=(row.get("ID") or "").strip() or uuid4().hex[:8],
+            name=name,
+            category=category,
+            purchase_cost=_parse_number(row.get("Costo total de compra") or "0", "Costo total de compra", row_number, False),
+            purchased_quantity=_parse_number(row.get("Cantidad comprada") or "0", "Cantidad comprada", row_number, False),
+            available_quantity=_parse_number(row.get("Existencia disponible") or "0", "Existencia disponible", row_number),
+            unit_name=unit_name,
+            minimum_stock=_parse_number(row.get("Existencia mínima") or "0", "Existencia mínima", row_number),
+            milliliters=_parse_number(row.get("Mililitros (ml)") or "0", "Mililitros (ml)", row_number),
+            centimeters=_parse_number(row.get("Longitud (cm)") or "0", "Longitud (cm)", row_number),
+            square_meters=_parse_number(row.get("Área (m²)") or "0", "Área (m²)", row_number),
+        ))
 
     if not imported_items:
         raise ValueError("El archivo no contiene materiales para importar.")
     return imported_items
 
 
-def _merge_items(
-    current_items: list[InventoryItem], imported_items: list[InventoryItem]
-) -> list[InventoryItem]:
+def _merge_items(current_items: list[InventoryItem], imported_items: list[InventoryItem]) -> list[InventoryItem]:
     merged_by_id = {item.item_id: item for item in current_items}
     for item in imported_items:
         merged_by_id[item.item_id] = item
@@ -192,67 +172,47 @@ def _merge_items(
 
 
 def render_inventory() -> None:
-    """Renderiza el inventario temporal de materiales."""
     with st.container(border=True):
         render_page_header(
             "Inventario",
-            "Registra materiales, controla existencias y respalda la lista en CSV.",
+            "Registra materiales, dimensiones, controla existencias y respalda la lista en CSV.",
         )
         st.caption("Los registros se conservan únicamente mientras la sesión permanezca abierta.")
 
     st.warning(
         "Este inventario todavía no usa base de datos. Exporta el CSV antes de cerrar y vuelve a importarlo al comenzar otra sesión."
     )
-
     items = _get_items()
 
     st.subheader("Respaldar o recuperar inventario")
     backup_columns = st.columns(2)
     with backup_columns[0]:
-        uploaded_file = st.file_uploader(
-            "Importar inventario desde CSV",
-            type=("csv",),
-            accept_multiple_files=False,
-        )
+        uploaded_file = st.file_uploader("Importar inventario desde CSV", type=("csv",), accept_multiple_files=False)
         import_mode = st.radio(
-            "Cómo aplicar la importación",
-            ("Reemplazar inventario actual", "Combinar por ID"),
+            "Cómo aplicar la importación", ("Reemplazar inventario actual", "Combinar por ID"),
             horizontal=True,
             help="Combinar conserva los materiales actuales y reemplaza solo los que tengan el mismo ID.",
         )
-        if uploaded_file is not None and st.button(
-            "Importar inventario",
-            type="primary",
-            use_container_width=True,
-        ):
+        if uploaded_file is not None and st.button("Importar inventario", type="primary", use_container_width=True):
             try:
                 imported_items = _parse_inventory_csv(uploaded_file.getvalue())
             except ValueError as exc:
                 st.error(str(exc))
             else:
-                if import_mode == "Combinar por ID":
-                    _save_items(_merge_items(items, imported_items))
-                else:
-                    _save_items(imported_items)
+                _save_items(_merge_items(items, imported_items) if import_mode == "Combinar por ID" else imported_items)
                 st.success(f"Se importaron {len(imported_items)} material(es) correctamente.")
                 st.rerun()
 
     with backup_columns[1]:
         if items:
             st.download_button(
-                "Descargar inventario en CSV",
-                data=_build_inventory_csv(items),
-                file_name="copymary_inventario.csv",
-                mime="text/csv",
-                type="primary",
-                use_container_width=True,
+                "Descargar inventario en CSV", data=_build_inventory_csv(items),
+                file_name="copymary_inventario.csv", mime="text/csv",
+                type="primary", use_container_width=True,
             )
             render_info_card(
                 "Contenido del respaldo",
-                (
-                    "Incluye identificación, nombre, categoría, costos, cantidades, unidad de control "
-                    "y existencia mínima de cada material."
-                ),
+                "Incluye identificación, costos, existencias, unidad y dimensiones en ml, cm y m².",
                 "CSV PARA EXCEL",
             )
         else:
@@ -266,45 +226,35 @@ def render_inventory() -> None:
             name = st.text_input("Nombre del material", max_chars=100)
         with first_row[1]:
             category = st.selectbox(
-                "Categoría",
-                ("Papel", "Tinta", "Adhesivo", "Sublimación", "Papelería", "Empaque", "Otro"),
+                "Categoría", ("Papel", "Tinta", "Adhesivo", "Sublimación", "Papelería", "Empaque", "Otro"),
             )
         with first_row[2]:
             unit_name = st.text_input(
-                "Unidad de control",
-                value="unidad",
-                max_chars=30,
+                "Unidad de control", value="unidad", max_chars=30,
                 help="Ejemplos: hoja, unidad, ml, metro o pliego.",
             )
 
         second_row = st.columns(3)
         with second_row[0]:
-            purchase_cost = st.number_input(
-                "Costo total de compra",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
-            )
+            purchase_cost = st.number_input("Costo total de compra", min_value=0.0, value=0.0, step=1.0)
         with second_row[1]:
-            purchased_quantity = st.number_input(
-                "Cantidad comprada",
-                min_value=0.01,
-                value=1.0,
-                step=1.0,
-            )
+            purchased_quantity = st.number_input("Cantidad comprada", min_value=0.01, value=1.0, step=1.0)
         with second_row[2]:
-            minimum_stock = st.number_input(
-                "Existencia mínima",
-                min_value=0.0,
-                value=0.0,
-                step=1.0,
+            minimum_stock = st.number_input("Existencia mínima", min_value=0.0, value=0.0, step=1.0)
+
+        st.caption("Dimensiones opcionales del material")
+        dimension_row = st.columns(3)
+        with dimension_row[0]:
+            milliliters = st.number_input("Mililitros (ml)", min_value=0.0, value=0.0, step=1.0)
+        with dimension_row[1]:
+            centimeters = st.number_input("Longitud (cm)", min_value=0.0, value=0.0, step=1.0)
+        with dimension_row[2]:
+            square_meters = st.number_input(
+                "Área (m²)", min_value=0.0, value=0.0, step=0.01,
+                help="Úsala para controlar papeles, vinilos, láminas y calcular merma por área.",
             )
 
-        submitted = st.form_submit_button(
-            "Registrar material",
-            type="primary",
-            use_container_width=True,
-        )
+        submitted = st.form_submit_button("Registrar material", type="primary", use_container_width=True)
 
     if submitted:
         cleaned_name = name.strip()
@@ -316,18 +266,13 @@ def render_inventory() -> None:
         elif purchase_cost <= 0:
             st.error("El costo total de compra debe ser mayor que cero.")
         else:
-            items.append(
-                InventoryItem(
-                    item_id=uuid4().hex[:8],
-                    name=cleaned_name,
-                    category=category,
-                    purchase_cost=float(purchase_cost),
-                    purchased_quantity=float(purchased_quantity),
-                    available_quantity=float(purchased_quantity),
-                    unit_name=cleaned_unit,
-                    minimum_stock=float(minimum_stock),
-                )
-            )
+            items.append(InventoryItem(
+                item_id=uuid4().hex[:8], name=cleaned_name, category=category,
+                purchase_cost=float(purchase_cost), purchased_quantity=float(purchased_quantity),
+                available_quantity=float(purchased_quantity), unit_name=cleaned_unit,
+                minimum_stock=float(minimum_stock), milliliters=float(milliliters),
+                centimeters=float(centimeters), square_meters=float(square_meters),
+            ))
             _save_items(items)
             st.success("Material registrado durante esta sesión.")
             st.rerun()
@@ -337,10 +282,12 @@ def render_inventory() -> None:
     items = _get_items()
     total_value = sum(item.stock_value for item in items)
     low_stock_count = sum(1 for item in items if item.is_low_stock)
-    summary_columns = st.columns(3)
+    total_area = sum(item.square_meters for item in items)
+    summary_columns = st.columns(4)
     summary_columns[0].metric("Materiales registrados", str(len(items)))
     summary_columns[1].metric("Valor disponible", format_money(total_value))
     summary_columns[2].metric("Existencias bajas", str(low_stock_count))
+    summary_columns[3].metric("Área registrada", f"{total_area:,.4f} m²")
 
     if not items:
         st.info("Todavía no hay materiales registrados en esta sesión.")
@@ -352,7 +299,7 @@ def render_inventory() -> None:
             title_columns = st.columns([3, 1])
             with title_columns[0]:
                 st.markdown(f"### {item.name}")
-                st.caption(f"{item.category} · ID {item.item_id}")
+                st.caption(f"{item.category} · ID {item.item_id} · {item.dimensions_summary}")
             with title_columns[1]:
                 if st.button("Eliminar", key=f"delete_item_{item.item_id}", use_container_width=True):
                     _save_items([current for current in items if current.item_id != item.item_id])
@@ -360,63 +307,34 @@ def render_inventory() -> None:
 
             metric_columns = st.columns(4)
             metric_columns[0].metric("Costo unitario", format_money(item.unit_cost))
-            metric_columns[1].metric(
-                "Existencia",
-                f"{item.available_quantity:,.2f} {item.unit_name}",
-            )
+            metric_columns[1].metric("Existencia", f"{item.available_quantity:,.2f} {item.unit_name}")
             metric_columns[2].metric("Valor disponible", format_money(item.stock_value))
-            metric_columns[3].metric(
-                "Estado",
-                "BAJO" if item.is_low_stock else "DISPONIBLE",
-            )
+            metric_columns[3].metric("Estado", "BAJO" if item.is_low_stock else "DISPONIBLE")
 
             if item.is_low_stock:
-                st.warning(
-                    f"La existencia alcanzó el mínimo definido de {item.minimum_stock:,.2f} {item.unit_name}."
-                )
+                st.warning(f"La existencia alcanzó el mínimo definido de {item.minimum_stock:,.2f} {item.unit_name}.")
 
             with st.form(f"stock_movement_form_{item.item_id}", clear_on_submit=True):
                 movement_columns = st.columns(3)
                 with movement_columns[0]:
-                    movement = st.selectbox(
-                        "Movimiento",
-                        ("Entrada", "Salida"),
-                        key=f"movement_{item.item_id}",
-                    )
+                    movement = st.selectbox("Movimiento", ("Entrada", "Salida"), key=f"movement_{item.item_id}")
                 with movement_columns[1]:
                     movement_quantity = st.number_input(
-                        f"Cantidad en {item.unit_name}",
-                        min_value=0.01,
-                        value=1.0,
-                        step=1.0,
+                        f"Cantidad en {item.unit_name}", min_value=0.01, value=1.0, step=1.0,
                         key=f"movement_quantity_{item.item_id}",
                     )
                 with movement_columns[2]:
-                    movement_submitted = st.form_submit_button(
-                        "Aplicar movimiento",
-                        type="primary",
-                        use_container_width=True,
-                    )
+                    movement_submitted = st.form_submit_button("Aplicar movimiento", type="primary", use_container_width=True)
 
             if movement_submitted:
                 if movement == "Salida" and movement_quantity > item.available_quantity:
                     st.error("La salida no puede superar la existencia disponible.")
                 else:
-                    _save_items(
-                        _adjust_stock(
-                            items,
-                            item_id=item.item_id,
-                            movement=movement,
-                            quantity=float(movement_quantity),
-                        )
-                    )
+                    _save_items(_adjust_stock(items, item.item_id, movement, float(movement_quantity)))
                     st.rerun()
 
             render_info_card(
                 "Costo utilizable en Costeo",
-                (
-                    f"Cada {item.unit_name} de {item.name} tiene un costo orientativo de "
-                    f"{format_money(item.unit_cost)}."
-                ),
+                f"Cada {item.unit_name} de {item.name} tiene un costo orientativo de {format_money(item.unit_cost)}.",
                 "COSTO UNITARIO",
             )
