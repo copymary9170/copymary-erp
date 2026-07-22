@@ -4,7 +4,7 @@ from src.inventory_enterprise_loader import activate_inventory_enterprise
 from src.module_bootstrap import activate_module_bootstrap
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
-from src.session_backup import restore_latest_snapshot_on_startup
+from src.startup_restore import restore_session_snapshot_on_startup
 from src.top_navigation_app import run_app
 
 
@@ -19,7 +19,7 @@ def _activate_process_quotes_safely() -> None:
     activate_process_quotes()
 
 
-restore_latest_snapshot_on_startup()
+restore_session_snapshot_on_startup()
 activate_module_bootstrap()
 activate_printer_asset_specs()
 activate_print_cost_module()
