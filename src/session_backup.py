@@ -10,75 +10,32 @@ import streamlit as st
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, get_database_status, initialize_database
 
-# Cuántos respaldos automáticos conservar en la base de datos. Se guarda
-# historial acotado (no solo el último) para poder recuperar una versión
-# anterior si un guardado automático capturó un estado a medio llenar.
 MAX_CLOUD_SNAPSHOTS = 10
-
-# NOTA: `GeneralSettings` se importa de forma perezosa dentro de `_settings()`
-# en vez de aquí arriba. El import a nivel de módulo creaba un ciclo latente:
-# session_backup → general_settings → assets → session_backup (assets registra
-# su sección de respaldo al importarse). El ciclo solo explotaba cuando
-# session_backup era el PRIMER módulo de la cadena en importarse (p. ej. al
-# correr un subconjunto de pruebas donde test_finishing_jobs.py se recolecta
-# primero) — con otros órdenes de importación funcionaba de casualidad.
-
 BACKUP_VERSION = 2
 LIST_SECTIONS = (
-    "customers_registry",
-    "quotes_registry",
-    "sales_registry",
-    "order_plans",
-    "payment_records",
-    "receivables_registry",
-    "cash_movements",
-    "cash_closings",
-    "expense_records",
-    "expense_budgets",
-    "recurring_expenses",
-    "team_members",
-    "team_payments",
-    "adjustment_records",
-    "suppliers_registry",
-    "purchases_registry",
-    "supplier_payment_records",
-    "payables_registry",
-    "products_registry",
-    "production_log",
-    "assets_registry",
-    "inventory_registry",
-    "inventory_movements",
-    "saved_prices",
+    "customers_registry", "quotes_registry", "sales_registry", "order_plans",
+    "payment_records", "receivables_registry", "cash_movements", "cash_closings",
+    "expense_records", "expense_budgets", "recurring_expenses", "team_members",
+    "team_payments", "adjustment_records", "suppliers_registry", "purchases_registry",
+    "supplier_payment_records", "payables_registry", "products_registry", "production_log",
+    "assets_registry", "inventory_registry", "inventory_movements", "saved_prices",
 )
 DICT_SECTIONS = ("business_goals",)
 SESSION_KEYS = ("general_settings", *LIST_SECTIONS, *DICT_SECTIONS)
 SECTION_LABELS = {
-    "general_settings": "Configuración General",
-    "customers_registry": "Clientes",
-    "quotes_registry": "Cotizaciones",
-    "sales_registry": "Ventas y pedidos",
-    "order_plans": "Agenda de pedidos",
-    "payment_records": "Abonos de clientes",
-    "receivables_registry": "Seguimiento de cobro",
-    "cash_movements": "Caja",
-    "cash_closings": "Cierres de caja",
-    "expense_records": "Gastos",
-    "expense_budgets": "Presupuestos",
-    "recurring_expenses": "Gastos recurrentes",
-    "team_members": "Equipo",
-    "team_payments": "Pagos al equipo",
-    "adjustment_records": "Anulaciones y ajustes",
-    "suppliers_registry": "Proveedores",
-    "purchases_registry": "Compras",
-    "supplier_payment_records": "Pagos a proveedores",
-    "payables_registry": "Seguimiento por pagar",
-    "products_registry": "Catálogo",
-    "production_log": "Producción",
-    "assets_registry": "Activos",
-    "inventory_registry": "Inventario",
-    "inventory_movements": "Movimientos de inventario",
-    "saved_prices": "Lista de precios",
-    "business_goals": "Metas del negocio",
+    "general_settings": "Configuración General", "customers_registry": "Clientes",
+    "quotes_registry": "Cotizaciones", "sales_registry": "Ventas y pedidos",
+    "order_plans": "Agenda de pedidos", "payment_records": "Abonos de clientes",
+    "receivables_registry": "Seguimiento de cobro", "cash_movements": "Caja",
+    "cash_closings": "Cierres de caja", "expense_records": "Gastos",
+    "expense_budgets": "Presupuestos", "recurring_expenses": "Gastos recurrentes",
+    "team_members": "Equipo", "team_payments": "Pagos al equipo",
+    "adjustment_records": "Anulaciones y ajustes", "suppliers_registry": "Proveedores",
+    "purchases_registry": "Compras", "supplier_payment_records": "Pagos a proveedores",
+    "payables_registry": "Seguimiento por pagar", "products_registry": "Catálogo",
+    "production_log": "Producción", "assets_registry": "Activos",
+    "inventory_registry": "Inventario", "inventory_movements": "Movimientos de inventario",
+    "saved_prices": "Lista de precios", "business_goals": "Metas del negocio",
 }
 
 
@@ -105,22 +62,7 @@ def _build_backup() -> bytes:
     return json.dumps(_backup_payload(), ensure_ascii=False, indent=2).encode("utf-8")
 
 
-# ---------------------------------------------------------------------------
-# Respaldo automático en base de datos ("en la nube")
-#
-# El botón "Descargar respaldo" de abajo sigue existiendo, pero depende de
-# que alguien se acuerde de usarlo justo antes de que la app se reinicie. Lo
-# de aquí guarda el MISMO snapshot en la base de datos, para poder
-# restaurarlo automáticamente al arrancar sin que nadie tenga que hacer nada
-# — siempre que `COPYMARY_DATABASE_URL` apunte a un PostgreSQL real (con
-# SQLite por defecto, la base de datos también es efímera en la mayoría de
-# hostings, así que esto no protege más que la sesión misma).
-# ---------------------------------------------------------------------------
-
 def save_snapshot_to_database() -> dict:
-    """Guarda el estado actual de la sesión como un nuevo respaldo en la
-    base de datos, y elimina los más antiguos más allá de
-    `MAX_CLOUD_SNAPSHOTS`. Devuelve el registro guardado (con su tamaño)."""
     payload = _backup_payload()
     data_json = json.dumps(payload, ensure_ascii=False)
     sections_included = sum(1 for value in payload["data"].values() if value)
@@ -134,7 +76,8 @@ def save_snapshot_to_database() -> dict:
             (snapshot_id, data_json, sections_included, len(data_json.encode("utf-8")), created_at),
         )
         old_ids = [
-            row["snapshot_id"] for row in conn.execute(
+            row["snapshot_id"]
+            for row in conn.execute(
                 "SELECT snapshot_id FROM session_snapshots ORDER BY created_at_utc DESC"
             ).fetchall()
         ][MAX_CLOUD_SNAPSHOTS:]
@@ -142,14 +85,14 @@ def save_snapshot_to_database() -> dict:
             conn.execute("DELETE FROM session_snapshots WHERE snapshot_id = ?", (old_id,))
 
     return {
-        "snapshot_id": snapshot_id, "sections_included": sections_included,
-        "size_bytes": len(data_json.encode("utf-8")), "created_at_utc": created_at,
+        "snapshot_id": snapshot_id,
+        "sections_included": sections_included,
+        "size_bytes": len(data_json.encode("utf-8")),
+        "created_at_utc": created_at,
     }
 
 
 def latest_snapshot_info() -> dict | None:
-    """Metadatos del respaldo automático más reciente (sin el JSON completo,
-    para no cargar el contenido cuando solo se necesita mostrar el estado)."""
     initialize_database()
     with connect() as conn:
         rows = conn.execute(
@@ -158,40 +101,55 @@ def latest_snapshot_info() -> dict | None:
     return dict(rows[0]) if rows else None
 
 
-def restore_latest_snapshot_from_database() -> dict | None:
-    """Restaura en `st.session_state` el respaldo automático más reciente.
-    Devuelve sus metadatos, o None si no hay ninguno guardado todavía."""
+def _latest_snapshot_row() -> dict | None:
     initialize_database()
     with connect() as conn:
         rows = conn.execute(
             "SELECT * FROM session_snapshots ORDER BY created_at_utc DESC LIMIT 1"
         ).fetchall()
-    if not rows:
+    return dict(rows[0]) if rows else None
+
+
+def restore_latest_snapshot_from_database() -> dict | None:
+    row = _latest_snapshot_row()
+    if row is None:
         return None
-    row = dict(rows[0])
     restored = _parse_backup(row["data_json"].encode("utf-8"))
     _restore(restored, [key for key in SESSION_KEYS if key in restored["present_sections"]])
     return row
 
 
 def session_has_data() -> bool:
-    """True si la sesión actual ya tiene algo cargado en cualquiera de las
-    secciones respaldables — para decidir si vale la pena restaurar
-    automáticamente al arrancar (no pisar una sesión que ya está en uso)."""
     return any(st.session_state.get(key) for key in SESSION_KEYS)
 
 
 def restore_latest_snapshot_on_startup() -> None:
-    """Restauración automática al arrancar la app: si la sesión actual está
-    vacía (primera vez que se abre desde este arranque del servidor) y hay
-    un respaldo guardado en la base de datos, lo carga solo. No hace nada si
-    la sesión ya tiene datos (para no pisar trabajo en curso) ni si no hay
-    ningún respaldo todavía. Cualquier error de conexión se ignora en
-    silencio — no debe impedir que la app arranque."""
-    if session_has_data():
+    """Restaura sin sobrescribir trabajo ya cargado.
+
+    En una sesión totalmente vacía restaura el respaldo completo. Si otras
+    secciones ya fueron inicializadas pero falta Configuración General, recupera
+    únicamente ``general_settings``. Así las tasas sobreviven al reload sin
+    reemplazar inventario, ventas, clientes ni otros datos activos.
+    """
+    settings_missing = not st.session_state.get("general_settings")
+    if session_has_data() and not settings_missing:
         return
+
     try:
-        restore_latest_snapshot_from_database()
+        row = _latest_snapshot_row()
+        if row is None:
+            return
+        restored = _parse_backup(row["data_json"].encode("utf-8"))
+        if session_has_data():
+            if (
+                settings_missing
+                and "general_settings" in restored["present_sections"]
+                and restored.get("general_settings") is not None
+            ):
+                _restore(restored, ["general_settings"])
+        else:
+            selected = [key for key in SESSION_KEYS if key in restored["present_sections"]]
+            _restore(restored, selected)
     except Exception:
         pass
 
@@ -201,17 +159,6 @@ def _settings(raw: dict | None):
 
     if raw is None:
         return None
-    # Bug real encontrado: `GeneralSettings` cambió hace poco (equipment_name/
-    # equipment_cost/equipment_lifetime_units se reemplazaron por
-    # pricing_method + selected_asset_ids, vinculado a Activos reales), pero
-    # esta función se quedó validando el esquema VIEJO. Resultado: exportar
-    # un respaldo funcionaba, pero restaurarlo fallaba siempre con "La
-    # configuración general no tiene la estructura esperada" — la app nunca
-    # llegaba a construir un GeneralSettings válido. Además, antes se exigía
-    # coincidencia EXACTA de claves (`!=` en vez de subconjunto), lo cual es
-    # frágil ante cualquier evolución futura del esquema; ahora sólo se
-    # exigen los campos obligatorios y los opcionales (tasas de cambio, IVA,
-    # IGTF, comisiones) se completan con su valor por defecto si faltan.
     required = {
         "business_name", "currency", "profit_margin", "pricing_method",
         "monthly_internet", "monthly_electricity", "estimated_monthly_units",
@@ -223,9 +170,11 @@ def _settings(raw: dict | None):
     if currency not in {"USD", "VES", "EUR"}:
         raise ValueError("La moneda debe ser USD, VES o EUR.")
     optional_defaults = {
-        "bcv_rate": 0.0, "bcv_eur_rate": 0.0, "binance_rate": 0.0, "kontigo_in_rate": 0.0, "kontigo_out_rate": 0.0,
+        "bcv_rate": 0.0, "bcv_eur_rate": 0.0, "binance_rate": 0.0,
+        "kontigo_in_rate": 0.0, "kontigo_out_rate": 0.0,
         "kontigo_in_fee": 0.0, "kontigo_out_fee": 0.0,
-        "iva_rate": 16.0, "igtf_rate": 3.0, "mobile_payment_fee": 0.0, "pos_fee": 0.0,
+        "iva_rate": 16.0, "igtf_rate": 3.0, "mobile_payment_fee": 0.0,
+        "pos_fee": 0.0,
     }
     return GeneralSettings(
         business_name=str(raw["business_name"]).strip(),
@@ -289,7 +238,10 @@ def _restore(data: dict, selected: list[str]) -> None:
                 st.session_state[key] = data[key]
         else:
             st.session_state[key] = data[key]
-    for key in ("connected_costing_result", "connected_costing_asset", "connected_costing_material", "price_estimate"):
+    for key in (
+        "connected_costing_result", "connected_costing_asset",
+        "connected_costing_material", "price_estimate",
+    ):
         st.session_state.pop(key, None)
 
 
@@ -314,20 +266,21 @@ def _metrics(values: dict[str, str]) -> None:
 
 def render_session_backup() -> None:
     with st.container(border=True):
-        render_page_header("Respaldo general", "Guarda o recupera toda la información temporal principal del ERP.")
+        render_page_header(
+            "Respaldo general",
+            "Guarda o recupera toda la información temporal principal del ERP.",
+        )
         st.caption("Incluye metas, equipo, pagos internos, ajustes, ventas, compras, caja, producción e inventario.")
 
     db_status = get_database_status()
     is_durable = db_status.engine == "postgresql"
-
     st.markdown("### Respaldo automático en la nube")
     if is_durable:
-        st.caption("Guarda toda la sesión en tu base de datos PostgreSQL. Al reabrir la app, se restaura sola si la sesión llegó vacía.")
+        st.caption("Guarda toda la sesión en PostgreSQL y recupera Configuración General sin sobrescribir otras secciones activas.")
     else:
         st.warning(
-            "Todavía usas SQLite, que también se borra al reiniciar en la mayoría de hostings — el respaldo automático "
-            "se guardará, pero no protege más que la sesión actual. Configura `COPYMARY_DATABASE_URL` con PostgreSQL "
-            "para que este respaldo sí sobreviva a un reinicio."
+            "Todavía usas SQLite, que también se borra al reiniciar en la mayoría de hostings. "
+            "Configura `COPYMARY_DATABASE_URL` con PostgreSQL para que el respaldo sobreviva a un reinicio."
         )
 
     latest = latest_snapshot_info()
@@ -346,7 +299,8 @@ def render_session_backup() -> None:
         st.rerun()
     if cloud_cols[1].button(
         "Restaurar el más reciente de la nube", use_container_width=True,
-        disabled=latest is None, help="Reemplaza los datos de esta sesión con el último respaldo guardado en la nube.",
+        disabled=latest is None,
+        help="Reemplaza los datos de esta sesión con el último respaldo guardado en la nube.",
     ):
         restored = restore_latest_snapshot_from_database()
         if restored:
@@ -357,14 +311,10 @@ def render_session_backup() -> None:
     st.markdown("### Respaldo manual (archivo)")
     st.warning("Descarga este respaldo antes de cerrar la sesión para evitar perder datos.")
     _metrics({SECTION_LABELS[key]: _count(st.session_state.get(key)) for key in SESSION_KEYS})
-
     st.download_button(
-        "Descargar respaldo general",
-        data=_build_backup(),
-        file_name="copymary_respaldo_sesion_v2.json",
-        mime="application/json",
-        type="primary",
-        use_container_width=True,
+        "Descargar respaldo general", data=_build_backup(),
+        file_name="copymary_respaldo_sesion_v2.json", mime="application/json",
+        type="primary", use_container_width=True,
     )
 
     st.divider()
@@ -381,15 +331,20 @@ def render_session_backup() -> None:
             available = [key for key in SESSION_KEYS if key in present]
             _metrics({SECTION_LABELS[key]: _count(restored[key]) for key in available})
             selected = st.multiselect(
-                "Secciones que deseas restaurar",
-                options=available,
-                default=available,
+                "Secciones que deseas restaurar", options=available, default=available,
                 format_func=lambda key: SECTION_LABELS[key],
             )
             confirmation = st.checkbox("Entiendo que las secciones seleccionadas reemplazarán sus datos actuales.")
-            if st.button("Restaurar secciones seleccionadas", type="primary", use_container_width=True, disabled=not selected or not confirmation):
+            if st.button(
+                "Restaurar secciones seleccionadas", type="primary", use_container_width=True,
+                disabled=not selected or not confirmation,
+            ):
                 _restore(restored, selected)
                 st.success(f"Se restauraron {len(selected)} sección(es).")
                 st.rerun()
 
-    render_info_card("Compatibilidad", "Los respaldos antiguos pueden restaurarse sin borrar las secciones nuevas que no existían en el archivo.", "RESPALDO V2")
+    render_info_card(
+        "Compatibilidad",
+        "Los respaldos antiguos pueden restaurarse sin borrar las secciones nuevas que no existían en el archivo.",
+        "RESPALDO V2",
+    )
