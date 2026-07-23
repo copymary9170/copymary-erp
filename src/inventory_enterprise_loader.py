@@ -1,14 +1,16 @@
 """Activa la versión empresarial del módulo Inventario."""
 from src import app_shell
 from src import inventory_enterprise as inventory_module
+from src.inventory_enterprise_enhancements import activate_inventory_enterprise_enhancements
 
 
 def activate_inventory_enterprise() -> None:
+    activate_inventory_enterprise_enhancements(inventory_module)
     app_shell.FUNCTIONAL_MODULES["Inventario"] = inventory_module.render_inventory_enterprise
     try:
         from src import top_navigation_app
         top_navigation_app.DESCRIPTIONS["Inventario"] = (
-            "Control de existencias, costos, movimientos, conteos, lotes y reposición integrado con Producción."
+            "Control de existencias, costos, dimensiones, movimientos, conteos, lotes y reposición integrado con Producción."
         )
     except (ImportError, KeyError):
         pass
