@@ -1,0 +1,74 @@
+name: Aplicar separación Catálogo Compras Inventario
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patches:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Obtener exclusivamente los parches 0007 a 0010
+        run: |
+          git fetch origin setup/apply-separation-patches
+          mkdir -p /tmp/copymary-patches
+
+          for patch in \
+            0007-Fase-1-Cat-logo-de-art-culos-separaci-n-Cat-logo-Com.patch \
+            0008-Fase-2-Compras-enlaza-con-el-Cat-logo-por-item_id-es.patch \
+            0009-Fase-3-Recepci-n-de-mercanc-a-inventario-idempotente.patch \
+            0010-Fase-4-Inventario-deja-de-pedir-datos-de-compra-limp.patch
+          do
+            git show "origin/setup/apply-separation-patches:patches/$patch" > "/tmp/copymary-patches/$patch"
+          done
+
+      - name: Crear rama final limpia desde main
+        run: |
+          git switch -c agent/separate-catalog-purchases-inventory-clean
+
+      - name: Aplicar parches 0007 a 0010
+        run: |
+          git am \
+            /tmp/copymary-patches/0007-Fase-1-Cat-logo-de-art-culos-separaci-n-Cat-logo-Com.patch \
+            /tmp/copymary-patches/0008-Fase-2-Compras-enlaza-con-el-Cat-logo-por-item_id-es.patch \
+            /tmp/copymary-patches/0009-Fase-3-Recepci-n-de-mercanc-a-inventario-idempotente.patch \
+            /tmp/copymary-patches/0010-Fase-4-Inventario-deja-de-pedir-datos-de-compra-limp.patch
+
+      - name: Comprobar sintaxis
+        run: python -m compileall src
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install pytest
+
+      - name: Ejecutar pruebas
+        run: python -m pytest
+
+      - name: Verificar los cuatro commits
+        run: |
+          git log --oneline main..HEAD
+          test "$(git rev-list --count main..HEAD)" -eq 4
+          git diff --stat main..HEAD
+
+      - name: Subir rama final
+        run: |
+          git push --force-with-lease origin agent/separate-catalog-purchases-inventory-clean
