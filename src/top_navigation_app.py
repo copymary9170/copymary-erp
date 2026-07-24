@@ -12,9 +12,9 @@ from src.modern_styles import apply_modern_styles
 SPECIALTY_AREAS = {
     "Inicio": ("⌂", "Vista ejecutiva", "Resumen general, alertas y accesos de uso diario.", ("Inicio", "Novedades", "Centro de control", "Metas del negocio", "Panel comercial", "Auditoría de datos", "Fundación técnica")),
     "Comercial y CRM": ("◎", "Relación con clientes", "Clientes, cotizaciones, ventas, pedidos y cobros.", ("Clientes", "Cotizaciones", "Ventas y pedidos", "Venta rápida de mostrador", "Agenda de producción y entregas", "Cuentas por cobrar", "Comprobantes", "Reportes comerciales")),
-    "Compras y abastecimiento": ("◇", "Cadena de suministro", "Proveedores, compras, recepción y cuentas por pagar.", ("Proveedores", "Compras", "Cuentas por pagar")),
+    "Compras y abastecimiento": ("◇", "Cadena de suministro", "Proveedores, órdenes de compra, recepción y cuentas por pagar.", ("Proveedores", "Compras", "Recepción de mercancía", "Cuentas por pagar")),
     "Producción": ("◫", "Operación productiva", "Catálogo productivo, órdenes, capacidad y reversos.", ("Catálogo y producción", "Órdenes de producción", "Mantenimiento del catálogo", "Reversos de producción")),
-    "Inventario y almacén": ("▦", "Control de existencias", "Existencias, movimientos, ajustes y alertas de stock.", ("Inventario", "Movimientos de inventario", "Ajustes de inventario", "Alertas de inventario")),
+    "Inventario y almacén": ("▦", "Control de artículos y existencias", "Catálogo maestro, existencias, movimientos, ajustes y alertas de stock.", ("Catálogo de artículos", "Inventario", "Movimientos de inventario", "Ajustes de inventario", "Alertas de inventario")),
     "Costos y precios": ("◈", "Rentabilidad", "Costeo, recetas, márgenes, tasas y precios de venta.", ("Costeo", "Costeo por procesos", "BOM multinivel", "Tasas de cambio", "Ajustar precios", "Exportar precios")),
     "Finanzas y tesorería": ("◉", "Control financiero", "Caja, conciliación, gastos, pagos, ajustes y cierres.", ("Panel financiero y cierres", "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto", "Reversos de pagos", "Anulaciones y ajustes")),
     "Contabilidad y análisis": ("◌", "Análisis gerencial", "Resultados financieros y proyecciones de efectivo.", ("Estado de Resultados", "Flujo de caja proyectado")),
@@ -33,10 +33,13 @@ DESCRIPTIONS = {
     "Venta rápida de mostrador": "Venta directa y cobro inmediato.", "Agenda de producción y entregas": "Fechas y capacidad.",
     "Cuentas por cobrar": "Saldos y vencimientos.", "Comprobantes": "Soportes comerciales.",
     "Reportes comerciales": "Rendimiento de ventas.", "Proveedores": "Directorio de proveedores.",
-    "Compras": "Abastecimiento y recepción.", "Cuentas por pagar": "Obligaciones pendientes.",
+    "Compras": "Órdenes y condiciones de adquisición sin alterar existencias.",
+    "Recepción de mercancía": "Confirma lo recibido y actualiza inventario y costo promedio.",
+    "Cuentas por pagar": "Obligaciones pendientes.",
+    "Catálogo de artículos": "Definición maestra de materiales, productos, unidades y características.",
     "Catálogo y producción": "Productos, recetas y procesos.", "Órdenes de producción": "Seguimiento de trabajos.",
     "Mantenimiento del catálogo": "Actualización del catálogo.", "Reversos de producción": "Correcciones productivas.",
-    "Inventario": "Existencias disponibles.", "Movimientos de inventario": "Entradas y salidas.",
+    "Inventario": "Existencias disponibles sin datos de compra.", "Movimientos de inventario": "Entradas y salidas.",
     "Ajustes de inventario": "Correcciones autorizadas.", "Alertas de inventario": "Mínimos y reposición.",
     "Costeo": "Costos y márgenes.", "Costeo por procesos": "Costos por etapa.", "BOM multinivel": "Materiales anidados.",
     "Tasas de cambio": "Tasas monetarias.", "Ajustar precios": "Actualización de precios.", "Exportar precios": "Listados de precios.",
@@ -73,23 +76,11 @@ def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
         st.session_state["navigation_page"] = current
     if len(pages) == 1:
         return pages[0]
-
-    selected = st.radio(
-        "Módulos del área",
-        pages,
-        index=pages.index(current),
-        key=f"module_strip_{area}",
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    selected = st.radio("Módulos del área", pages, index=pages.index(current), key=f"module_strip_{area}", horizontal=True, label_visibility="collapsed")
     if selected != current:
         st.session_state["navigation_page"] = selected
         st.rerun()
-
-    st.markdown(
-        f'<div class="cm-selected-module"><strong>{selected}</strong><span>{DESCRIPTIONS.get(selected, "Herramientas de esta especialidad.")}</span></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="cm-selected-module"><strong>{selected}</strong><span>{DESCRIPTIONS.get(selected, "Herramientas de esta especialidad.")}</span></div>', unsafe_allow_html=True)
     return selected
 
 
@@ -115,18 +106,12 @@ def run_app() -> None:
     app_shell._apply_pending_navigation()
     if not auth.require_login():
         return
-
     user = auth.current_user()
     areas, allowed = _effective_areas(user)
     st.session_state.setdefault("navigation_area", "Inicio")
     if st.session_state["navigation_area"] not in areas:
         st.session_state["navigation_area"] = next(iter(areas))
-
-    st.markdown(
-        f'<div class="cm-shell"><div class="cm-topline"><div class="cm-brand"><div class="cm-logo">CM</div><div><div class="cm-brand-title">CopyMary Enterprise</div><div class="cm-brand-subtitle">ERP integral para impresión, papelería y servicios</div></div></div><div class="cm-account"><span class="cm-account-dot"></span><div><div class="cm-account-name">{user.display_name}</div><div class="cm-account-role">{user.role_name}</div></div></div></div><div class="cm-nav-label">Áreas de especialidad</div></div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown(f'<div class="cm-shell"><div class="cm-topline"><div class="cm-brand"><div class="cm-logo">CM</div><div><div class="cm-brand-title">CopyMary Enterprise</div><div class="cm-brand-subtitle">ERP integral para impresión, papelería y servicios</div></div></div><div class="cm-account"><span class="cm-account-dot"></span><div><div class="cm-account-name">{user.display_name}</div><div class="cm-account-role">{user.role_name}</div></div></div></div><div class="cm-nav-label">Áreas de especialidad</div></div>', unsafe_allow_html=True)
     nav, action = st.columns([10, 1])
     with nav:
         selected_area = st.radio("Áreas", tuple(areas), key="navigation_area", horizontal=True, label_visibility="collapsed")
@@ -134,7 +119,6 @@ def run_app() -> None:
         if st.button("Salir", key="top_logout_button", use_container_width=True):
             auth.logout()
             st.rerun()
-
     icon, eyebrow, description, pages = areas[selected_area]
     st.markdown(f'<div class="cm-workspace"><div><div class="cm-eyebrow">{eyebrow}</div><div class="cm-workspace-title">{selected_area}</div><div class="cm-workspace-copy">{description}</div></div><div class="cm-workspace-icon">{icon}</div></div>', unsafe_allow_html=True)
     if selected_area != "Administración y seguridad":
