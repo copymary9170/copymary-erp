@@ -34,7 +34,14 @@ jobs:
             0009-Fase-3-Recepci-n-de-mercanc-a-inventario-idempotente.patch \
             0010-Fase-4-Inventario-deja-de-pedir-datos-de-compra-limp.patch
           do
-            git show "origin/setup/apply-separation-patches:patches/$patch" > "/tmp/copymary-patches/$patch"
+            if git cat-file -e "origin/setup/apply-separation-patches:patches/$patch" 2>/dev/null; then
+              git show "origin/setup/apply-separation-patches:patches/$patch" > "/tmp/copymary-patches/$patch"
+            else
+              git show "origin/setup/apply-separation-patches:patches/$patch.gz.b64" \
+                | base64 --decode \
+                | gzip --decompress \
+                > "/tmp/copymary-patches/$patch"
+            fi
           done
 
       - name: Crear rama final limpia desde main
