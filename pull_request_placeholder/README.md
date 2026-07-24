@@ -1,1 +1,0 @@
-Este archivo existe únicamente para crear un commit y permitir abrir el Pull Request. Será eliminado antes del merge.
