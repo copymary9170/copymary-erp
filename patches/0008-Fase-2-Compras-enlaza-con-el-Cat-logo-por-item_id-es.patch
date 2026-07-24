@@ -1,0 +1,435 @@
+From 67212ffb21c5bef7fb98e2369162bd01e054dec1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 24 Jul 2026 01:01:31 +0000
+Subject: [PATCH 08/10] =?UTF-8?q?Fase=202:=20Compras=20enlaza=20con=20el?=
+ =?UTF-8?q?=20Cat=C3=A1logo=20por=20item=5Fid=20+=20estados=20de=20compra/?=
+ =?UTF-8?q?pago?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- src/purchase_states.py: estados de compra (Borrador→Solicitada→Aprobada→
+  Ordenada→Parcialmente recibida→Recibida→Cerrada, + Cancelada) con
+  transiciones válidas; estados de pago (Pendiente/Parcial/Pagada/Vencida/
+  Anulada); validaciones de línea (cantidad>0, precio>=0, tasa>0) y de
+  recepción (no recibir más de lo pendiente salvo autorización); enlace
+  Compras↔Catálogo (catalog_purchase_options, resolve_purchase_article,
+  link_fields_for).
+- src/purchases_plus.py: el formulario de solicitud permite elegir un artículo
+  del catálogo (guarda catalog_item_id + catalog_sku), de forma aditiva; el
+  modo manual sigue disponible. No se crean artículos silenciosamente.
+- tests/test_purchase_states.py: 14 pruebas.
+- Doc actualizado con lo entregado en Fase 2.
+
+Suite completa: 619 passed, 6 skipped.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MtE5MMQXcD71k2x6tcKzC8
+---
+ .../SEPARACION_CATALOGO_COMPRAS_INVENTARIO.md |  31 ++++-
+ src/purchase_states.py                        | 128 ++++++++++++++++++
+ src/purchases_plus.py                         |  50 ++++++-
+ tests/test_purchase_states.py                 | 120 ++++++++++++++++
+ 4 files changed, 320 insertions(+), 9 deletions(-)
+ create mode 100644 src/purchase_states.py
+ create mode 100644 tests/test_purchase_states.py
+
+diff --git a/docs/SEPARACION_CATALOGO_COMPRAS_INVENTARIO.md b/docs/SEPARACION_CATALOGO_COMPRAS_INVENTARIO.md
+index e87c95e..fed6d2d 100644
+--- a/docs/SEPARACION_CATALOGO_COMPRAS_INVENTARIO.md
++++ b/docs/SEPARACION_CATALOGO_COMPRAS_INVENTARIO.md
+@@ -56,8 +56,9 @@ Navegación activa: `top_navigation_app.SPECIALTY_AREAS` (grupos como
+ - **Fase 1 (implementada):** catálogo de artículos como fuente de verdad de la
+   definición permanente; migración idempotente y no destructiva desde
+   Inventario; interfaces estables para las fases siguientes.
+-- **Fase 2 (pendiente):** Compras selecciona artículos del catálogo por
+-  `item_id` (no texto libre); líneas de compra; estados de compra y de pago.
++- **Fase 2 (implementada, base):** Compras puede seleccionar artículos del
++  catálogo por `item_id` (no texto libre) en la solicitud; estados de compra y
++  de pago con transiciones válidas; validaciones de línea y de recepción.
+ - **Fase 3 (pendiente):** recepción de mercancía separada; solo la cantidad
+   aceptada aumenta el inventario; idempotencia por clave; costo promedio
+   ponderado móvil; devoluciones y daños.
+@@ -108,6 +109,32 @@ Interfaces estables para fases siguientes:
+ - `add_item(item)` / `update_item(item_id, **updates)`
+ - `migrate_inventory_to_catalog(dry_run=False) -> dict`
+ 
++## Fase 2 — lo entregado
++
++Archivos nuevos:
++
++- `src/purchase_states.py` — estados de compra (Borrador, Solicitada, Aprobada,
++  Ordenada, Parcialmente recibida, Recibida, Cancelada, Cerrada) con
++  transiciones válidas; estados de pago (Pendiente, Parcial, Pagada, Vencida,
++  Anulada); validaciones (`validate_purchase_line`, `validate_reception` que no
++  permite recibir más de lo pendiente salvo autorización); y el enlace
++  Compras ↔ Catálogo (`catalog_purchase_options`, `resolve_purchase_article`,
++  `link_fields_for`).
++- `tests/test_purchase_states.py` — 14 pruebas.
++
++Cambios:
++
++- `src/purchases_plus.py` — el formulario de solicitud permite elegir un
++  artículo del catálogo (guarda `catalog_item_id` + `catalog_sku`), de forma
++  aditiva: el modo manual sigue disponible y no se crean artículos de forma
++  silenciosa.
++
++Interfaces estables para Recepción (Fase 3):
++
++- `can_transition(current, target)` / `next_states(current)`
++- `validate_reception(ordered, already_received, receiving_now, allow_over_receipt=False)`
++- `resolve_purchase_article(purchase) -> CatalogItem | None`
++
+ ## Pendiente / notas
+ 
+ - **Permisos (Fase 9):** el admin ve la página (acceso total). Para roles
+diff --git a/src/purchase_states.py b/src/purchase_states.py
+new file mode 100644
+index 0000000..d15a3a6
+--- /dev/null
++++ b/src/purchase_states.py
+@@ -0,0 +1,128 @@
++"""Estados de compra y de pago, y enlace Compras ↔ Catálogo (Fase 2 de la
++separación Catálogo / Compras / Inventario).
++
++Modela el ciclo de vida de una compra y de su pago como funciones puras y
++testeables, y ofrece los ayudantes para que Compras seleccione artículos del
++Catálogo por ``item_id`` en vez de por texto libre.
++
++Principio: no se crean artículos de forma silenciosa desde una compra. Si el
++artículo no existe, primero se crea en el Catálogo.
++"""
++from __future__ import annotations
++
++from src.catalog_items import CatalogItem, find_by_id, get_catalog_items
++
++# ---------------------------------------------------------------------------
++# Estados de compra
++# ---------------------------------------------------------------------------
++PURCHASE_DRAFT = "Borrador"
++PURCHASE_REQUESTED = "Solicitada"
++PURCHASE_APPROVED = "Aprobada"
++PURCHASE_ORDERED = "Ordenada"
++PURCHASE_PARTIAL = "Parcialmente recibida"
++PURCHASE_RECEIVED = "Recibida"
++PURCHASE_CANCELLED = "Cancelada"
++PURCHASE_CLOSED = "Cerrada"
++
++PURCHASE_STATES = (
++    PURCHASE_DRAFT, PURCHASE_REQUESTED, PURCHASE_APPROVED, PURCHASE_ORDERED,
++    PURCHASE_PARTIAL, PURCHASE_RECEIVED, PURCHASE_CANCELLED, PURCHASE_CLOSED,
++)
++
++# Transiciones válidas del estado de compra.
++_PURCHASE_TRANSITIONS: dict[str, set[str]] = {
++    PURCHASE_DRAFT: {PURCHASE_REQUESTED, PURCHASE_CANCELLED},
++    PURCHASE_REQUESTED: {PURCHASE_APPROVED, PURCHASE_CANCELLED},
++    PURCHASE_APPROVED: {PURCHASE_ORDERED, PURCHASE_CANCELLED},
++    PURCHASE_ORDERED: {PURCHASE_PARTIAL, PURCHASE_RECEIVED, PURCHASE_CANCELLED},
++    PURCHASE_PARTIAL: {PURCHASE_PARTIAL, PURCHASE_RECEIVED, PURCHASE_CANCELLED},
++    PURCHASE_RECEIVED: {PURCHASE_CLOSED},
++    PURCHASE_CANCELLED: set(),
++    PURCHASE_CLOSED: set(),
++}
++
++# ---------------------------------------------------------------------------
++# Estados de pago
++# ---------------------------------------------------------------------------
++PAYMENT_PENDING = "Pendiente"
++PAYMENT_PARTIAL = "Parcial"
++PAYMENT_PAID = "Pagada"
++PAYMENT_OVERDUE = "Vencida"
++PAYMENT_VOID = "Anulada"
++
++PAYMENT_STATES = (
++    PAYMENT_PENDING, PAYMENT_PARTIAL, PAYMENT_PAID, PAYMENT_OVERDUE, PAYMENT_VOID,
++)
++
++
++def can_transition(current: str, target: str) -> bool:
++    """True si la compra puede pasar de ``current`` a ``target``."""
++    return target in _PURCHASE_TRANSITIONS.get(current, set())
++
++
++def next_states(current: str) -> tuple[str, ...]:
++    """Estados a los que se puede mover una compra desde ``current``."""
++    return tuple(sorted(_PURCHASE_TRANSITIONS.get(current, set())))
++
++
++# ---------------------------------------------------------------------------
++# Validaciones explícitas
++# ---------------------------------------------------------------------------
++
++def validate_purchase_line(
++    *, quantity: float | None, unit_price: float | None = None,
++    exchange_rate: float | None = None,
++) -> list[str]:
++    """Valida una línea de compra. Devuelve la lista de errores (vacía si ok)."""
++    errors: list[str] = []
++    if quantity is None or quantity <= 0:
++        errors.append("La cantidad debe ser mayor que cero.")
++    if unit_price is not None and unit_price < 0:
++        errors.append("El precio unitario no puede ser negativo.")
++    if exchange_rate is not None and exchange_rate <= 0:
++        errors.append("El tipo de cambio debe ser mayor que cero.")
++    return errors
++
++
++def validate_reception(
++    *, ordered: float, already_received: float, receiving_now: float,
++    allow_over_receipt: bool = False,
++) -> list[str]:
++    """Valida una recepción. No permite recibir más de lo pendiente salvo
++    autorización explícita."""
++    errors: list[str] = []
++    if receiving_now <= 0:
++        errors.append("La cantidad recibida debe ser mayor que cero.")
++    pending = ordered - already_received
++    if not allow_over_receipt and receiving_now > pending + 1e-9:
++        errors.append(f"No puedes recibir más de lo pendiente ({pending:g}).")
++    return errors
++
++
++# ---------------------------------------------------------------------------
++# Enlace Compras ↔ Catálogo
++# ---------------------------------------------------------------------------
++
++def catalog_purchase_options(include_inactive: bool = False) -> dict[str, str]:
++    """Etiqueta legible → ``item_id``, para elegir el artículo en Compras."""
++    options: dict[str, str] = {}
++    for item in get_catalog_items(include_inactive=include_inactive):
++        label = f"{item.name} · {item.sku or item.item_id} · {item.inventory_unit}"
++        options[label] = item.item_id
++    return options
++
++
++def resolve_purchase_article(purchase: dict) -> CatalogItem | None:
++    """Devuelve el artículo de catálogo enlazado a una compra, o None."""
++    return find_by_id(str(purchase.get("catalog_item_id", "")))
++
++
++def link_fields_for(item: CatalogItem) -> dict:
++    """Campos que Compras guarda para enlazar una compra/solicitud con el
++    Catálogo, manteniendo ``material_name`` para compatibilidad."""
++    return {
++        "catalog_item_id": item.item_id,
++        "catalog_sku": item.sku,
++        "material_name": item.name,
++        "unit_name": item.inventory_unit,
++    }
+diff --git a/src/purchases_plus.py b/src/purchases_plus.py
+index 4bb29a3..b00f342 100644
+--- a/src/purchases_plus.py
++++ b/src/purchases_plus.py
+@@ -8,7 +8,7 @@ import io
+ 
+ import streamlit as st
+ 
+-from src import purchasing as base, session_backup
++from src import catalog_items, purchase_states, purchasing as base, session_backup
+ from src.components import render_info_card, render_page_header
+ from src.money import format_money
+ from src.session_utils import now_iso as _now, read_list as _rows, save_list as _save
+@@ -150,11 +150,42 @@ def render_purchases_plus() -> None:
+     )
+ 
+     with request_tab:
++        # Enlace con el Catálogo: elegir un artículo existente (por item_id) en
++        # vez de texto libre. Aditivo: el modo manual sigue disponible para no
++        # romper el flujo anterior. No se crean artículos silenciosamente.
++        catalog_options = purchase_states.catalog_purchase_options()
++        selected_article = None
++        if catalog_options:
++            source = st.radio(
++                "Origen del artículo",
++                ("Desde el catálogo", "Escribir manualmente"),
++                horizontal=True, key="purchase_request_source",
++            )
++            if source == "Desde el catálogo":
++                chosen = st.selectbox(
++                    "Artículo del catálogo", tuple(catalog_options.keys()),
++                    key="purchase_request_catalog_item",
++                )
++                selected_article = catalog_items.find_by_id(catalog_options[chosen])
++                st.caption("¿No aparece el artículo? Créalo primero en 'Catálogo de artículos'.")
++        else:
++            st.caption(
++                "Aún no hay artículos en el catálogo. Puedes escribir el material "
++                "manualmente o crearlos en 'Catálogo de artículos'."
++            )
++
+         with st.form("purchase_request_form", clear_on_submit=True):
+             columns = st.columns(4)
+-            material = columns[0].text_input("Material o producto")
++            if selected_article is not None:
++                columns[0].markdown(f"**{selected_article.name}**")
++                columns[0].caption(f"SKU {selected_article.sku or selected_article.item_id}")
++                material = selected_article.name
++                unit_default = selected_article.inventory_unit
++            else:
++                material = columns[0].text_input("Material o producto")
++                unit_default = "unidad"
+             quantity = columns[1].number_input("Cantidad requerida", min_value=0.01, value=1.0, step=1.0)
+-            unit = columns[2].text_input("Unidad", value="unidad")
++            unit = columns[2].text_input("Unidad", value=unit_default)
+             priority = columns[3].selectbox("Prioridad", ("Baja", "Normal", "Alta", "Urgente"))
+             second = st.columns(3)
+             needed_date = second[0].date_input("Fecha necesaria", value=today + timedelta(days=7))
+@@ -163,12 +194,13 @@ def render_purchases_plus() -> None:
+             reason = st.text_area("Motivo de la compra", max_chars=500)
+             submitted = st.form_submit_button("Crear solicitud", type="primary", use_container_width=True)
+         if submitted:
+-            if not material.strip():
++            material_name = (material or "").strip()
++            if not material_name:
+                 st.error("Indica el material o producto requerido.")
+             else:
+-                requests.append({
++                record = {
+                     "request_id": f"REQ-{uuid4().hex[:8].upper()}",
+-                    "material_name": material.strip(),
++                    "material_name": material_name,
+                     "quantity": float(quantity),
+                     "unit_name": unit.strip() or "unidad",
+                     "priority": priority,
+@@ -178,7 +210,11 @@ def render_purchases_plus() -> None:
+                     "reason": reason.strip(),
+                     "status": "Pendiente",
+                     "created_at_utc": _now(),
+-                })
++                }
++                if selected_article is not None:
++                    record["catalog_item_id"] = selected_article.item_id
++                    record["catalog_sku"] = selected_article.sku
++                requests.append(record)
+                 _save("purchase_requests", requests)
+                 st.rerun()
+ 
+diff --git a/tests/test_purchase_states.py b/tests/test_purchase_states.py
+new file mode 100644
+index 0000000..eea9bdd
+--- /dev/null
++++ b/tests/test_purchase_states.py
+@@ -0,0 +1,120 @@
++"""Pruebas de estados de compra/pago y del enlace Compras ↔ Catálogo (Fase 2)."""
++
++from __future__ import annotations
++
++from src import purchase_states as ps
++from src.catalog_items import CatalogItem, add_item
++
++
++# ---------------------------------------------------------------------------
++# Transiciones de estado
++# ---------------------------------------------------------------------------
++
++def test_valid_purchase_transitions():
++    assert ps.can_transition(ps.PURCHASE_DRAFT, ps.PURCHASE_REQUESTED)
++    assert ps.can_transition(ps.PURCHASE_APPROVED, ps.PURCHASE_ORDERED)
++    assert ps.can_transition(ps.PURCHASE_ORDERED, ps.PURCHASE_PARTIAL)
++    assert ps.can_transition(ps.PURCHASE_PARTIAL, ps.PURCHASE_RECEIVED)
++    assert ps.can_transition(ps.PURCHASE_RECEIVED, ps.PURCHASE_CLOSED)
++
++
++def test_invalid_purchase_transitions():
++    # No se puede saltar de Borrador directo a Recibida.
++    assert not ps.can_transition(ps.PURCHASE_DRAFT, ps.PURCHASE_RECEIVED)
++    # Una compra cancelada o cerrada es terminal.
++    assert ps.next_states(ps.PURCHASE_CANCELLED) == ()
++    assert ps.next_states(ps.PURCHASE_CLOSED) == ()
++
++
++def test_next_states_from_ordered():
++    nxt = ps.next_states(ps.PURCHASE_ORDERED)
++    assert ps.PURCHASE_PARTIAL in nxt
++    assert ps.PURCHASE_RECEIVED in nxt
++    assert ps.PURCHASE_CANCELLED in nxt
++
++
++# ---------------------------------------------------------------------------
++# Validaciones
++# ---------------------------------------------------------------------------
++
++def test_validate_purchase_line_rejects_bad_values():
++    assert ps.validate_purchase_line(quantity=0)
++    assert ps.validate_purchase_line(quantity=-1)
++    assert ps.validate_purchase_line(quantity=5, unit_price=-2)
++    assert ps.validate_purchase_line(quantity=5, exchange_rate=0)
++
++
++def test_validate_purchase_line_accepts_good_values():
++    assert ps.validate_purchase_line(quantity=10, unit_price=3.5, exchange_rate=40.0) == []
++
++
++def test_validate_reception_blocks_over_receipt():
++    errors = ps.validate_reception(ordered=100, already_received=96, receiving_now=10)
++    assert any("pendiente" in e for e in errors)
++
++
++def test_validate_reception_allows_partial():
++    assert ps.validate_reception(ordered=100, already_received=0, receiving_now=40) == []
++
++
++def test_validate_reception_over_receipt_with_authorization():
++    assert ps.validate_reception(
++        ordered=100, already_received=96, receiving_now=10, allow_over_receipt=True
++    ) == []
++
++
++def test_validate_reception_rejects_zero():
++    assert ps.validate_reception(ordered=100, already_received=0, receiving_now=0)
++
++
++# ---------------------------------------------------------------------------
++# Enlace con el catálogo
++# ---------------------------------------------------------------------------
++
++def _add_article(item_id="ART1", sku="SKU1", name="Papel bond", unit="Resma") -> CatalogItem:
++    item = CatalogItem(
++        item_id=item_id, sku=sku, name=name,
++        article_type="Material consumible", category="Papel y cartulina",
++        inventory_unit=unit,
++    )
++    add_item(item)
++    return item
++
++
++def test_catalog_purchase_options_lists_active_items():
++    _add_article()
++    options = ps.catalog_purchase_options()
++    assert len(options) == 1
++    label = next(iter(options))
++    assert "Papel bond" in label
++    assert options[label] == "ART1"
++
++
++def test_catalog_purchase_options_excludes_inactive_by_default():
++    add_item(CatalogItem(item_id="ART2", sku="SKU2", name="Viejo",
++                         article_type="Otro", category="Otro",
++                         inventory_unit="Unidad", active=False))
++    assert ps.catalog_purchase_options() == {}
++    assert len(ps.catalog_purchase_options(include_inactive=True)) == 1
++
++
++def test_resolve_purchase_article_by_id():
++    _add_article()
++    purchase = {"catalog_item_id": "ART1", "material_name": "Papel bond"}
++    resolved = ps.resolve_purchase_article(purchase)
++    assert resolved is not None
++    assert resolved.name == "Papel bond"
++
++
++def test_resolve_purchase_article_missing_returns_none():
++    assert ps.resolve_purchase_article({"catalog_item_id": "NOPE"}) is None
++    assert ps.resolve_purchase_article({}) is None
++
++
++def test_link_fields_keep_material_name_for_compat():
++    item = _add_article()
++    fields = ps.link_fields_for(item)
++    assert fields["catalog_item_id"] == "ART1"
++    assert fields["catalog_sku"] == "SKU1"
++    assert fields["material_name"] == "Papel bond"
++    assert fields["unit_name"] == "Resma"
+-- 
+2.43.0
