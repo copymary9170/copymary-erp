@@ -2,6 +2,10 @@ name: Aplicar separación Catálogo Compras Inventario
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-separation-patches.yml
 
 permissions:
   contents: write
