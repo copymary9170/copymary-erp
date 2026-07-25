@@ -1,4 +1,6 @@
 """Punto de entrada de CopyMary ERP."""
+from src import app_shell
+from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
 from src.inventory_enterprise_loader import activate_inventory_enterprise
@@ -28,6 +30,9 @@ activate_print_cost_module()
 activate_finishing_modules()
 activate_inventory_enterprise()
 activate_supply_chain_integration()
+# La vista reactiva se registra después de la integración para sustituir la
+# versión basada en st.form, cuyos selectores no redibujaban los campos.
+app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
 _activate_process_quotes_safely()
 
 # Se ejecuta en cada rerun, pero solo escribe cuando la huella de Configuración
