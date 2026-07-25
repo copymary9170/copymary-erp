@@ -12,6 +12,7 @@ from src.inventory_movements_safe_loader import activate_inventory_movements_saf
 from src.inventory_replenishment_safe_loader import activate_inventory_replenishment_safe
 from src.inventory_reservations_safe_loader import activate_inventory_reservations_safe
 from src.inventory_stock_view_loader import activate_inventory_stock_view
+from src.inventory_workspace_safe_loader import activate_inventory_workspace_safe
 from src.module_bootstrap import activate_module_bootstrap
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
@@ -62,6 +63,9 @@ activate_inventory_lots_safe()
 # Octava fase de Inventario: permite editar únicamente ubicación, lote y
 # vencimiento con confirmación expresa y un historial separado de auditoría.
 activate_inventory_metadata_safe()
+# Novena fase de Inventario: elimina de su navegación Registrar y Factura de
+# compra para completar la separación entre Catálogo, Compras y Recepción.
+activate_inventory_workspace_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
