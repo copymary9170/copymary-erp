@@ -7,6 +7,7 @@ from src.inventory_counts_safe_loader import activate_inventory_counts_safe
 from src.inventory_dashboard_safe_loader import activate_inventory_dashboard_safe
 from src.inventory_enterprise_loader import activate_inventory_enterprise
 from src.inventory_movements_safe_loader import activate_inventory_movements_safe
+from src.inventory_reservations_safe_loader import activate_inventory_reservations_safe
 from src.inventory_stock_view_loader import activate_inventory_stock_view
 from src.module_bootstrap import activate_module_bootstrap
 from src.print_cost_loader import activate_print_cost_module
@@ -46,6 +47,9 @@ activate_inventory_dashboard_safe()
 # Cuarta fase de Inventario: el conteo físico calcula y muestra diferencias,
 # pero solo aplica el ajuste después de una confirmación expresa.
 activate_inventory_counts_safe()
+# Quinta fase de Inventario: mejora únicamente Reservas y exige confirmación
+# para liberar o consumir una reserva completa con trazabilidad.
+activate_inventory_reservations_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
