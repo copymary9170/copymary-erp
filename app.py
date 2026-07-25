@@ -3,6 +3,7 @@ from src import app_shell
 from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
+from src.inventory_dashboard_safe_loader import activate_inventory_dashboard_safe
 from src.inventory_enterprise_loader import activate_inventory_enterprise
 from src.inventory_movements_safe_loader import activate_inventory_movements_safe
 from src.inventory_stock_view_loader import activate_inventory_stock_view
@@ -38,6 +39,9 @@ activate_inventory_stock_view()
 # Segunda fase de Inventario: sustituye únicamente la vista de movimientos
 # para impedir que una compra se registre manualmente fuera de Recepción.
 activate_inventory_movements_safe()
+# Tercera fase de Inventario: mejora únicamente el panel de indicadores y
+# calcula físico, reservado y disponible sin modificar los registros.
+activate_inventory_dashboard_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
