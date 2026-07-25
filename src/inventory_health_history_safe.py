@@ -12,12 +12,15 @@ from typing import Any
 import streamlit as st
 
 from src import inventory_enterprise
-from src.erp_database import connect
+from src.auth import ADMIN_ROLE_NAME, current_user
+from src.erp_database import connect, record_audit_event
 from src.inventory_health_summary_safe import _completion, _health_score, _status
 from src.inventory_priority_summary_safe import _findings
 
 _TABLE = "inventory_health_snapshots"
 _SOURCE_VERSION = "inventory-health-v1"
+_PERMISSION_MODULE = "Inventario"
+_PERMISSION_ACTION = "health_snapshot_create"
 
 
 def _current_measurement() -> dict[str, Any]:
@@ -46,6 +49,27 @@ def _table_is_ready() -> bool:
         return False
 
 
+def _can_create_snapshot() -> bool:
+    user = current_user()
+    if user is None:
+        return False
+    if user.role_name == ADMIN_ROLE_NAME:
+        return True
+    try:
+        with connect() as conn:
+            row = conn.execute(
+                """
+                SELECT allowed FROM app_permissions
+                WHERE role_id = ? AND module_name = ? AND action_name = ?
+                LIMIT 1
+                """,
+                (user.role_id, _PERMISSION_MODULE, _PERMISSION_ACTION),
+            ).fetchone()
+    except Exception:
+        return False
+    return bool(row and row["allowed"])
+
+
 def _history(limit: int = 100) -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
@@ -62,8 +86,13 @@ def _history(limit: int = 100) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def _save_measurement(measurement: dict[str, Any], recorded_by: str, notes: str) -> None:
+def _save_measurement(measurement: dict[str, Any], notes: str) -> None:
+    user = current_user()
+    if user is None or not _can_create_snapshot():
+        raise PermissionError("Tu rol no tiene permiso para guardar mediciones de salud de Inventario.")
+
     recorded_at = datetime.now(timezone.utc).isoformat()
+    recorded_by = f"{user.display_name} <{user.email}>"
     with connect() as conn:
         conn.execute(
             f"""
@@ -87,6 +116,14 @@ def _save_measurement(measurement: dict[str, Any], recorded_by: str, notes: str)
                 notes or None,
             ),
         )
+    record_audit_event(
+        "inventory",
+        _TABLE,
+        recorded_at,
+        "create_health_snapshot",
+        after={**measurement, "recorded_by": recorded_by, "source_version": _SOURCE_VERSION},
+        reason=notes.strip() or "Medición manual confirmada",
+    )
 
 
 def _display_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -133,35 +170,39 @@ def render_inventory_health_history() -> None:
         measurement["critical_findings"] + measurement["high_findings"] + measurement["medium_findings"],
     )
 
-    with st.form("inventory_health_persistent_history_form", clear_on_submit=False):
-        recorded_by = st.text_input(
-            "Responsable de la medición",
-            max_chars=120,
-            help="Identifica a la persona que revisó y decidió guardar esta observación.",
+    user = current_user()
+    can_create = _can_create_snapshot()
+    if user:
+        st.caption(f"Usuario autenticado: {user.display_name} · Rol: {user.role_name}")
+    if not can_create:
+        st.info(
+            "Tu rol puede consultar el historial, pero no guardar mediciones. Se requiere el permiso "
+            "Inventario / health_snapshot_create o el rol Administrador."
         )
+
+    with st.form("inventory_health_persistent_history_form", clear_on_submit=False):
         notes = st.text_area(
             "Notas",
             max_chars=1000,
             placeholder="Ejemplo: línea base antes de corregir códigos duplicados.",
+            disabled=not can_create,
         )
         confirmed = st.checkbox(
             "Confirmo que deseo guardar esta medición en el historial persistente.",
+            disabled=not can_create,
         )
-        submitted = st.form_submit_button("Guardar medición", type="primary")
+        submitted = st.form_submit_button("Guardar medición", type="primary", disabled=not can_create)
 
     if submitted:
-        responsible = recorded_by.strip()
-        if not responsible:
-            st.error("Indica el responsable antes de guardar.")
-        elif not confirmed:
+        if not confirmed:
             st.error("Debes confirmar expresamente el guardado.")
         else:
             try:
-                _save_measurement(measurement, responsible, notes.strip())
+                _save_measurement(measurement, notes.strip())
             except Exception as exc:
                 st.error(f"No fue posible guardar la medición: {exc}")
             else:
-                st.success("Medición guardada con fecha, responsable y métricas auditables.")
+                st.success("Medición guardada con usuario autenticado y evento de auditoría.")
                 st.rerun()
 
     try:
