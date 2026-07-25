@@ -17,6 +17,9 @@ ACTION_LABELS = {
     "reservation_consume": "Consumir reservas",
     "metadata_edit": "Editar ubicación, lote y vencimiento",
     "cost_view": "Visualizar costos de inventario",
+    "movement_create": "Registrar movimientos manuales",
+    "movement_view": "Consultar historial de movimientos",
+    "report_download": "Descargar informes de inventario",
 }
 
 
@@ -36,7 +39,7 @@ def can_inventory_action(action_name: str) -> bool:
 
 
 def require_inventory_action(action_name: str) -> None:
-    """Impide ejecutar una escritura aunque la interfaz haya sido manipulada."""
+    """Impide ejecutar una acción aunque la interfaz haya sido manipulada."""
     if not can_inventory_action(action_name):
         label = ACTION_LABELS.get(action_name, action_name)
         raise PermissionError(f"No tienes permiso para: {label}.")
