@@ -10,6 +10,7 @@ from src.inventory_data_quality_safe_loader import activate_inventory_data_quali
 from src.inventory_enterprise_loader import activate_inventory_enterprise
 from src.inventory_flow_consistency_safe_loader import activate_inventory_flow_consistency_safe
 from src.inventory_health_summary_safe_loader import activate_inventory_health_summary_safe
+from src.inventory_health_trend_safe_loader import activate_inventory_health_trend_safe
 from src.inventory_lots_safe_loader import activate_inventory_lots_safe
 from src.inventory_metadata_safe_loader import activate_inventory_metadata_safe
 from src.inventory_movements_safe_loader import activate_inventory_movements_safe
@@ -90,6 +91,9 @@ activate_inventory_review_plan_safe()
 # Decimoquinta fase de Inventario: consolida calidad, hallazgos y prioridades en
 # un resumen ejecutivo de salud, sin modificar ni valorar registros.
 activate_inventory_health_summary_safe()
+# Decimosexta fase de Inventario: permite guardar observaciones temporales dentro
+# de la sesión para comparar tendencias sin escribir historial en la base de datos.
+activate_inventory_health_trend_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
