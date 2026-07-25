@@ -4,6 +4,7 @@ from src.catalog_items_reactive import render_catalog_items as render_catalog_it
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
 from src.inventory_enterprise_loader import activate_inventory_enterprise
+from src.inventory_stock_view_loader import activate_inventory_stock_view
 from src.module_bootstrap import activate_module_bootstrap
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
@@ -30,6 +31,9 @@ activate_print_cost_module()
 activate_finishing_modules()
 activate_inventory_enterprise()
 activate_supply_chain_integration()
+# Primera fase de Inventario: solo sustituye la tabla visual de existencias.
+# No modifica movimientos, reservas, conteos ni datos guardados.
+activate_inventory_stock_view()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
