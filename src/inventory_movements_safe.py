@@ -9,6 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from src import inventory_enterprise
+from src.inventory_action_permissions import can_inventory_action, require_inventory_action
 from src.session_utils import read_list
 
 MANUAL_MOVEMENTS = (
@@ -30,61 +31,75 @@ def _num(value, default: float = 0.0) -> float:
 
 def render_inventory_movements_safe(rows: list[dict]) -> None:
     """Registra solo movimientos manuales que no correspondan a compras."""
+    can_create = can_inventory_action("movement_create")
+    can_view = can_inventory_action("movement_view")
+
     st.info(
         "Las compras y sus costos se reciben únicamente desde Recepción de mercancía. "
         "Aquí se registran salidas, devoluciones, mermas y ajustes autorizados."
     )
+    if not can_create:
+        st.warning("Tu rol no tiene permiso para registrar movimientos manuales.")
 
     active_rows = [row for row in rows if row.get("active", True)]
-    if not active_rows:
+    if active_rows:
+        labels = {
+            (
+                f"{row['name']} · {row.get('sku') or row.get('item_id')} · "
+                f"existencia {_num(row.get('available_quantity')):,.2f} {row.get('unit_name', '')}"
+            ): row
+            for row in active_rows
+        }
+
+        with st.form("inventory_safe_manual_movement", clear_on_submit=True):
+            selected = st.selectbox("Artículo", tuple(labels), disabled=not can_create)
+            movement_type = st.selectbox("Tipo de movimiento", MANUAL_MOVEMENTS, disabled=not can_create)
+            quantity = st.number_input("Cantidad", min_value=0.0001, value=1.0, step=1.0, disabled=not can_create)
+            reason = st.text_input("Motivo / referencia obligatoria", disabled=not can_create)
+            submitted = st.form_submit_button(
+                "Registrar movimiento",
+                type="primary",
+                use_container_width=True,
+                disabled=not can_create,
+            )
+
+        if submitted:
+            try:
+                require_inventory_action("movement_create")
+            except PermissionError as exc:
+                st.error(str(exc))
+                return
+            item = labels[selected]
+            stock = _num(item.get("available_quantity"))
+            if not reason.strip():
+                st.error("Debes indicar el motivo o documento de referencia.")
+                return
+            if movement_type in NEGATIVE_MOVEMENTS and quantity > stock:
+                st.error("La cantidad supera la existencia disponible.")
+                return
+
+            inventory_enterprise._movement(
+                item,
+                movement_type,
+                float(quantity),
+                reason.strip(),
+            )
+            inventory_enterprise._save(rows)
+            st.success("Movimiento registrado con trazabilidad.")
+            st.rerun()
+    else:
         st.info("No hay artículos activos disponibles para registrar movimientos.")
+
+    st.markdown("#### Historial reciente")
+    if not can_view:
+        st.warning("Tu rol no tiene permiso para consultar el historial de movimientos.")
         return
-
-    labels = {
-        (
-            f"{row['name']} · {row.get('sku') or row.get('item_id')} · "
-            f"existencia {_num(row.get('available_quantity')):,.2f} {row.get('unit_name', '')}"
-        ): row
-        for row in active_rows
-    }
-
-    with st.form("inventory_safe_manual_movement", clear_on_submit=True):
-        selected = st.selectbox("Artículo", tuple(labels))
-        movement_type = st.selectbox("Tipo de movimiento", MANUAL_MOVEMENTS)
-        quantity = st.number_input("Cantidad", min_value=0.0001, value=1.0, step=1.0)
-        reason = st.text_input("Motivo / referencia obligatoria")
-        submitted = st.form_submit_button(
-            "Registrar movimiento",
-            type="primary",
-            use_container_width=True,
-        )
-
-    if submitted:
-        item = labels[selected]
-        stock = _num(item.get("available_quantity"))
-        if not reason.strip():
-            st.error("Debes indicar el motivo o documento de referencia.")
-            return
-        if movement_type in NEGATIVE_MOVEMENTS and quantity > stock:
-            st.error("La cantidad supera la existencia disponible.")
-            return
-
-        inventory_enterprise._movement(
-            item,
-            movement_type,
-            float(quantity),
-            reason.strip(),
-        )
-        inventory_enterprise._save(rows)
-        st.success("Movimiento registrado con trazabilidad.")
-        st.rerun()
 
     history = list(reversed(read_list("inventory_movements")[-200:]))
     if not history:
         st.info("Todavía no hay movimientos registrados.")
         return
 
-    st.markdown("#### Historial reciente")
     st.dataframe(
         [
             {
