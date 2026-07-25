@@ -3,6 +3,7 @@ from src import app_shell
 from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
+from src.inventory_consistency_rules_safe_loader import activate_inventory_consistency_rules_safe
 from src.inventory_counts_safe_loader import activate_inventory_counts_safe
 from src.inventory_dashboard_safe_loader import activate_inventory_dashboard_safe
 from src.inventory_data_quality_safe_loader import activate_inventory_data_quality_safe
@@ -74,6 +75,9 @@ activate_inventory_flow_consistency_safe()
 # Undécima fase de Inventario: añade un diagnóstico de solo lectura para
 # detectar datos maestros incompletos sin corregir ni modificar registros.
 activate_inventory_data_quality_safe()
+# Duodécima fase de Inventario: detecta códigos duplicados, valores negativos,
+# mínimos incoherentes y existencias anómalas sin modificar ningún registro.
+activate_inventory_consistency_rules_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
