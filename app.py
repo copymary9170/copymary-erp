@@ -5,6 +5,7 @@ from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
 from src.inventory_counts_safe_loader import activate_inventory_counts_safe
 from src.inventory_dashboard_safe_loader import activate_inventory_dashboard_safe
+from src.inventory_data_quality_safe_loader import activate_inventory_data_quality_safe
 from src.inventory_enterprise_loader import activate_inventory_enterprise
 from src.inventory_flow_consistency_safe_loader import activate_inventory_flow_consistency_safe
 from src.inventory_lots_safe_loader import activate_inventory_lots_safe
@@ -70,6 +71,9 @@ activate_inventory_workspace_safe()
 # Décima fase de Inventario: añade una guía visual y términos consistentes para
 # el flujo Catálogo → Compras → Recepción → Inventario, sin cambiar la lógica.
 activate_inventory_flow_consistency_safe()
+# Undécima fase de Inventario: añade un diagnóstico de solo lectura para
+# detectar datos maestros incompletos sin corregir ni modificar registros.
+activate_inventory_data_quality_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
