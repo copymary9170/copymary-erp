@@ -12,6 +12,7 @@ from collections import Counter
 import streamlit as st
 
 from src import inventory_enterprise
+from src.inventory_action_permissions import can_inventory_action
 from src.inventory_priority_summary_safe import _findings
 
 
@@ -58,6 +59,7 @@ def _csv_bytes(rows: list[dict[str, str]]) -> bytes:
 def render_inventory_review_plan() -> None:
     """Muestra y permite descargar un plan de revisión sin alterar datos."""
     rows = _rows_for_export()
+    can_download = can_inventory_action("report_download")
 
     st.divider()
     st.subheader("Plan de revisión de inventario")
@@ -86,12 +88,15 @@ def render_inventory_review_plan() -> None:
     ]
     st.dataframe(filtered, use_container_width=True, hide_index=True)
 
+    if not can_download:
+        st.warning("Tu rol puede consultar el plan, pero no tiene permiso para descargar informes de Inventario.")
     st.download_button(
         "Descargar plan en CSV",
         data=_csv_bytes(rows),
         file_name="plan_revision_inventario.csv",
         mime="text/csv",
         key="inventory_review_plan_download",
+        disabled=not can_download,
     )
     st.info(
         "El archivo sirve para asignar responsables y documentar el seguimiento fuera de esta pantalla. "
