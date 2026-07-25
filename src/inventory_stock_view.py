@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from src.inventory_action_permissions import can_inventory_action
 from src.session_utils import read_list
 
 
@@ -28,6 +29,7 @@ def _reserved_for(item_id: str, reservations: list[dict]) -> float:
 def render_inventory_stock_table(rows: list[dict]) -> None:
     """Muestra existencias sin mezclar proveedor, moneda ni método de pago."""
     reservations = read_list("inventory_reservations")
+    can_view_costs = can_inventory_action("cost_view")
 
     a, b, c = st.columns([2, 1, 1])
     query = a.text_input("Buscar por nombre, SKU, lote o ubicación", key="inventory_stock_query")
@@ -38,6 +40,9 @@ def render_inventory_stock_table(rows: list[dict]) -> None:
         ("Todos", "Disponible", "Stock bajo", "Agotado", "Inactivo"),
         key="inventory_stock_status",
     )
+
+    if not can_view_costs:
+        st.info("Tu rol puede consultar existencias, pero no tiene permiso para visualizar costos ni valores monetarios.")
 
     table: list[dict] = []
     for row in rows:
@@ -62,7 +67,7 @@ def render_inventory_stock_table(rows: list[dict]) -> None:
             continue
 
         unit_cost = _num(row.get("average_cost", row.get("unit_cost", 0.0)))
-        table.append({
+        item_row = {
             "SKU": row.get("sku") or item_id,
             "Artículo": row.get("name") or row.get("material_name") or "Material",
             "Categoría": row.get("category") or "Otro",
@@ -71,22 +76,25 @@ def render_inventory_stock_table(rows: list[dict]) -> None:
             "Reservado": round(reserved, 4),
             "Disponible": round(available, 4),
             "Unidad": row.get("unit_name") or row.get("unit") or "unidad",
-            "Costo promedio": round(unit_cost, 4),
-            "Valor disponible": round(available * unit_cost, 2),
             "Mínimo": round(minimum, 4),
             "Máximo": round(maximum, 4),
             "Lote": row.get("lot") or "",
             "Vencimiento": row.get("expiry_date") or row.get("expiry") or "",
             "Estado": current,
-        })
+        }
+        if can_view_costs:
+            item_row["Costo promedio"] = round(unit_cost, 4)
+            item_row["Valor disponible"] = round(available * unit_cost, 2)
+        table.append(item_row)
 
     if not table:
         st.info("No hay artículos que coincidan con los filtros.")
         return
 
     st.dataframe(table, use_container_width=True, hide_index=True)
-    metrics = st.columns(4)
+    metrics = st.columns(4 if can_view_costs else 3)
     metrics[0].metric("Resultados", len(table))
     metrics[1].metric("Existencia física", f"{sum(_num(row['Existencia física']) for row in table):,.2f}")
     metrics[2].metric("Reservado", f"{sum(_num(row['Reservado']) for row in table):,.2f}")
-    metrics[3].metric("Valor disponible", f"${sum(_num(row['Valor disponible']) for row in table):,.2f}")
+    if can_view_costs:
+        metrics[3].metric("Valor disponible", f"${sum(_num(row['Valor disponible']) for row in table):,.2f}")
