@@ -26,6 +26,7 @@ from src.inventory_workspace_safe_loader import activate_inventory_workspace_saf
 from src.module_bootstrap import activate_module_bootstrap
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
+from src.purchases_overview_safe_loader import activate_purchases_overview_safe
 from src.startup_restore import restore_session_snapshot_on_startup
 from src.supply_chain_integration import activate_supply_chain_integration
 from src.top_navigation_app import run_app
@@ -49,6 +50,9 @@ activate_print_cost_module()
 activate_finishing_modules()
 activate_inventory_enterprise()
 activate_supply_chain_integration()
+# Primera fase de Compras: añade un resumen operativo de solo lectura con filtros,
+# métricas y valores calculados sin modificar órdenes, recepciones ni existencias.
+activate_purchases_overview_safe()
 # Primera fase de Inventario: solo sustituye la tabla visual de existencias.
 # No modifica movimientos, reservas, conteos ni datos guardados.
 activate_inventory_stock_view()
