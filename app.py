@@ -15,6 +15,7 @@ from src.inventory_movements_safe_loader import activate_inventory_movements_saf
 from src.inventory_priority_summary_safe_loader import activate_inventory_priority_summary_safe
 from src.inventory_replenishment_safe_loader import activate_inventory_replenishment_safe
 from src.inventory_reservations_safe_loader import activate_inventory_reservations_safe
+from src.inventory_review_plan_safe_loader import activate_inventory_review_plan_safe
 from src.inventory_stock_view_loader import activate_inventory_stock_view
 from src.inventory_workspace_safe_loader import activate_inventory_workspace_safe
 from src.module_bootstrap import activate_module_bootstrap
@@ -82,6 +83,9 @@ activate_inventory_consistency_rules_safe()
 # Decimotercera fase de Inventario: agrupa los hallazgos por prioridad y muestra
 # acciones recomendadas sin corregir ni modificar registros automáticamente.
 activate_inventory_priority_summary_safe()
+# Decimocuarta fase de Inventario: convierte los hallazgos en una cola de trabajo
+# descargable sin modificar datos ni marcar tareas como resueltas.
+activate_inventory_review_plan_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
