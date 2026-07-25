@@ -11,6 +11,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src import inventory_enterprise
+from src.inventory_action_permissions import can_inventory_action, require_inventory_action
 from src.session_utils import read_list, save_list
 
 COUNTS_KEY = "inventory_count_sessions"
@@ -28,11 +29,17 @@ def _now() -> str:
 
 
 def render_inventory_counts_safe(rows: list[dict]) -> None:
-    """Registra conteos con revisión y confirmación previa al ajuste."""
+    """Registra conteos con revisión, permiso y confirmación previa al ajuste."""
+    can_apply = can_inventory_action("count_adjustment_apply")
     st.info(
         "El conteo no cambia la existencia de inmediato. Primero se calcula la "
         "diferencia y luego debes confirmar expresamente el ajuste."
     )
+    if not can_apply:
+        st.warning(
+            "Puedes revisar y preparar el conteo, pero tu rol no tiene permiso "
+            "para aplicar ajustes de existencia."
+        )
 
     active = [row for row in rows if row.get("active", True)]
     if not active:
@@ -52,26 +59,17 @@ def render_inventory_counts_safe(rows: list[dict]) -> None:
     system_quantity = _num(item.get("available_quantity"))
 
     counted_quantity = st.number_input(
-        "Cantidad física contada",
-        min_value=0.0,
-        value=float(system_quantity),
-        step=1.0,
-        key="safe_count_quantity",
+        "Cantidad física contada", min_value=0.0, value=float(system_quantity),
+        step=1.0, key="safe_count_quantity",
     )
-    reference = st.text_input(
-        "Responsable / referencia del conteo",
-        key="safe_count_reference",
-    )
+    reference = st.text_input("Responsable / referencia del conteo", key="safe_count_reference")
 
     difference = float(counted_quantity) - system_quantity
     preview = st.columns(4)
     preview[0].metric("Cantidad del sistema", f"{system_quantity:,.2f}")
     preview[1].metric("Cantidad contada", f"{counted_quantity:,.2f}")
     preview[2].metric("Diferencia", f"{difference:+,.2f}")
-    preview[3].metric(
-        "Resultado propuesto",
-        f"{counted_quantity:,.2f}",
-    )
+    preview[3].metric("Resultado propuesto", f"{counted_quantity:,.2f}")
 
     if difference == 0:
         st.success("El conteo coincide con la existencia del sistema. No se requiere ajuste.")
@@ -82,17 +80,19 @@ def render_inventory_counts_safe(rows: list[dict]) -> None:
 
     confirm = st.checkbox(
         "Confirmo que revisé la diferencia y autorizo aplicar el ajuste",
-        key="safe_count_confirm",
-        disabled=difference == 0,
+        key="safe_count_confirm", disabled=difference == 0 or not can_apply,
     )
     apply_adjustment = st.button(
-        "Cerrar conteo y aplicar ajuste",
-        type="primary",
-        use_container_width=True,
-        disabled=difference == 0 or not confirm,
+        "Cerrar conteo y aplicar ajuste", type="primary", use_container_width=True,
+        disabled=difference == 0 or not confirm or not can_apply,
     )
 
     if apply_adjustment:
+        try:
+            require_inventory_action("count_adjustment_apply")
+        except PermissionError as exc:
+            st.error(str(exc))
+            return
         if not reference.strip():
             st.error("Debes indicar responsable o referencia antes de aplicar el ajuste.")
             return
@@ -102,26 +102,16 @@ def render_inventory_counts_safe(rows: list[dict]) -> None:
         count_id = f"CON-{uuid4().hex[:8].upper()}"
         reason = f"Conteo físico {count_id} · {reference.strip()}"
 
-        inventory_enterprise._movement(
-            item,
-            movement_type,
-            quantity,
-            reason,
-        )
+        inventory_enterprise._movement(item, movement_type, quantity, reason)
         inventory_enterprise._save(rows)
 
         sessions = read_list(COUNTS_KEY)
         sessions.append({
-            "count_id": count_id,
-            "created_at_utc": _now(),
-            "item_id": item.get("item_id"),
-            "sku": item.get("sku"),
-            "item_name": item.get("name"),
-            "system_quantity": system_quantity,
-            "counted_quantity": float(counted_quantity),
-            "difference": difference,
-            "movement_type": movement_type,
-            "reference": reference.strip(),
+            "count_id": count_id, "created_at_utc": _now(),
+            "item_id": item.get("item_id"), "sku": item.get("sku"),
+            "item_name": item.get("name"), "system_quantity": system_quantity,
+            "counted_quantity": float(counted_quantity), "difference": difference,
+            "movement_type": movement_type, "reference": reference.strip(),
             "status": "Aplicado",
         })
         save_list(COUNTS_KEY, sessions)
@@ -131,20 +121,12 @@ def render_inventory_counts_safe(rows: list[dict]) -> None:
     history = list(reversed(read_list(COUNTS_KEY)[-100:]))
     if history:
         st.markdown("#### Historial de conteos confirmados")
-        st.dataframe(
-            [
-                {
-                    "Conteo": row.get("count_id", ""),
-                    "Fecha": row.get("created_at_utc", ""),
-                    "Artículo": row.get("item_name", ""),
-                    "Sistema": row.get("system_quantity", 0),
-                    "Contado": row.get("counted_quantity", 0),
-                    "Diferencia": row.get("difference", 0),
-                    "Responsable / referencia": row.get("reference", ""),
-                    "Estado": row.get("status", ""),
-                }
-                for row in history
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.dataframe([
+            {
+                "Conteo": row.get("count_id", ""), "Fecha": row.get("created_at_utc", ""),
+                "Artículo": row.get("item_name", ""), "Sistema": row.get("system_quantity", 0),
+                "Contado": row.get("counted_quantity", 0), "Diferencia": row.get("difference", 0),
+                "Responsable / referencia": row.get("reference", ""), "Estado": row.get("status", ""),
+            }
+            for row in history
+        ], use_container_width=True, hide_index=True)
