@@ -20,6 +20,7 @@ ACTION_LABELS = {
     "movement_create": "Registrar movimientos manuales",
     "movement_view": "Consultar historial de movimientos",
     "report_download": "Descargar informes de inventario",
+    "audit_view": "Consultar auditoría unificada de inventario",
 }
 
 

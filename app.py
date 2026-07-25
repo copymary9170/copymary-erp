@@ -3,6 +3,7 @@ from src import app_shell
 from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
+from src.inventory_audit_unified_safe_loader import activate_inventory_unified_audit_safe
 from src.inventory_consistency_rules_safe_loader import activate_inventory_consistency_rules_safe
 from src.inventory_counts_safe_loader import activate_inventory_counts_safe
 from src.inventory_dashboard_safe_loader import activate_inventory_dashboard_safe
@@ -102,6 +103,9 @@ activate_inventory_health_history_readiness_safe()
 # Decimoctava fase de Inventario: habilita guardado manual y lectura del historial
 # solo cuando la tabla preparada ya existe, con responsable y confirmación expresa.
 activate_inventory_health_history_safe()
+# Vigesimosegunda fase de Inventario: consolida movimientos, reservas, conteos,
+# cambios logísticos y mediciones de salud en una auditoría de solo lectura.
+activate_inventory_unified_audit_safe()
 # La vista reactiva se registra después de la integración para sustituir la
 # versión basada en st.form, cuyos selectores no redibujaban los campos.
 app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
