@@ -9,6 +9,7 @@ from src.commission_history import render_commission_history
 from src.commission_snapshots import activate_commission_snapshots
 from src.deletion_protection import activate_deletion_protection
 from src.financial_reconciliation import render_financial_reconciliation
+from src.hr_labor_integration import activate_hr_labor_support, render_hr_labor_management
 from src.inventory_plus import render_inventory_plus
 from src.order_planning_capacity import render_order_planning_capacity
 from src.payment_consistency import activate_payment_consistency
@@ -25,6 +26,7 @@ activate_deletion_protection()
 activate_closing_reopen_support()
 activate_restore_rollback()
 activate_commission_snapshots()
+activate_hr_labor_support()
 app_shell.FUNCTIONAL_MODULES['Reversos de pagos'] = render_payment_reversals
 app_shell.FUNCTIONAL_MODULES['Conciliación financiera'] = render_financial_reconciliation
 app_shell.FUNCTIONAL_MODULES['Reabrir cierre de caja'] = render_cash_closing_reopen
@@ -41,8 +43,10 @@ app_shell.FUNCTIONAL_MODULES['Catálogo y producción'] = render_catalog_product
 app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance_bulk
 app_shell.FUNCTIONAL_MODULES['Reversos de producción'] = render_production_reversals
 app_shell.FUNCTIONAL_MODULES['Inventario'] = render_inventory_plus
+app_shell.FUNCTIONAL_MODULES['RRHH y nómina'] = render_hr_labor_management
 
 
 def run_app():
     activate_commission_snapshots()
+    activate_hr_labor_support()
     _run_base_app()
