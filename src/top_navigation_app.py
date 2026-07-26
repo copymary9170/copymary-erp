@@ -12,9 +12,9 @@ from src.modern_styles import apply_modern_styles
 SPECIALTY_AREAS = {
     "Inicio": ("⌂", "Vista ejecutiva", "Resumen general, alertas y accesos de uso diario.", ("Inicio", "Novedades", "Centro de control", "Tablero ejecutivo", "Metas del negocio", "Panel comercial", "Auditoría de datos", "Fundación técnica")),
     "Comercial y CRM": ("◎", "Relación con clientes", "Clientes, cotizaciones, ventas, pedidos y cobros.", ("Clientes", "Cotizaciones", "Ventas y pedidos", "Venta rápida de mostrador", "Agenda de producción y entregas", "Cuentas por cobrar", "Comprobantes", "Reportes comerciales")),
-    "Compras y abastecimiento": ("◇", "Cadena de suministro", "Proveedores, órdenes de compra, recepción y cuentas por pagar.", ("Proveedores", "Compras", "Recepción de mercancía", "Cuentas por pagar")),
+    "Compras y abastecimiento": ("◇", "Cadena de suministro", "Proveedores, órdenes de compra, recepción y cuentas por pagar.", ("Proveedores", "Compras", "Cuentas por pagar")),
     "Producción": ("◫", "Operación productiva", "Catálogo productivo, órdenes, capacidad y reversos.", ("Catálogo y producción", "Órdenes de producción", "Mantenimiento del catálogo", "Reversos de producción")),
-    "Inventario y almacén": ("▦", "Control de artículos y existencias", "Catálogo maestro, existencias, movimientos, ajustes y alertas de stock.", ("Catálogo de artículos", "Inventario", "Movimientos de inventario", "Ajustes de inventario", "Alertas de inventario")),
+    "Inventario y almacén": ("▦", "Control de artículos y existencias", "Catálogo maestro, existencias, movimientos, ajustes y alertas de stock.", ("Inventario", "Movimientos de inventario", "Ajustes de inventario", "Alertas de inventario")),
     "Costos y precios": ("◈", "Rentabilidad", "Costeo, recetas, márgenes, tasas y precios de venta.", ("Costeo", "Costeo por procesos", "BOM multinivel", "Tasas de cambio", "Ajustar precios", "Exportar precios")),
     "Finanzas y tesorería": ("◉", "Control financiero", "Caja, conciliación, gastos, pagos, ajustes y cierres.", ("Panel financiero y cierres", "Control financiero detallado", "Caja", "Conciliación financiera", "Reabrir cierre de caja", "Gastos y presupuesto", "Reversos de pagos", "Anulaciones y ajustes")),
     "Contabilidad y análisis": ("◌", "Análisis gerencial", "Resultados financieros y proyecciones de efectivo.", ("Estado de Resultados", "Flujo de caja proyectado")),
@@ -33,13 +33,11 @@ DESCRIPTIONS = {
     "Venta rápida de mostrador": "Venta directa y cobro inmediato.", "Agenda de producción y entregas": "Fechas y capacidad.",
     "Cuentas por cobrar": "Saldos y vencimientos.", "Comprobantes": "Soportes comerciales.",
     "Reportes comerciales": "Rendimiento de ventas.", "Proveedores": "Directorio de proveedores.",
-    "Compras": "Órdenes y condiciones de adquisición sin alterar existencias.",
-    "Recepción de mercancía": "Confirma lo recibido y actualiza inventario y costo promedio.",
+    "Compras": "Órdenes, recepción y control de abastecimiento.",
     "Cuentas por pagar": "Obligaciones pendientes.",
-    "Catálogo de artículos": "Definición maestra de materiales, productos, unidades y características.",
     "Catálogo y producción": "Productos, recetas y procesos.", "Órdenes de producción": "Seguimiento de trabajos.",
     "Mantenimiento del catálogo": "Actualización del catálogo.", "Reversos de producción": "Correcciones productivas.",
-    "Inventario": "Existencias disponibles sin datos de compra.", "Movimientos de inventario": "Entradas y salidas.",
+    "Inventario": "Catálogo maestro, existencias, reservas, lotes y control de stock.", "Movimientos de inventario": "Entradas y salidas.",
     "Ajustes de inventario": "Correcciones autorizadas.", "Alertas de inventario": "Mínimos y reposición.",
     "Costeo": "Costos y márgenes.", "Costeo por procesos": "Costos por etapa.", "BOM multinivel": "Materiales anidados.",
     "Tasas de cambio": "Tasas monetarias.", "Ajustar precios": "Actualización de precios.", "Exportar precios": "Listados de precios.",
@@ -81,19 +79,21 @@ def _page_is_allowed(page: str, allowed: set[str] | None) -> bool:
 
 
 def _canonical_area_for_page(page: str) -> str | None:
+    canonical_page = _functional_page_name(page)
     for area, pages in navigation_groups().items():
-        if page in pages:
+        if canonical_page in pages:
             return area
     return None
 
 
 def _allowed_home_shortcuts(app_shell, allowed: set[str] | None):
-    """Filtra accesos y corrige sus áreas al momento de renderizar."""
+    """Filtra accesos y redirige alias antiguos hacia sus módulos principales."""
     shortcuts = []
     for title, description, _legacy_area, page in app_shell._home_shortcuts():
-        area = _canonical_area_for_page(page)
-        if area and _page_is_allowed(page, allowed):
-            shortcuts.append((title, description, area, page))
+        canonical_page = _functional_page_name(page)
+        area = _canonical_area_for_page(canonical_page)
+        if area and _page_is_allowed(canonical_page, allowed):
+            shortcuts.append((title, description, area, canonical_page))
     return tuple(shortcuts)
 
 
@@ -101,7 +101,7 @@ def _allowed_home_alerts(app_shell, allowed: set[str] | None):
     low_stock, expiring_lots = app_shell._inventory_alert_counts()
     alerts = (
         ("Cobros vencidos", app_shell._overdue_receivables(), "Revisa saldos cuya fecha de cobro ya pasó.", "Comercial y CRM", "Cuentas por cobrar"),
-        ("Compras por recibir", app_shell._pending_purchase_receipts(), "Confirma mercancía pendiente de recepción.", "Compras y abastecimiento", "Recepción de mercancía"),
+        ("Compras por recibir", app_shell._pending_purchase_receipts(), "Confirma mercancía pendiente de recepción.", "Compras y abastecimiento", "Compras"),
         ("Stock bajo", low_stock, "Atiende materiales en mínimo o agotados.", "Inventario y almacén", "Alertas de inventario"),
         ("Lotes próximos a vencer", expiring_lots, "Revisa lotes con vencimiento dentro de 30 días.", "Inventario y almacén", "Inventario"),
     )
@@ -118,7 +118,7 @@ def _render_permission_aware_home(app_shell, allowed: set[str] | None) -> None:
         with st.container(border=True):
             cols = st.columns([5, 1])
             cols[0].markdown("**🆕 Hay módulos nuevos**")
-            cols[0].caption("Catálogo de artículos, Recepción de mercancía, Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
+            cols[0].caption("Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
             if cols[1].button("Ver todos", key="home_whats_new_button", use_container_width=True):
                 app_shell._navigate("Inicio", "Novedades")
     metrics = st.columns(4)
@@ -174,6 +174,7 @@ def _effective_areas(user):
 
 def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
     current = st.session_state.get("navigation_page")
+    current = _functional_page_name(current) if current else current
     if current not in pages:
         current = pages[0]
         st.session_state["navigation_page"] = current
