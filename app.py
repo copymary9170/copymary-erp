@@ -1,7 +1,6 @@
 """Punto de entrada de CopyMary ERP."""
 from src import app_shell
 from src.business_goals_admin_loader import activate_business_goals_admin
-from src.business_goals_v15_bootstrap import activate_business_goals_schema_v15
 from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
@@ -46,9 +45,9 @@ def _activate_process_quotes_safely() -> None:
     activate_process_quotes()
 
 
-# La migración de metas se ejecuta antes de restaurar sesión o registrar pantallas,
-# de modo que Inicio y el gestor administrativo encuentren el esquema disponible.
-activate_business_goals_schema_v15()
+# Desde la Fase 6B parte 12, initialize_database() ya incorpora y registra v15.
+# Los módulos que restauran sesión o acceden a metas invocan la inicialización
+# fundacional cuando corresponde; se elimina el bootstrap temporal duplicado.
 restore_session_snapshot_on_startup()
 activate_module_bootstrap()
 activate_printer_asset_specs()
