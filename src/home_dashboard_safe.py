@@ -16,6 +16,7 @@ from src.erp_database import get_database_status
 from src.home_dashboard_phase3 import render_phase3_sections
 from src.home_dashboard_phase4 import render_preferences_panel
 from src.home_dashboard_phase5 import render_phase5_sections
+from src.home_dashboard_phase6 import render_phase6_sections
 from src.session_backup import latest_snapshot_info
 from src.session_utils import read_list
 
@@ -318,6 +319,9 @@ def render_home_dashboard_safe() -> None:
     if "phase5" in visible_widgets:
         render_phase5_sections(preferences.chart_days)
 
+    if "phase6" in visible_widgets:
+        render_phase6_sections(user_id)
+
     if "quick_actions" in visible_widgets:
         st.markdown("### Acciones rápidas")
         action_columns = st.columns(4)
@@ -343,5 +347,5 @@ def render_home_dashboard_safe() -> None:
                 column.metric(label, value)
 
     st.caption(
-        "Panel de solo lectura. La personalización y la analítica no modifican ventas, compras, inventario, producción ni finanzas."
+        "Panel de solo lectura. La personalización, la analítica y las metas de sesión no modifican ventas, compras, inventario, producción ni finanzas."
     )
