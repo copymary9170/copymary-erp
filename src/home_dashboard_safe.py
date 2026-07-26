@@ -13,6 +13,7 @@ import streamlit as st
 from src import auth
 from src.config import APP_VERSION, PROJECT_STATUS
 from src.erp_database import get_database_status
+from src.home_dashboard_phase3 import render_phase3_sections
 from src.session_backup import latest_snapshot_info
 from src.session_utils import read_list
 
@@ -224,6 +225,7 @@ def render_home_dashboard_safe() -> None:
     production_active = _production_active()
     receipts = read_list("goods_receipts")
     inventory = read_list("inventory_registry")
+    sales_today = _sales_total_today(sales)
 
     st.markdown(
         f'<div class="cm-home-hero"><div class="cm-home-hero__eyebrow">Torre de control empresarial</div>'
@@ -233,7 +235,7 @@ def render_home_dashboard_safe() -> None:
     )
 
     metrics = st.columns(6)
-    metrics[0].metric("Ventas de hoy", f"${_sales_total_today(sales):,.2f}")
+    metrics[0].metric("Ventas de hoy", f"${sales_today:,.2f}")
     metrics[1].metric("Compras por recibir", len(pending_purchases))
     metrics[2].metric("Producción activa", production_active)
     metrics[3].metric("Entregas de hoy", len(deliveries_today))
@@ -288,6 +290,16 @@ def render_home_dashboard_safe() -> None:
                 f'<small>{event["reference"] or "Sin referencia"} · {timestamp} UTC</small></div>',
                 unsafe_allow_html=True,
             )
+
+    render_phase3_sections(
+        sales_today=sales_today,
+        pending_purchases=len(pending_purchases),
+        low_stock=low_stock,
+        out_of_stock=out_of_stock,
+        deliveries_today=len(deliveries_today),
+        receivables=receivables,
+        payables=payables,
+    )
 
     st.markdown("### Acciones rápidas")
     action_columns = st.columns(4)
