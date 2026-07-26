@@ -1,7 +1,7 @@
 """Panel ejecutivo seguro para la pantalla de Inicio.
 
-Esta fase solo consulta datos ya presentes en ``st.session_state``. No crea,
-modifica ni elimina registros y conserva los módulos operativos existentes.
+Esta implementación consulta datos ya presentes en ``st.session_state`` y el
+estado técnico de la base de datos. No crea, modifica ni elimina registros.
 """
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ from typing import Any
 import streamlit as st
 
 from src import auth
+from src.config import APP_VERSION, PROJECT_STATUS
+from src.erp_database import get_database_status
+from src.session_backup import latest_snapshot_info
 from src.session_utils import read_list
 
 
@@ -95,31 +98,21 @@ def _inventory_alerts() -> tuple[int, int]:
     return low, out
 
 
-def _pending_receivables() -> float:
-    rows = read_list("receivables_registry")
+def _pending_balance(key: str) -> float:
     return sum(
         max(_num(row.get("balance", row.get("pending_amount", row.get("amount_due", 0.0)))), 0.0)
-        for row in rows
-        if str(row.get("status", "Pendiente")).casefold() not in {"pagado", "pagada", "cerrado", "cerrada"}
+        for row in read_list(key)
+        if str(row.get("status", "Pendiente")).casefold()
+        not in {"pagado", "pagada", "cerrado", "cerrada"}
     )
 
 
-def _pending_payables() -> float:
-    rows = read_list("payables_registry")
-    return sum(
-        max(_num(row.get("balance", row.get("pending_amount", row.get("amount_due", 0.0)))), 0.0)
-        for row in rows
-        if str(row.get("status", "Pendiente")).casefold() not in {"pagado", "pagada", "cerrado", "cerrada"}
-    )
-
-
-def _deliveries_due(rows: list[dict]) -> int:
-    today = date.today()
-    return sum(
-        1 for row in rows
+def _deliveries_due(rows: list[dict], target: date) -> list[dict]:
+    return [
+        row for row in rows
         if str(row.get("order_status", "Pendiente")).casefold() not in {"entregado", "entregada"}
-        and _date_value(row.get("delivery_date") or row.get("due_date") or row.get("expected_date")) == today
-    )
+        and _date_value(row.get("delivery_date") or row.get("due_date") or row.get("expected_date")) == target
+    ]
 
 
 def _production_active() -> int:
@@ -162,6 +155,24 @@ def _navigate(area: str, page: str) -> None:
     st.rerun()
 
 
+def _system_status() -> tuple[dict[str, str], str | None]:
+    try:
+        database = get_database_status()
+        snapshot = latest_snapshot_info()
+    except (RuntimeError, OSError, ValueError) as exc:
+        return {}, f"No se pudo consultar el estado técnico: {exc}"
+
+    last_backup = "Sin respaldo"
+    if snapshot and snapshot.get("created_at_utc"):
+        last_backup = str(snapshot["created_at_utc"])[:16].replace("T", " ") + " UTC"
+    return {
+        "Base de datos": "PostgreSQL" if database.engine == "postgresql" else "SQLite local",
+        "Estado": "Operativa" if database.ready else "Requiere revisión",
+        "Último respaldo": last_backup,
+        "Versión": f"{APP_VERSION} · {PROJECT_STATUS}",
+    }, None
+
+
 def _render_styles() -> None:
     st.markdown(
         """
@@ -170,14 +181,33 @@ def _render_styles() -> None:
         .cm-home-hero__eyebrow{font-size:.75rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6d4aff}
         .cm-home-hero__title{font-size:1.7rem;font-weight:850;color:#172033;margin:.25rem 0}
         .cm-home-hero__copy{color:#64748b;max-width:760px}
-        .cm-alert-card{padding:.9rem 1rem;border:1px solid rgba(148,163,184,.22);border-radius:16px;background:white;margin:.35rem 0}
-        .cm-alert-card strong{display:block;color:#172033}.cm-alert-card span{font-size:.86rem;color:#64748b}
         .cm-activity{padding:.72rem .85rem;border-left:3px solid rgba(109,74,255,.35);background:rgba(248,250,252,.8);border-radius:0 12px 12px 0;margin:.45rem 0}
         .cm-activity strong{color:#172033}.cm-activity small{display:block;color:#64748b;margin-top:.15rem}
+        .cm-flow{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.45rem;margin:.7rem 0 1.2rem}
+        .cm-flow__step{padding:.85rem .55rem;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:white;text-align:center}
+        .cm-flow__step strong{display:block;color:#172033;font-size:.88rem}.cm-flow__step span{display:block;color:#6d4aff;font-weight:800;font-size:1.05rem;margin-top:.2rem}
+        @media(max-width:900px){.cm-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_business_flow(pending_purchases: int, receipts: int, inventory_items: int, production: int, sales: list[dict], receivables: float) -> None:
+    steps = (
+        ("Compras", pending_purchases),
+        ("Recepción", receipts),
+        ("Inventario", inventory_items),
+        ("Producción", production),
+        ("Ventas", len(sales)),
+        ("Cobros", int(receivables > 0)),
+        ("Caja", len(read_list("cash_movements"))),
+    )
+    cards = "".join(
+        f'<div class="cm-flow__step"><strong>{label}</strong><span>{value}</span></div>'
+        for label, value in steps
+    )
+    st.markdown(f'<div class="cm-flow">{cards}</div>', unsafe_allow_html=True)
 
 
 def render_home_dashboard_safe() -> None:
@@ -188,15 +218,17 @@ def render_home_dashboard_safe() -> None:
     sales = _active_sales()
     pending_purchases = _pending_purchase_rows()
     low_stock, out_of_stock = _inventory_alerts()
-    receivables = _pending_receivables()
-    payables = _pending_payables()
-    deliveries_today = _deliveries_due(sales)
+    receivables = _pending_balance("receivables_registry")
+    payables = _pending_balance("payables_registry")
+    deliveries_today = _deliveries_due(sales, date.today())
     production_active = _production_active()
+    receipts = read_list("goods_receipts")
+    inventory = read_list("inventory_registry")
 
     st.markdown(
-        f'<div class="cm-home-hero"><div class="cm-home-hero__eyebrow">Centro ejecutivo</div>'
+        f'<div class="cm-home-hero"><div class="cm-home-hero__eyebrow">Torre de control empresarial</div>'
         f'<div class="cm-home-hero__title">Buenos días, {display_name}</div>'
-        '<div class="cm-home-hero__copy">Revisa el estado del negocio, atiende alertas y abre las tareas prioritarias desde un solo lugar.</div></div>',
+        '<div class="cm-home-hero__copy">Decide qué atender primero, revisa el flujo completo del negocio y abre cada tarea desde un solo lugar.</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -204,38 +236,52 @@ def render_home_dashboard_safe() -> None:
     metrics[0].metric("Ventas de hoy", f"${_sales_total_today(sales):,.2f}")
     metrics[1].metric("Compras por recibir", len(pending_purchases))
     metrics[2].metric("Producción activa", production_active)
-    metrics[3].metric("Entregas de hoy", deliveries_today)
+    metrics[3].metric("Entregas de hoy", len(deliveries_today))
     metrics[4].metric("Cobros pendientes", f"${receivables:,.2f}")
     metrics[5].metric("Pagos pendientes", f"${payables:,.2f}")
 
-    left, right = st.columns([1.1, 1])
+    st.markdown("### Flujo del negocio")
+    _render_business_flow(len(pending_purchases), len(receipts), len(inventory), production_active, sales, receivables)
+
+    left, right = st.columns([1.08, 1])
     with left:
-        st.markdown("### Alertas y trabajo pendiente")
+        st.markdown("### Prioridades")
         alerts = [
-            (out_of_stock > 0, "Inventario agotado", f"{out_of_stock} artículo(s) sin disponibilidad.", "Inventario y almacén", "Inventario"),
-            (low_stock > 0, "Stock bajo", f"{low_stock} artículo(s) alcanzaron su mínimo.", "Inventario y almacén", "Inventario"),
-            (len(pending_purchases) > 0, "Compras esperando recepción", f"{len(pending_purchases)} orden(es) todavía no ingresan al inventario.", "Compras y abastecimiento", "Recepción de mercancía"),
-            (deliveries_today > 0, "Entregas para hoy", f"{deliveries_today} pedido(s) requieren seguimiento.", "Comercial y CRM", "Agenda de producción y entregas"),
-            (receivables > 0, "Cobros pendientes", f"Saldo pendiente: ${receivables:,.2f}.", "Comercial y CRM", "Cuentas por cobrar"),
-            (payables > 0, "Pagos a proveedores", f"Saldo pendiente: ${payables:,.2f}.", "Compras y abastecimiento", "Cuentas por pagar"),
+            (out_of_stock > 0, "Crítica", "Inventario agotado", f"{out_of_stock} artículo(s) sin disponibilidad.", "Inventario y almacén", "Inventario"),
+            (low_stock > 0, "Alta", "Stock bajo", f"{low_stock} artículo(s) alcanzaron su mínimo.", "Inventario y almacén", "Inventario"),
+            (len(pending_purchases) > 0, "Alta", "Compras esperando recepción", f"{len(pending_purchases)} orden(es) todavía no ingresan al inventario.", "Compras y abastecimiento", "Recepción de mercancía"),
+            (len(deliveries_today) > 0, "Alta", "Entregas para hoy", f"{len(deliveries_today)} pedido(s) requieren seguimiento.", "Comercial y CRM", "Agenda de producción y entregas"),
+            (receivables > 0, "Media", "Cobros pendientes", f"Saldo pendiente: ${receivables:,.2f}.", "Comercial y CRM", "Cuentas por cobrar"),
+            (payables > 0, "Media", "Pagos a proveedores", f"Saldo pendiente: ${payables:,.2f}.", "Compras y abastecimiento", "Cuentas por pagar"),
         ]
         visible_alerts = [item for item in alerts if item[0]]
         if not visible_alerts:
             st.success("No hay alertas operativas con los datos actuales.")
-        for index, (_, title, detail, area, page) in enumerate(visible_alerts):
+        for index, (_, priority, title, detail, area, page) in enumerate(visible_alerts):
             with st.container(border=True):
                 a, b = st.columns([4, 1])
-                a.markdown(f"**{title}**")
+                a.markdown(f"**{priority} · {title}**")
                 a.caption(detail)
                 if b.button("Abrir", key=f"home_alert_{index}", use_container_width=True):
                     _navigate(area, page)
 
     with right:
+        st.markdown("### Agenda de hoy")
+        if deliveries_today:
+            for row in deliveries_today[:6]:
+                customer = str(row.get("customer_name") or "Cliente sin nombre")
+                reference = str(row.get("order_id") or row.get("sale_id") or "Sin referencia")
+                st.markdown(f"- **Entrega:** {customer} · {reference}")
+        else:
+            st.info("No hay entregas programadas para hoy.")
+        if pending_purchases:
+            st.caption(f"También hay {len(pending_purchases)} compra(s) pendientes de recepción.")
+
         st.markdown("### Actividad reciente")
         recent = _recent_activity()
         if not recent:
             st.info("Todavía no hay actividad reciente para mostrar.")
-        for event in recent:
+        for event in recent[:5]:
             timestamp = event["timestamp"][:16].replace("T", " ") if event["timestamp"] else "Sin fecha"
             st.markdown(
                 f'<div class="cm-activity"><strong>{event["type"]}: {event["label"]}</strong>'
@@ -250,12 +296,20 @@ def render_home_dashboard_safe() -> None:
             if st.button(label, key=f"home_quick_action_{index}", use_container_width=True, type="primary" if index < 2 else "secondary"):
                 _navigate(area, page)
 
-    st.markdown("### Estado general")
-    status = st.columns(4)
-    status[0].metric("Clientes", len(read_list("customers_registry")))
-    status[1].metric("Pedidos activos", sum(str(row.get("order_status", "Pendiente")).casefold() not in {"entregado", "entregada"} for row in sales))
-    status[2].metric("Artículos en catálogo", len(read_list("catalog_items")))
-    status[3].metric("Recepciones registradas", len(read_list("goods_receipts")))
+    st.markdown("### Estado general y técnico")
+    business_status = st.columns(4)
+    business_status[0].metric("Clientes", len(read_list("customers_registry")))
+    business_status[1].metric("Pedidos activos", sum(str(row.get("order_status", "Pendiente")).casefold() not in {"entregado", "entregada"} for row in sales))
+    business_status[2].metric("Artículos en catálogo", len(read_list("catalog_items")))
+    business_status[3].metric("Recepciones registradas", len(receipts))
+
+    technical, technical_error = _system_status()
+    if technical_error:
+        st.warning(technical_error)
+    elif technical:
+        technical_columns = st.columns(4)
+        for column, (label, value) in zip(technical_columns, technical.items(), strict=True):
+            column.metric(label, value)
 
     st.caption(
         "Panel de solo lectura. Los datos se originan en los módulos operativos y esta pantalla no modifica ventas, compras, inventario, producción ni finanzas."
