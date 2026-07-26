@@ -49,7 +49,3 @@ def activate_payment_consistency() -> None:
     control_center._purchase_paid = _purchase_paid
     adjustments._linked_references = _linked_references
     app_shell.FUNCTIONAL_MODULES["Ajustes de inventario"] = render_inventory_adjustments
-    current = app_shell.NAVIGATION_GROUPS["Productos e inventario"]
-    if "Ajustes de inventario" not in current:
-        position = current.index("Movimientos de inventario")
-        app_shell.NAVIGATION_GROUPS["Productos e inventario"] = (*current[:position], "Ajustes de inventario", *current[position:])
