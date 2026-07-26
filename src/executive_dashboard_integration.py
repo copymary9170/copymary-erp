@@ -30,8 +30,14 @@ def canonical_area_for_page(page: str, groups: dict[str, tuple[str, ...]] | None
 
 
 def canonical_home_shortcuts() -> tuple[tuple[str, str, str, str], ...]:
+    original = getattr(app_shell, "_home_shortcuts_original", None)
+    if original is None:
+        original = getattr(app_shell, "_home_shortcuts", None)
+    if original is None:
+        return ()
+
     shortcuts = []
-    for title, description, _legacy_area, page in app_shell._home_shortcuts_original():
+    for title, description, _legacy_area, page in original():
         area = canonical_area_for_page(page)
         if area:
             shortcuts.append((title, description, area, page))
@@ -39,8 +45,12 @@ def canonical_home_shortcuts() -> tuple[tuple[str, str, str, str], ...]:
 
 
 def activate_home_navigation_fix() -> None:
+    """Activa el ajuste solo cuando app_shell terminó de definir sus accesos."""
+    current = getattr(app_shell, "_home_shortcuts", None)
+    if current is None:
+        return
     if not hasattr(app_shell, "_home_shortcuts_original"):
-        app_shell._home_shortcuts_original = app_shell._home_shortcuts
+        app_shell._home_shortcuts_original = current
     app_shell._home_shortcuts = canonical_home_shortcuts
 
 
