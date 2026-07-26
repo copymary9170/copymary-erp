@@ -4,7 +4,6 @@ from collections import Counter
 
 import streamlit as st
 
-from src import app_shell
 from src.components import render_info_card, render_page_header
 from src.money import format_money
 from src.production_reversals_enterprise import render_production_reversals_enterprise
@@ -77,17 +76,3 @@ def render_production_reversals_visible() -> None:
     )
     st.divider()
     render_production_reversals_enterprise()
-
-
-app_shell.FUNCTIONAL_MODULES["Reversos de producción"] = render_production_reversals_visible
-app_shell.NAVIGATION_GROUPS["Productos e inventario"] = (
-    "Catálogo y producción",
-    "Mantenimiento del catálogo",
-    "Reversos de producción",
-    "Inventario",
-    "Movimientos de inventario",
-    "Alertas de inventario",
-    "Costeo",
-    "Ajustar precios",
-    "Exportar precios",
-)
