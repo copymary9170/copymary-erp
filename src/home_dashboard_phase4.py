@@ -18,6 +18,7 @@ WIDGET_LABELS = {
     "priorities": "Prioridades",
     "agenda": "Agenda y actividad",
     "phase3": "Tendencias y centros operativos",
+    "phase5": "Analítica ejecutiva y comparativos",
     "quick_actions": "Acciones rápidas",
     "system_status": "Estado general y técnico",
 }
