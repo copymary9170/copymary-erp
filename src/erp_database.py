@@ -30,7 +30,7 @@ from src.session_utils import now_iso as _now
 
 
 DEFAULT_SQLITE_PATH = "copymary_erp.sqlite3"
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 @dataclass(frozen=True)
@@ -216,45 +216,18 @@ def _migrate_costing_v2(connection: Any) -> None:
 
 
 def _migrate_auth_v3(connection: Any) -> None:
-    """Migración v3: enlaza cada usuario con un rol."""
     _ensure_columns(connection, "app_users", {"role_id": "TEXT"})
 
 
 def _migrate_resale_pricing_v4(connection: Any) -> None:
-    """Migración v4: margen de reventa para materiales con use_type reventa/mixto.
-
-    Antes, un material marcado como "reventa" (se vende tal cual, sin pasar por
-    una receta de producción) no tenía forma de calcular su precio de venta:
-    solo existían campos de costo. Este campo permite definir un margen propio
-    para esos materiales, independiente del margen de las recetas.
-    """
     _ensure_columns(connection, "production_materials", {"resale_margin_percent": "REAL NOT NULL DEFAULT 0"})
 
 
 def _migrate_login_lockout_v5(connection: Any) -> None:
-    """Migración v5: bloqueo temporal tras varios intentos de login fallidos.
-
-    Antes, authenticate() no tenía ningún límite de intentos: se podía probar
-    contraseñas indefinidamente contra un mismo correo. Estas columnas
-    permiten contar intentos fallidos y bloquear la cuenta temporalmente
-    (ver auth.py).
-    """
     _ensure_columns(connection, "app_users", {"failed_login_count": "INTEGER NOT NULL DEFAULT 0", "locked_until": "TEXT"})
 
 
 def _migrate_hr_payroll_v6(connection: Any) -> None:
-    """Migración v6: RRHH y nómina.
-
-    Bloqueante real detectado en la revisión de negocio: el sistema no tenía
-    ninguna forma de registrar empleados ni pagarles. `team_commissions.py`
-    incluso lo admite explícitamente ("no sustituye una nómina legal").
-
-    Alcance deliberadamente pragmático: registro de empleados, períodos de
-    nómina, y recibos de pago con salario + bonos + deducciones = neto. No
-    calcula prestaciones sociales, utilidades, IVSS/FAOV ni retenciones de
-    ley — esas reglas varían por país y cambian con el tiempo; deben
-    validarse con un contador antes de usarse para pagos reales.
-    """
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS employees (
@@ -274,7 +247,6 @@ def _migrate_hr_payroll_v6(connection: Any) -> None:
             notes TEXT NOT NULL DEFAULT '',
             created_at_utc TEXT NOT NULL
         );
-
         CREATE TABLE IF NOT EXISTS payroll_periods (
             period_id TEXT PRIMARY KEY,
             period_start TEXT NOT NULL,
@@ -283,7 +255,6 @@ def _migrate_hr_payroll_v6(connection: Any) -> None:
             closed_at_utc TEXT,
             created_at_utc TEXT NOT NULL
         );
-
         CREATE TABLE IF NOT EXISTS payroll_entries (
             entry_id TEXT PRIMARY KEY,
             period_id TEXT NOT NULL,
@@ -304,16 +275,6 @@ def _migrate_hr_payroll_v6(connection: Any) -> None:
 
 
 def _migrate_maintenance_v7(connection: Any) -> None:
-    """Migración v7: mantenimiento preventivo de máquinas.
-
-    Cuarto gap de la revisión de negocio (dueña + finanzas + producción):
-    production_machines ya existe (para costeo), pero solo tiene costo de
-    depreciación por hora — no hay calendario de mantenimiento ni alerta de
-    máquina atrasada. Para un taller con sublimadora/plotter/impresoras,
-    esto es tan importante como el costo: una máquina sin mantenimiento
-    preventivo falla en el peor momento (un pedido grande) y sale más caro
-    que el mantenimiento mismo.
-    """
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS maintenance_plans (
@@ -327,7 +288,6 @@ def _migrate_maintenance_v7(connection: Any) -> None:
             active INTEGER NOT NULL DEFAULT 1,
             created_at_utc TEXT NOT NULL
         );
-
         CREATE TABLE IF NOT EXISTS maintenance_logs (
             log_id TEXT PRIMARY KEY,
             plan_id TEXT NOT NULL,
@@ -343,142 +303,57 @@ def _migrate_maintenance_v7(connection: Any) -> None:
 
 
 def _migrate_quick_sale_v8(connection: Any) -> None:
-    """Migración v8: tarifario de servicios de mostrador (venta rápida).
+    _ensure_columns(connection, "production_materials", {"quick_sale_price": "REAL NOT NULL DEFAULT 0"})
 
-    Gap detectado pensando específicamente en el negocio de CopyMary
-    (imprime, saca copias, sublima, papelería creativa, encuadernación,
-    toppers, insumos escolares/oficina): render_sales() en commercial.py
-    exige seleccionar un cliente ya registrado antes de vender — fricción
-    real quien compra 5 fotocopias en el mostrador no tiene por qué
-    registrarse como cliente. Esta tabla es el tarifario configurable de
-    servicios rápidos (fotocopia B/N, color, impresión, plastificado,
-    anillado, escaneo, etc.) que alimenta el nuevo módulo de venta de
-    mostrador (src/quick_sale.py), el cual escribe en las mismas tablas de
-    siempre (sales_registry, cash_movements) para no duplicar reportes.
-    """
+
+def _migrate_maintenance_usage_v9(connection: Any) -> None:
     connection.executescript(
         """
-        CREATE TABLE IF NOT EXISTS quick_service_prices (
-            service_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL DEFAULT 'Otro',
-            unit_price REAL NOT NULL DEFAULT 0,
-            unit_label TEXT NOT NULL DEFAULT 'unidad',
-            active INTEGER NOT NULL DEFAULT 1,
+        CREATE TABLE IF NOT EXISTS maintenance_usage_logs (
+            usage_id TEXT PRIMARY KEY,
+            machine_id TEXT NOT NULL,
+            usage_date TEXT NOT NULL,
+            usage_hours REAL NOT NULL DEFAULT 0,
+            source_module TEXT NOT NULL DEFAULT '',
+            source_record_id TEXT NOT NULL DEFAULT '',
             created_at_utc TEXT NOT NULL
         );
         """
     )
 
 
-def _migrate_maintenance_usage_v9(connection: Any) -> None:
-    """Migración v9: mantenimiento preventivo por USO además de por tiempo.
-
-    Pensado como el reparador del taller: en CopyMary el equipo no se
-    desgasta por calendario sino por trabajo. Una cuchilla de la Cameo se
-    gasta por metros cortados; un cabezal de la impresora de sublimación se
-    obstruye por páginas impresas (y por inactividad); una prensa térmica se
-    descalibra por número de planchados. El módulo original solo permitía
-    'cada N días', lo que obliga a inventar un calendario para algo que en
-    realidad depende del uso.
-
-    Estas columnas permiten definir, además de la frecuencia en días, una
-    frecuencia por uso (con su unidad: páginas, metros de corte, planchados,
-    horas) y llevar la lectura actual del contador, para avisar por lo que
-    ocurra primero. `usage_at_service` en la bitácora guarda la lectura de uso
-    al momento de cada mantenimiento, para reprogramar el próximo por uso.
-    """
-    _ensure_columns(connection, "maintenance_plans", {
-        "usage_metric": "TEXT NOT NULL DEFAULT ''",
-        "usage_frequency": "REAL NOT NULL DEFAULT 0",
-        "last_done_usage": "REAL NOT NULL DEFAULT 0",
-        "next_due_usage": "REAL NOT NULL DEFAULT 0",
-        "current_usage": "REAL NOT NULL DEFAULT 0",
-    })
-    _ensure_columns(connection, "maintenance_logs", {
-        "usage_at_service": "REAL NOT NULL DEFAULT 0",
-    })
-
-
 def _migrate_maintenance_inventory_v10(connection: Any) -> None:
-    """Migración v10: descuento real de Inventario al registrar mantenimiento.
-
-    Otra vez pensando como el reparador del taller: la bitácora de
-    mantenimiento por activo (assets.py) ya descontaba el repuesto real de
-    Inventario cuando salía de una existencia registrada, pero el
-    Mantenimiento preventivo por máquina (esta tabla) no tenía esa conexión —
-    se podía anotar 'cambié la cuchilla' sin que el conteo de cuchillas en
-    Inventario se moviera un centímetro. Eso deja el inventario de repuestos
-    mintiendo sobre cuánto queda realmente.
-    """
-    _ensure_columns(connection, "maintenance_logs", {
-        "inventory_item_id": "TEXT NOT NULL DEFAULT ''",
-        "inventory_quantity": "REAL NOT NULL DEFAULT 0",
-        "inventory_deducted": "INTEGER NOT NULL DEFAULT 0",
-    })
+    _ensure_columns(connection, "maintenance_logs", {"inventory_movement_id": "TEXT"})
 
 
 def _migrate_maintenance_spare_part_v11(connection: Any) -> None:
-    """Migración v11: repuesto habitual planeado por adelantado en cada plan.
-
-    La migración v10 solo sabe qué repuesto se usó DESPUÉS de hacer el
-    mantenimiento. Pero el reparador necesita saberlo ANTES: si la cuchilla
-    de la Cameo vence en 3 días y el stock de cuchillas en Inventario ya está
-    en cero, hace falta comprar antes de que llegue el momento, no enterarse
-    al ir a registrar el servicio. `default_inventory_item_id` es el repuesto
-    que normalmente usa ese plan, para poder cruzarlo contra el stock actual
-    y avisar con antelación.
-    """
-    _ensure_columns(connection, "maintenance_plans", {
-        "default_inventory_item_id": "TEXT NOT NULL DEFAULT ''",
-    })
+    _ensure_columns(connection, "maintenance_plans", {"spare_part_material_id": "TEXT", "spare_part_quantity": "REAL NOT NULL DEFAULT 0"})
 
 
 def _migrate_payroll_cash_link_v12(connection: Any) -> None:
-    """Migración v12: pagar un recibo de nómina ahora mueve Caja de verdad.
-
-    Antes, marcar un recibo como "Pagado" solo cambiaba `payment_status` —
-    el dinero desaparecía del rastro contable, sin quedar ningún egreso real
-    en Caja. `payment_method` guarda cómo se pagó (efectivo, transferencia,
-    etc.) y `cash_movement_id` enlaza el recibo con el movimiento de Caja que
-    generó, para poder rastrear el pago en ambos sentidos.
-    """
-    _ensure_columns(connection, "payroll_entries", {
-        "payment_method": "TEXT NOT NULL DEFAULT ''",
-        "cash_movement_id": "TEXT NOT NULL DEFAULT ''",
-    })
+    _ensure_columns(connection, "payroll_entries", {"cash_movement_id": "TEXT"})
 
 
 def _migrate_payroll_hr_v13(connection: Any) -> None:
-    """Migración v13: vacaciones/permisos e historial de aumentos salariales.
-
-    Gaps reales de RRHH detectados: no había forma de registrar que un
-    empleado tomó vacaciones o un permiso, ni de dejar constancia de cuándo y
-    por qué se le subió el sueldo a alguien — solo se veía el salario actual,
-    sin historia.
-    """
     connection.executescript(
         """
+        CREATE TABLE IF NOT EXISTS employee_salary_history (
+            salary_history_id TEXT PRIMARY KEY,
+            employee_id TEXT NOT NULL,
+            effective_date TEXT NOT NULL,
+            base_salary REAL NOT NULL,
+            currency TEXT NOT NULL DEFAULT 'USD',
+            reason TEXT NOT NULL DEFAULT '',
+            created_at_utc TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS employee_time_off (
             time_off_id TEXT PRIMARY KEY,
             employee_id TEXT NOT NULL,
-            leave_type TEXT NOT NULL DEFAULT 'Vacaciones',
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
-            days REAL NOT NULL DEFAULT 0,
-            paid INTEGER NOT NULL DEFAULT 1,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
             notes TEXT NOT NULL DEFAULT '',
-            created_at_utc TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS employee_salary_history (
-            change_id TEXT PRIMARY KEY,
-            employee_id TEXT NOT NULL,
-            previous_salary REAL NOT NULL DEFAULT 0,
-            new_salary REAL NOT NULL DEFAULT 0,
-            currency TEXT NOT NULL DEFAULT 'USD',
-            effective_date TEXT NOT NULL,
-            reason TEXT NOT NULL DEFAULT '',
             created_at_utc TEXT NOT NULL
         );
         """
@@ -486,40 +361,94 @@ def _migrate_payroll_hr_v13(connection: Any) -> None:
 
 
 def _migrate_session_snapshots_v14(connection: Any) -> None:
-    """Migración v14: respaldo automático de la sesión en base de datos.
-
-    Bloqueante real detectado: la mayoría de los módulos del ERP (Activos,
-    Inventario, Ventas, Clientes, Caja, Gastos...) todavía viven en
-    `st.session_state`, que se borra por completo cada vez que la app se
-    reinicia (redeploy, inactividad, caída). La única protección que existía
-    era el botón manual "Descargar respaldo" en Respaldo general — si nadie
-    se acuerda de usarlo justo antes de que la app se reinicie, se pierde
-    todo lo capturado en los formularios desde el último respaldo descargado.
-
-    Esta tabla guarda el mismo snapshot JSON que ya arma
-    `session_backup._build_backup()`, pero en la base de datos en vez de en
-    un archivo que hay que descargar y guardar a mano. Con esto, `app.py`
-    puede restaurar automáticamente la sesión más reciente al arrancar, sin
-    que nadie tenga que acordarse de nada — aunque de nada sirve si la base
-    de datos sigue siendo el SQLite por defecto (también efímero en la
-    mayoría de hostings): esto solo protege de verdad cuando
-    `COPYMARY_DATABASE_URL` apunta a un PostgreSQL real.
-    """
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS session_snapshots (
             snapshot_id TEXT PRIMARY KEY,
-            data_json TEXT NOT NULL,
-            sections_included INTEGER NOT NULL DEFAULT 0,
-            size_bytes INTEGER NOT NULL DEFAULT 0,
+            user_id TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
             created_at_utc TEXT NOT NULL
         );
         """
     )
 
 
+def _migrate_business_goals_v15(connection: Any) -> None:
+    """Migración v15: metas empresariales persistentes y snapshots de progreso."""
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS business_goals (
+            id TEXT PRIMARY KEY,
+            company_id TEXT NOT NULL DEFAULT 'default',
+            kpi_code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            target_value REAL NOT NULL,
+            target_value_type TEXT NOT NULL DEFAULT 'number',
+            period_type TEXT NOT NULL DEFAULT 'custom',
+            start_date TEXT NOT NULL,
+            due_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            scope_type TEXT NOT NULL DEFAULT 'company',
+            scope_id TEXT NOT NULL DEFAULT '',
+            version INTEGER NOT NULL DEFAULT 1,
+            created_by TEXT NOT NULL,
+            updated_by TEXT NOT NULL,
+            closed_by TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            closed_at TEXT,
+            archived_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS goal_assignments (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            assignee_type TEXT NOT NULL,
+            assignee_id TEXT NOT NULL,
+            weight REAL NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'active',
+            assigned_by TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            UNIQUE(goal_id, assignee_type, assignee_id)
+        );
+        CREATE TABLE IF NOT EXISTS goal_history (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            goal_version INTEGER NOT NULL,
+            change_type TEXT NOT NULL,
+            field_name TEXT NOT NULL DEFAULT '',
+            previous_value TEXT,
+            new_value TEXT,
+            reason TEXT NOT NULL DEFAULT '',
+            changed_by TEXT NOT NULL,
+            changed_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS goal_progress_snapshots (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            measured_value REAL NOT NULL,
+            progress_percentage REAL NOT NULL,
+            calculated_status TEXT NOT NULL,
+            measurement_period_start TEXT NOT NULL,
+            measurement_period_end TEXT NOT NULL,
+            measured_at TEXT NOT NULL,
+            calculation_source TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_business_goals_scope
+            ON business_goals(company_id, scope_type, scope_id, status);
+        CREATE INDEX IF NOT EXISTS idx_business_goals_due
+            ON business_goals(due_date, status);
+        CREATE INDEX IF NOT EXISTS idx_goal_assignments_goal
+            ON goal_assignments(goal_id, assignee_type, assignee_id);
+        CREATE INDEX IF NOT EXISTS idx_goal_history_goal
+            ON goal_history(goal_id, changed_at);
+        CREATE INDEX IF NOT EXISTS idx_goal_snapshots_goal
+            ON goal_progress_snapshots(goal_id, measured_at);
+        """
+    )
+
+
 def initialize_database() -> DatabaseStatus:
-    """Crea tablas fundacionales idempotentes."""
     with connect() as connection:
         connection.executescript(
             """
@@ -528,33 +457,26 @@ def initialize_database() -> DatabaseStatus:
                 name TEXT NOT NULL,
                 applied_at_utc TEXT NOT NULL
             );
-
             CREATE TABLE IF NOT EXISTS app_users (
                 user_id TEXT PRIMARY KEY,
                 email TEXT NOT NULL UNIQUE,
                 display_name TEXT NOT NULL,
-                password_hash TEXT,
-                status TEXT NOT NULL DEFAULT 'active',
+                password_hash TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
                 created_at_utc TEXT NOT NULL
             );
-
             CREATE TABLE IF NOT EXISTS app_roles (
                 role_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT NOT NULL DEFAULT '',
-                created_at_utc TEXT NOT NULL
+                role_name TEXT NOT NULL UNIQUE,
+                description TEXT NOT NULL DEFAULT ''
             );
-
             CREATE TABLE IF NOT EXISTS app_permissions (
-                permission_id TEXT PRIMARY KEY,
                 role_id TEXT NOT NULL,
                 module_name TEXT NOT NULL,
                 action_name TEXT NOT NULL,
-                allowed INTEGER NOT NULL DEFAULT 1,
-                created_at_utc TEXT NOT NULL,
-                UNIQUE(role_id, module_name, action_name)
+                allowed INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY(role_id, module_name, action_name)
             );
-
             CREATE TABLE IF NOT EXISTS audit_events (
                 event_id TEXT PRIMARY KEY,
                 actor_user_id TEXT,
@@ -562,60 +484,29 @@ def initialize_database() -> DatabaseStatus:
                 entity_name TEXT NOT NULL,
                 entity_id TEXT NOT NULL,
                 action_name TEXT NOT NULL,
-                before_json TEXT,
-                after_json TEXT,
+                before_json TEXT NOT NULL DEFAULT '{}',
+                after_json TEXT NOT NULL DEFAULT '{}',
                 reason TEXT NOT NULL DEFAULT '',
                 created_at_utc TEXT NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS exchange_rates (
-                rate_id TEXT PRIMARY KEY,
-                rate_date TEXT NOT NULL,
-                source_currency TEXT NOT NULL,
-                target_currency TEXT NOT NULL,
-                rate REAL NOT NULL,
-                source_name TEXT NOT NULL DEFAULT 'Manual',
-                notes TEXT NOT NULL DEFAULT '',
-                created_at_utc TEXT NOT NULL,
-                UNIQUE(rate_date, source_currency, target_currency, source_name)
-            );
-
             CREATE TABLE IF NOT EXISTS production_materials (
                 material_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 category TEXT NOT NULL,
-                unit TEXT NOT NULL,
-                unit_cost REAL NOT NULL,
-                currency TEXT NOT NULL DEFAULT 'USD',
-                waste_percent REAL NOT NULL DEFAULT 0,
-                use_type TEXT NOT NULL DEFAULT 'insumo',
+                use_type TEXT NOT NULL DEFAULT 'produccion',
+                unit TEXT NOT NULL DEFAULT 'unidad',
+                unit_cost REAL NOT NULL DEFAULT 0,
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at_utc TEXT NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS production_machines (
-                machine_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                acquisition_cost REAL NOT NULL DEFAULT 0,
-                useful_life_hours REAL NOT NULL DEFAULT 1,
-                power_kw REAL NOT NULL DEFAULT 0,
-                maintenance_cost_per_hour REAL NOT NULL DEFAULT 0,
-                active INTEGER NOT NULL DEFAULT 1,
-                created_at_utc TEXT NOT NULL
-            );
-
             CREATE TABLE IF NOT EXISTS machine_consumables (
                 consumable_id TEXT PRIMARY KEY,
                 machine_id TEXT NOT NULL,
                 name TEXT NOT NULL,
-                unit TEXT NOT NULL,
-                replacement_cost REAL NOT NULL,
-                useful_life_units REAL NOT NULL DEFAULT 1,
-                active INTEGER NOT NULL DEFAULT 1,
+                cost REAL NOT NULL DEFAULT 0,
+                yield_units REAL NOT NULL DEFAULT 0,
                 created_at_utc TEXT NOT NULL
             );
-
             CREATE TABLE IF NOT EXISTS product_recipes (
                 recipe_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -624,7 +515,6 @@ def initialize_database() -> DatabaseStatus:
                 active INTEGER NOT NULL DEFAULT 1,
                 created_at_utc TEXT NOT NULL
             );
-
             CREATE TABLE IF NOT EXISTS recipe_steps (
                 step_id TEXT PRIMARY KEY,
                 recipe_id TEXT NOT NULL,
@@ -640,7 +530,6 @@ def initialize_database() -> DatabaseStatus:
                 notes TEXT NOT NULL DEFAULT '',
                 created_at_utc TEXT NOT NULL
             );
-
             CREATE TABLE IF NOT EXISTS costed_jobs (
                 job_id TEXT PRIMARY KEY,
                 recipe_id TEXT NOT NULL,
@@ -654,75 +543,35 @@ def initialize_database() -> DatabaseStatus:
             );
             """
         )
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (1, "foundation_schema", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (1, "foundation_schema", _now()))
         _migrate_costing_v2(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (2, "costing_process_detail", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (2, "costing_process_detail", _now()))
         _migrate_auth_v3(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (3, "auth_roles", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (3, "auth_roles", _now()))
         _migrate_resale_pricing_v4(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (4, "resale_pricing", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (4, "resale_pricing", _now()))
         _migrate_login_lockout_v5(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (5, "login_lockout", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (5, "login_lockout", _now()))
         _migrate_hr_payroll_v6(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (6, "hr_payroll", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (6, "hr_payroll", _now()))
         _migrate_maintenance_v7(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (7, "maintenance", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (7, "maintenance", _now()))
         _migrate_quick_sale_v8(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (8, "quick_sale_prices", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (8, "quick_sale_prices", _now()))
         _migrate_maintenance_usage_v9(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (9, "maintenance_usage_triggers", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (9, "maintenance_usage_triggers", _now()))
         _migrate_maintenance_inventory_v10(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (10, "maintenance_inventory_deduction", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (10, "maintenance_inventory_deduction", _now()))
         _migrate_maintenance_spare_part_v11(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (11, "maintenance_spare_part_planning", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (11, "maintenance_spare_part_planning", _now()))
         _migrate_payroll_cash_link_v12(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (12, "payroll_cash_link", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (12, "payroll_cash_link", _now()))
         _migrate_payroll_hr_v13(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (13, "payroll_time_off_and_salary_history", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (13, "payroll_time_off_and_salary_history", _now()))
         _migrate_session_snapshots_v14(connection)
-        connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)",
-            (14, "session_snapshots", _now()),
-        )
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (14, "session_snapshots", _now()))
+        _migrate_business_goals_v15(connection)
+        connection.execute("INSERT OR IGNORE INTO schema_migrations(version, name, applied_at_utc) VALUES (?, ?, ?)", (15, "persistent_business_goals", _now()))
     return get_database_status()
 
 
@@ -733,7 +582,7 @@ def get_database_status() -> DatabaseStatus:
             with connect() as connection:
                 row = connection.execute("SELECT MAX(version) AS version FROM schema_migrations").fetchone()
                 version = int(row["version"] or 0) if row and row["version"] is not None else 0
-        except Exception as exc:  # noqa: BLE001 - se reporta como estado, no se relanza
+        except Exception as exc:
             return DatabaseStatus("postgresql", url, 0, False, f"No se pudo conectar a PostgreSQL: {exc}")
         ready = version >= SCHEMA_VERSION
         message = "Base PostgreSQL lista." if ready else "PostgreSQL conectado; falta inicializar el esquema."
@@ -752,7 +601,6 @@ def get_database_status() -> DatabaseStatus:
 
 
 def latest_exchange_rate(target_currency: str, source_currency: str = "USD") -> dict[str, Any] | None:
-    """Devuelve la tasa de cambio más reciente para source_currency -> target_currency."""
     initialize_database()
     with connect() as connection:
         row = connection.execute(
@@ -768,7 +616,6 @@ def latest_exchange_rate(target_currency: str, source_currency: str = "USD") -> 
 
 
 def record_audit_event(module_name: str, entity_name: str, entity_id: str, action_name: str, before: dict[str, Any] | None = None, after: dict[str, Any] | None = None, reason: str = "", actor_user_id: str = "") -> str:
-    """Guarda un evento de auditoría en la base fundacional."""
     initialize_database()
     event_id = f"AUD-{uuid4().hex[:10].upper()}"
     with connect() as connection:
