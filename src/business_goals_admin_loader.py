@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from src import app_shell, auth
 from src.business_goals_admin_closure import render_business_goals_admin_with_closure
+from src.business_goals_permissions_admin import render_goal_permissions_admin
 from src.business_goals_service import GoalActor
 
 PAGE_NAME = "Metas del negocio"
@@ -22,7 +23,9 @@ def actor_from_current_user() -> GoalActor:
 
 
 def render_business_goals_for_current_user() -> None:
-    render_business_goals_admin_with_closure(actor=actor_from_current_user())
+    actor = actor_from_current_user()
+    render_business_goals_admin_with_closure(actor=actor)
+    render_goal_permissions_admin(actor)
 
 
 def activate_business_goals_admin() -> None:
