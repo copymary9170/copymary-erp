@@ -1,7 +1,6 @@
 """Punto de entrada de CopyMary ERP."""
 from src import app_shell
 from src.business_goals_admin_loader import activate_business_goals_admin
-from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.core_data_startup import load_core_data_on_startup
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
@@ -27,6 +26,7 @@ from src.inventory_review_plan_safe_loader import activate_inventory_review_plan
 from src.inventory_stock_view_loader import activate_inventory_stock_view
 from src.inventory_workspace_safe_loader import activate_inventory_workspace_safe
 from src.module_bootstrap import activate_module_bootstrap
+from src.navigation_cleanup_loader import activate_navigation_cleanup
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
 from src.purchases_overview_safe_loader import activate_purchases_overview_safe
@@ -79,7 +79,7 @@ activate_inventory_health_trend_safe()
 activate_inventory_health_history_readiness_safe()
 activate_inventory_health_history_safe()
 activate_inventory_unified_audit_safe()
-app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
 _activate_process_quotes_safely()
+activate_navigation_cleanup()
 persist_general_settings_if_changed()
 run_app()
