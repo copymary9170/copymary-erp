@@ -30,10 +30,7 @@ app_shell.FUNCTIONAL_MODULES["Equipo y comisiones"] = render_team_commission_con
 app_shell.FUNCTIONAL_MODULES["Catálogo y producción"] = render_safe_catalog
 app_shell.FUNCTIONAL_MODULES["Mantenimiento del catálogo"] = render_catalog_maintenance
 app_shell.FUNCTIONAL_MODULES["Reversos de producción"] = render_production_reversal
-
-# El tablero ejecutivo gobierna ambos paneles. financial_control permanece
-# disponible para una integración posterior de cierres especializados.
-app_shell.FUNCTIONAL_MODULES.setdefault("Control financiero detallado", render_financial_control)
+app_shell.FUNCTIONAL_MODULES["Control financiero detallado"] = render_financial_control
 
 
 def run_app() -> None:
