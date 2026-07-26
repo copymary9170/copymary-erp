@@ -55,11 +55,15 @@ DESCRIPTIONS = {
 }
 
 
+def navigation_groups() -> dict[str, tuple[str, ...]]:
+    """Devuelve la taxonomía canónica de áreas y páginas del ERP."""
+    return {area: tuple(config[3]) for area, config in SPECIALTY_AREAS.items()}
+
+
 def _effective_areas(user):
     allowed = auth.allowed_modules_for_role(user.role_id, user.role_name)
     registered = set(app_shell.FUNCTIONAL_MODULES)
-    for pages in app_shell.NAVIGATION_GROUPS.values():
-        registered.update(pages)
+    registered.update(page for pages in navigation_groups().values() for page in pages)
     registered.add("Inicio")
     areas = {}
     for area, (icon, eyebrow, description, pages) in SPECIALTY_AREAS.items():
