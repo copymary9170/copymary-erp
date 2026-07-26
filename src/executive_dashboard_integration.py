@@ -1,4 +1,4 @@
-"""Integración no destructiva del tablero ejecutivo y accesos del Inicio."""
+"""Integración del tablero ejecutivo sin alterar Inicio ni paneles existentes."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from src.session_utils import read_list as _rows
 
 
 def canonical_area_for_page(page: str, groups: dict[str, tuple[str, ...]] | None = None) -> str | None:
+    """Busca el área activa de una página sin modificar funciones del shell."""
     for area, pages in (groups or app_shell.navigation_groups()).items():
         if page in pages:
             return area
@@ -30,28 +31,13 @@ def canonical_area_for_page(page: str, groups: dict[str, tuple[str, ...]] | None
 
 
 def canonical_home_shortcuts() -> tuple[tuple[str, str, str, str], ...]:
-    original = getattr(app_shell, "_home_shortcuts_original", None)
-    if original is None:
-        original = getattr(app_shell, "_home_shortcuts", None)
-    if original is None:
-        return ()
-
+    """Devuelve accesos con áreas canónicas y descarta destinos inexistentes."""
     shortcuts = []
-    for title, description, _legacy_area, page in original():
+    for title, description, _legacy_area, page in app_shell._home_shortcuts():
         area = canonical_area_for_page(page)
         if area:
             shortcuts.append((title, description, area, page))
     return tuple(shortcuts)
-
-
-def activate_home_navigation_fix() -> None:
-    """Activa el ajuste solo cuando app_shell terminó de definir sus accesos."""
-    current = getattr(app_shell, "_home_shortcuts", None)
-    if current is None:
-        return
-    if not hasattr(app_shell, "_home_shortcuts_original"):
-        app_shell._home_shortcuts_original = current
-    app_shell._home_shortcuts = canonical_home_shortcuts
 
 
 def _executive_values() -> dict:
@@ -71,7 +57,12 @@ def _executive_values() -> dict:
         "delivery": delivery_performance(orders, today),
         "capacity": capacity_usage(orders),
         "waste": waste_by_process(waste),
-        "approvals": approval_trace(_rows("purchases_registry"), _rows("inventory_adjustments"), _rows("price_change_history"), _rows("payables_registry")),
+        "approvals": approval_trace(
+            _rows("purchases_registry"),
+            _rows("inventory_adjustments"),
+            _rows("price_change_history"),
+            _rows("payables_registry"),
+        ),
     }
 
 
@@ -107,6 +98,5 @@ def render_executive_dashboard() -> None:
 
 
 def activate_executive_dashboard() -> None:
-    activate_home_navigation_fix()
-    app_shell.FUNCTIONAL_MODULES["Panel comercial"] = render_executive_dashboard
-    app_shell.FUNCTIONAL_MODULES["Panel financiero y cierres"] = render_executive_dashboard
+    """Registra el tablero como módulo propio y conserva los paneles originales."""
+    app_shell.FUNCTIONAL_MODULES["Tablero ejecutivo"] = render_executive_dashboard
