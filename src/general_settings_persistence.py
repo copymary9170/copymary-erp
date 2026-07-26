@@ -1,9 +1,4 @@
-"""Persistencia automática de Configuración General.
-
-La configuración activa vive en ``st.session_state``. Este módulo detecta
-cambios y crea un snapshot en la base de datos sin exigir que el usuario vaya
-a Respaldos y pulse otro botón después de guardar las tasas.
-"""
+"""Persistencia automática de Configuración General."""
 
 from __future__ import annotations
 
@@ -13,6 +8,7 @@ from dataclasses import asdict, is_dataclass
 
 import streamlit as st
 
+from src.core_repository import save_entity
 from src.session_backup import save_snapshot_to_database
 
 _SETTINGS_FINGERPRINT_KEY = "_general_settings_persisted_fingerprint"
@@ -24,12 +20,12 @@ def _settings_payload(settings: object | None) -> dict | None:
     if is_dataclass(settings):
         return asdict(settings)
     if isinstance(settings, dict):
-        return settings
+        return dict(settings)
     return None
 
 
 def settings_fingerprint(settings: object | None) -> str:
-    """Huella estable de la configuración para evitar snapshots duplicados."""
+    """Huella estable de la configuración para evitar escrituras duplicadas."""
     payload = _settings_payload(settings)
     if payload is None:
         return ""
@@ -38,23 +34,21 @@ def settings_fingerprint(settings: object | None) -> str:
 
 
 def persist_general_settings_if_changed() -> bool:
-    """Guarda un snapshot cuando Configuración General cambió.
-
-    Devuelve ``True`` si se creó un respaldo y ``False`` si no había cambios o
-    si la base de datos no estaba disponible. Un fallo de persistencia nunca
-    debe borrar lo que ya quedó guardado en la sesión activa.
-    """
+    """Guarda configuración en BD y conserva el snapshot como respaldo histórico."""
     settings = st.session_state.get("general_settings")
+    payload = _settings_payload(settings)
     fingerprint = settings_fingerprint(settings)
-    if not fingerprint:
+    if payload is None or not fingerprint:
         return False
     if st.session_state.get(_SETTINGS_FINGERPRINT_KEY) == fingerprint:
         return False
 
+    save_entity("general_settings", payload)
     try:
         save_snapshot_to_database()
     except Exception:
-        return False
+        # La entidad núcleo ya quedó persistida. El snapshot es respaldo adicional.
+        pass
 
     st.session_state[_SETTINGS_FINGERPRINT_KEY] = fingerprint
     return True
