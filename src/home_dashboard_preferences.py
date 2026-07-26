@@ -18,6 +18,7 @@ PROFILE_WIDGETS: dict[str, tuple[str, ...]] = {
         "priorities",
         "agenda",
         "phase3",
+        "phase5",
         "quick_actions",
         "system_status",
     ),
@@ -26,6 +27,7 @@ PROFILE_WIDGETS: dict[str, tuple[str, ...]] = {
         "priorities",
         "agenda",
         "phase3",
+        "phase5",
         "quick_actions",
     ),
     "Compras": (
@@ -33,12 +35,14 @@ PROFILE_WIDGETS: dict[str, tuple[str, ...]] = {
         "business_flow",
         "priorities",
         "agenda",
+        "phase5",
         "quick_actions",
     ),
     "Inventario": (
         "business_flow",
         "priorities",
         "phase3",
+        "phase5",
         "quick_actions",
         "system_status",
     ),
@@ -47,6 +51,7 @@ PROFILE_WIDGETS: dict[str, tuple[str, ...]] = {
         "business_flow",
         "priorities",
         "agenda",
+        "phase5",
         "quick_actions",
     ),
 }
