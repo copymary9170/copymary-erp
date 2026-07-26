@@ -87,6 +87,104 @@ def _page_is_allowed(page: str, allowed: set[str] | None) -> bool:
     return page in allowed or _functional_page_name(page) in allowed
 
 
+def _allowed_home_shortcuts(app_shell, allowed: set[str] | None):
+    """Filtra accesos del Inicio con la misma regla del menú principal."""
+    return tuple(
+        shortcut
+        for shortcut in app_shell._home_shortcuts()
+        if _page_is_allowed(shortcut[3], allowed)
+    )
+
+
+def _allowed_home_alerts(app_shell, allowed: set[str] | None):
+    """Construye solo alertas cuyo destino puede abrir el rol actual."""
+    low_stock, expiring_lots = app_shell._inventory_alert_counts()
+    alerts = (
+        ("Cobros vencidos", app_shell._overdue_receivables(), "Revisa saldos cuya fecha de cobro ya pasó.", "Comercial y CRM", "Cuentas por cobrar"),
+        ("Compras por recibir", app_shell._pending_purchase_receipts(), "Confirma mercancía pendiente de recepción.", "Compras y abastecimiento", "Recepción de mercancía"),
+        ("Stock bajo", low_stock, "Atiende materiales en mínimo o agotados.", "Inventario y almacén", "Alertas de inventario"),
+        ("Lotes próximos a vencer", expiring_lots, "Revisa lotes con vencimiento dentro de 30 días.", "Inventario y almacén", "Inventario"),
+    )
+    return tuple(alert for alert in alerts if _page_is_allowed(alert[4], allowed))
+
+
+def _render_permission_aware_home(app_shell, allowed: set[str] | None) -> None:
+    """Renderiza el Inicio sin exponer acciones hacia módulos restringidos."""
+    clients, active_sales, low_stock, pending_payments = app_shell._home_metrics()
+    app_shell.render_page_header(
+        app_shell._home_greeting(),
+        "Aquí tienes una vista rápida del negocio y los accesos principales para comenzar tu jornada.",
+    )
+
+    if _page_is_allowed("Novedades", allowed):
+        with st.container(border=True):
+            cols = st.columns([5, 1])
+            cols[0].markdown("**🆕 Hay módulos nuevos**")
+            cols[0].caption(
+                "Catálogo de artículos, Recepción de mercancía, Venta rápida de mostrador, "
+                "Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo."
+            )
+            if cols[1].button("Ver todos", key="home_whats_new_button", use_container_width=True):
+                app_shell._navigate("Inicio", "Novedades")
+
+    metrics = st.columns(4)
+    metrics[0].metric("Clientes registrados", str(clients))
+    metrics[1].metric("Pedidos activos", str(active_sales))
+    metrics[2].metric("Cobros pendientes", str(pending_payments))
+    metrics[3].metric("Alertas de inventario", str(low_stock))
+
+    if _page_is_allowed("Configuración General", allowed):
+        app_shell._render_rates_cta()
+
+    alerts = _allowed_home_alerts(app_shell, allowed)
+    if alerts:
+        st.markdown("### Alertas accionables")
+        columns = st.columns(len(alerts))
+        for index, (title, count, description, area, page) in enumerate(alerts):
+            with columns[index]:
+                st.metric(title, str(count))
+                st.caption(description)
+                if st.button("Revisar", key=f"home_alert_{index}", use_container_width=True):
+                    app_shell._navigate(area, page)
+
+    if _page_is_allowed("Respaldo general", allowed):
+        st.markdown(
+            '<div class="cm-home-note"><div><strong>Respaldo recomendado</strong><span>Guarda una copia antes de cerrar o reiniciar la aplicación.</span></div><div class="cm-home-note__badge">Protege tu trabajo</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    shortcuts = _allowed_home_shortcuts(app_shell, allowed)
+    if shortcuts:
+        st.markdown("### Accesos principales")
+        st.caption("Pulsa Abrir para entrar directamente en la sección correspondiente.")
+        columns = st.columns(min(3, len(shortcuts)))
+        for index, (title, description, area, page) in enumerate(shortcuts):
+            with columns[index % len(columns)]:
+                app_shell.render_info_card(title, description, "ACCESO RÁPIDO")
+                if st.button(
+                    f"Abrir {title}",
+                    key=f"home_shortcut_{index}",
+                    use_container_width=True,
+                    type="primary" if index == 0 else "secondary",
+                ):
+                    app_shell._navigate(area, page)
+
+    st.markdown("### Estado general")
+    status_columns = st.columns(2)
+    with status_columns[0]:
+        app_shell.render_info_card(
+            "Operación",
+            "El inicio resume pedidos, cobros e inventario para ayudarte a decidir qué atender primero.",
+            "RESUMEN DIARIO",
+        )
+    with status_columns[1]:
+        app_shell.render_info_card(
+            "Seguridad de datos",
+            "Los accesos del Inicio respetan los permisos asignados al rol actual.",
+            "CONTROL DE ACCESO",
+        )
+
+
 def _effective_areas(user):
     app_shell = _app_shell()
     allowed = auth.allowed_modules_for_role(user.role_id, user.role_name)
@@ -124,7 +222,7 @@ def _render_current_page(selected_page: str, allowed) -> None:
     st.markdown('<div class="cm-content-frame">', unsafe_allow_html=True)
     functional_page = _functional_page_name(selected_page)
     if selected_page == "Inicio":
-        app_shell.render_home()
+        _render_permission_aware_home(app_shell, allowed)
     elif functional_page in app_shell.FUNCTIONAL_MODULES:
         app_shell.FUNCTIONAL_MODULES[functional_page]()
     else:

@@ -49,6 +49,35 @@ def test_effective_areas_show_alias_when_base_module_is_allowed(monkeypatch: pyt
     assert areas["Compras y abastecimiento"][3] == ("Compras", "Recepción de mercancía")
 
 
+def test_home_shortcuts_are_filtered_by_permission() -> None:
+    from src import top_navigation_app
+
+    shortcuts = top_navigation_app._allowed_home_shortcuts(app_shell, {"Compras"})
+    pages = tuple(shortcut[3] for shortcut in shortcuts)
+
+    assert pages == ("Compras", "Recepción de mercancía")
+    assert "Ventas y pedidos" not in pages
+    assert "Respaldo general" not in pages
+
+
+def test_home_shortcuts_allow_all_for_admin() -> None:
+    from src import top_navigation_app
+
+    assert top_navigation_app._allowed_home_shortcuts(app_shell, None) == app_shell._home_shortcuts()
+
+
+def test_home_alerts_are_filtered_by_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src import top_navigation_app
+
+    monkeypatch.setattr(app_shell, "_overdue_receivables", lambda: 2)
+    monkeypatch.setattr(app_shell, "_pending_purchase_receipts", lambda: 3)
+    monkeypatch.setattr(app_shell, "_inventory_alert_counts", lambda: (4, 5))
+
+    alerts = top_navigation_app._allowed_home_alerts(app_shell, {"Compras"})
+
+    assert alerts == (("Compras por recibir", 3, "Confirma mercancía pendiente de recepción.", "Compras y abastecimiento", "Recepción de mercancía"),)
+
+
 @pytest.mark.parametrize(
     ("area", "page"),
     [
