@@ -1,5 +1,9 @@
 """Interfaz principal de CopyMary ERP."""
 
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta
+
 import streamlit as st
 
 from src import auth
@@ -25,6 +29,7 @@ from src.inventory_movements import render_inventory_movements
 from src.modern_styles import apply_modern_styles
 from src.modules import MODULES
 from src.order_planning import render_order_planning
+from src.payment_fees import rates_are_stale
 from src.price_export import render_price_export
 from src.price_rounding import render_price_rounding
 from src.purchasing import render_purchases, render_suppliers
@@ -65,19 +70,25 @@ FUNCTIONAL_MODULES = {
     "Respaldo general": render_session_backup,
 }
 
-NAVIGATION_GROUPS = {
-    "Inicio": ("Inicio", "Centro de control", "Auditoría de datos", "Panel comercial", "Panel financiero y cierres"),
-    "Ventas y clientes": ("Clientes", "Cotizaciones", "Ventas y pedidos", "Agenda de producción y entregas", "Cuentas por cobrar", "Comprobantes", "Reportes comerciales"),
-    "Compras y proveedores": ("Proveedores", "Compras", "Cuentas por pagar"),
-    "Productos e inventario": ("Catálogo y producción", "Inventario", "Movimientos de inventario", "Alertas de inventario", "Costeo", "Ajustar precios", "Exportar precios"),
-    "Administración": ("Caja", "Gastos y presupuesto", "Equipo y comisiones", "Anulaciones y ajustes", "Activos", "Respaldar activos", "Configuración General", "Respaldo general"),
-    "Planificación futura": tuple(name for name in MODULES if name not in FUNCTIONAL_MODULES),
-}
+
+def navigation_groups() -> dict[str, tuple[str, ...]]:
+    """Obtiene la taxonomía activa sin duplicarla dentro de este shell."""
+    from src.top_navigation_app import navigation_groups as active_navigation_groups
+
+    return active_navigation_groups()
+
+
+NAVIGATION_GROUPS = navigation_groups()
+
+
+def _is_navigation_target(area: str | None, page: str | None) -> bool:
+    groups = navigation_groups()
+    return bool(area in groups and page in groups[area])
 
 
 def _navigate(area: str, page: str) -> None:
-    """Solicita un cambio de navegación para aplicarlo antes de crear los widgets."""
-    if area not in NAVIGATION_GROUPS or page not in NAVIGATION_GROUPS[area]:
+    """Solicita un cambio de navegación para aplicarlo antes de crear widgets."""
+    if not _is_navigation_target(area, page):
         st.error("El acceso rápido solicitado no está disponible.")
         return
     st.session_state["pending_navigation_area"] = area
@@ -86,13 +97,8 @@ def _navigate(area: str, page: str) -> None:
 
 
 def go_to(page: str) -> None:
-    """Navega a una página buscando automáticamente en qué área está.
-
-    Pensado para botones de "acceso rápido" desde otras páginas (por ej.
-    la de Novedades), donde el llamador solo conoce el nombre de la página
-    destino, no en qué grupo del menú vive.
-    """
-    for area, pages in NAVIGATION_GROUPS.items():
+    """Navega a una página buscando automáticamente su área activa."""
+    for area, pages in navigation_groups().items():
         if page in pages:
             _navigate(area, page)
             return
@@ -103,50 +109,185 @@ def _apply_pending_navigation() -> None:
     """Aplica cambios pendientes antes de instanciar selectbox y radio."""
     area = st.session_state.pop("pending_navigation_area", None)
     page = st.session_state.pop("pending_navigation_page", None)
-    if area in NAVIGATION_GROUPS and page in NAVIGATION_GROUPS[area]:
+    if _is_navigation_target(area, page):
         st.session_state["navigation_area"] = area
         st.session_state["navigation_page"] = page
 
 
-def _home_metrics() -> tuple[int, int, int, int]:
-    clients = len(_rows("customers_registry"))
-    sales = [
-        item for item in _rows("sales_registry")
-        if str(item.get("order_status", "")).strip().lower() not in {"cancelado", "cancelada", "anulado", "anulada"}
+def _greeting_for_hour(hour: int) -> str:
+    """Devuelve el saludo correspondiente a una hora local de 0 a 23."""
+    if not 0 <= hour <= 23:
+        raise ValueError("La hora debe estar entre 0 y 23.")
+    if hour < 12:
+        return "Buenos días"
+    if hour < 19:
+        return "Buenas tardes"
+    return "Buenas noches"
+
+
+def _home_greeting(now: datetime | None = None) -> str:
+    current = now or datetime.now().astimezone()
+    user = auth.current_user()
+    display_name = user.display_name.strip() if user and user.display_name.strip() else ""
+    greeting = _greeting_for_hour(current.hour)
+    return f"{greeting}, {display_name}" if display_name else greeting
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _active_sales() -> list[dict]:
+    cancelled = {"cancelado", "cancelada", "anulado", "anulada"}
+    return [
+        item
+        for item in _rows("sales_registry")
+        if str(item.get("order_status", "")).strip().casefold() not in cancelled
     ]
-    active_sales = sum(
-        1 for item in sales
-        if str(item.get("order_status", "Pendiente")) not in {"Entregado", "Entregada"}
+
+
+def _paid_amount(sale: dict, payments: list[dict]) -> float:
+    sale_id = str(sale.get("sale_id", ""))
+    registered = sum(
+        _safe_float(payment.get("amount"))
+        for payment in payments
+        if str(payment.get("sale_id", "")) == sale_id
     )
-    inventory = _rows("inventory_registry")
-    low_stock = 0
-    for item in inventory:
-        try:
-            available = float(item.get("available_quantity", item.get("quantity", 0.0)))
-            minimum = float(item.get("minimum_stock", item.get("reorder_point", 0.0)))
-        except (TypeError, ValueError):
+    total = _safe_float(sale.get("total"))
+    if registered > 0:
+        return min(registered, total)
+    if sale.get("payment_status") == "Pagado" and sale.get("cash_registered"):
+        return total
+    return 0.0
+
+
+def _overdue_receivables(today: date | None = None) -> int:
+    current_date = today or date.today()
+    metadata = {
+        str(item.get("sale_id", "")): item
+        for item in _rows("receivables_registry")
+    }
+    payments = _rows("payment_records")
+    overdue = 0
+    for sale in _active_sales():
+        balance = max(_safe_float(sale.get("total")) - _paid_amount(sale, payments), 0.0)
+        due_date = str(metadata.get(str(sale.get("sale_id", "")), {}).get("due_date", ""))
+        if balance <= 0 or not due_date:
             continue
+        try:
+            if date.fromisoformat(due_date) < current_date:
+                overdue += 1
+        except ValueError:
+            continue
+    return overdue
+
+
+def _pending_purchase_receipts() -> int:
+    return sum(
+        1
+        for item in _rows("purchases_registry")
+        if str(item.get("receipt_status", "Pendiente")).strip().casefold() == "pendiente"
+    )
+
+
+def _inventory_alert_counts(today: date | None = None, days_ahead: int = 30) -> tuple[int, int]:
+    current_date = today or date.today()
+    expiry_limit = current_date + timedelta(days=days_ahead)
+    low_stock = 0
+    expiring_lots = 0
+    for item in _rows("inventory_registry"):
+        available = _safe_float(item.get("available_quantity", item.get("quantity")))
+        minimum = _safe_float(item.get("minimum_stock", item.get("reorder_point")))
         if minimum > 0 and available <= minimum:
             low_stock += 1
+        expiry_value = item.get("expiration_date") or item.get("expiry_date") or item.get("fecha_vencimiento")
+        if not expiry_value:
+            continue
+        try:
+            expiry_date = date.fromisoformat(str(expiry_value)[:10])
+        except ValueError:
+            continue
+        if current_date <= expiry_date <= expiry_limit:
+            expiring_lots += 1
+    return low_stock, expiring_lots
+
+
+def _home_metrics() -> tuple[int, int, int, int]:
+    clients = len(_rows("customers_registry"))
+    sales = _active_sales()
+    active_sales = sum(
+        1
+        for item in sales
+        if str(item.get("order_status", "Pendiente")) not in {"Entregado", "Entregada"}
+    )
+    low_stock, _ = _inventory_alert_counts()
     pending_payments = sum(
-        1 for item in sales
-        if str(item.get("payment_status", "Pendiente")) != "Pagado"
+        1 for item in sales if str(item.get("payment_status", "Pendiente")) != "Pagado"
     )
     return clients, active_sales, low_stock, pending_payments
+
+
+def _home_shortcuts() -> tuple[tuple[str, str, str, str], ...]:
+    return (
+        ("Centro de control", "Revisa alertas, pendientes y decisiones importantes del negocio.", "Inicio", "Centro de control"),
+        ("Ventas y pedidos", "Gestiona clientes, pedidos, entregas y cobros.", "Comercial y CRM", "Ventas y pedidos"),
+        ("Catálogo e inventario", "Controla productos, materiales y existencias.", "Inventario y almacén", "Inventario"),
+        ("Compras", "Organiza proveedores y órdenes de abastecimiento.", "Compras y abastecimiento", "Compras"),
+        ("Panel financiero", "Consulta caja, gastos, cierres y resultados financieros.", "Finanzas y tesorería", "Panel financiero y cierres"),
+        ("Respaldo general", "Descarga o restaura una copia segura de la información.", "Respaldos", "Respaldo general"),
+        ("Recepción de mercancía", "Confirma lo recibido y actualiza existencias.", "Compras y abastecimiento", "Recepción de mercancía"),
+        ("Catálogo de artículos", "Administra la definición maestra de materiales y productos.", "Inventario y almacén", "Catálogo de artículos"),
+    )
+
+
+def _render_actionable_alerts() -> None:
+    overdue = _overdue_receivables()
+    pending_receipts = _pending_purchase_receipts()
+    low_stock, expiring_lots = _inventory_alert_counts()
+    alerts = (
+        ("Cobros vencidos", overdue, "Revisa saldos cuya fecha de cobro ya pasó.", "Comercial y CRM", "Cuentas por cobrar"),
+        ("Compras por recibir", pending_receipts, "Confirma mercancía pendiente de recepción.", "Compras y abastecimiento", "Recepción de mercancía"),
+        ("Stock bajo", low_stock, "Atiende materiales en mínimo o agotados.", "Inventario y almacén", "Alertas de inventario"),
+        ("Lotes próximos a vencer", expiring_lots, "Revisa lotes con vencimiento dentro de 30 días.", "Inventario y almacén", "Inventario"),
+    )
+    st.markdown("### Alertas accionables")
+    columns = st.columns(4)
+    for index, (title, count, description, area, page) in enumerate(alerts):
+        with columns[index]:
+            st.metric(title, str(count))
+            st.caption(description)
+            if st.button("Revisar", key=f"home_alert_{index}", use_container_width=True):
+                _navigate(area, page)
+
+
+def _render_rates_cta() -> None:
+    if not rates_are_stale():
+        return
+    with st.container(border=True):
+        columns = st.columns([5, 1])
+        columns[0].warning("Las tasas BCV, Binance y Kontigo todavía no han sido confirmadas hoy.")
+        if columns[1].button("Confirmar tasas", key="home_rates_cta", use_container_width=True, type="primary"):
+            _navigate("Administración y seguridad", "Configuración General")
 
 
 def render_home() -> None:
     clients, active_sales, low_stock, pending_payments = _home_metrics()
 
     render_page_header(
-        "Buenos días, Copy Mary",
+        _home_greeting(),
         "Aquí tienes una vista rápida del negocio y los accesos principales para comenzar tu jornada.",
     )
 
     with st.container(border=True):
         cols = st.columns([5, 1])
         cols[0].markdown("**🆕 Hay módulos nuevos**")
-        cols[0].caption("Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
+        cols[0].caption(
+            "Catálogo de artículos, Recepción de mercancía, Venta rápida de mostrador, "
+            "Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo."
+        )
         if cols[1].button("Ver todos", key="home_whats_new_button", use_container_width=True):
             _navigate("Inicio", "Novedades")
 
@@ -156,6 +297,9 @@ def render_home() -> None:
     metrics[2].metric("Cobros pendientes", str(pending_payments))
     metrics[3].metric("Alertas de inventario", str(low_stock))
 
+    _render_rates_cta()
+    _render_actionable_alerts()
+
     st.markdown(
         '<div class="cm-home-note"><div><strong>Respaldo recomendado</strong><span>Guarda una copia antes de cerrar o reiniciar la aplicación.</span></div><div class="cm-home-note__badge">Protege tu trabajo</div></div>',
         unsafe_allow_html=True,
@@ -164,15 +308,7 @@ def render_home() -> None:
     st.markdown("### Accesos principales")
     st.caption("Pulsa Abrir para entrar directamente en la sección correspondiente.")
     columns = st.columns(3)
-    shortcuts = (
-        ("Centro de control", "Revisa alertas, pendientes y decisiones importantes del negocio.", "Inicio", "Centro de control"),
-        ("Ventas y clientes", "Registra clientes, prepara cotizaciones y gestiona pedidos y cobros.", "Ventas y clientes", "Ventas y pedidos"),
-        ("Productos e inventario", "Controla materiales, recetas, producción, costos y existencias.", "Productos e inventario", "Catálogo y producción"),
-        ("Compras y proveedores", "Organiza abastecimiento, compras y pagos a proveedores.", "Compras y proveedores", "Compras"),
-        ("Finanzas", "Consulta caja, gastos, cierres y el estado financiero del negocio.", "Inicio", "Panel financiero y cierres"),
-        ("Respaldos", "Descarga o restaura una copia segura de toda la información.", "Administración", "Respaldo general"),
-    )
-    for index, (title, description, area, page) in enumerate(shortcuts):
+    for index, (title, description, area, page) in enumerate(_home_shortcuts()):
         with columns[index % 3]:
             render_info_card(title, description, "ACCESO RÁPIDO")
             if st.button(
@@ -234,12 +370,13 @@ def run_app() -> None:
 
     user = auth.current_user()
     allowed_modules = auth.allowed_modules_for_role(user.role_id, user.role_name)
+    groups = navigation_groups()
 
     if allowed_modules is None:
-        effective_groups = NAVIGATION_GROUPS
+        effective_groups = groups
     else:
         effective_groups = {}
-        for area, pages in NAVIGATION_GROUPS.items():
+        for area, pages in groups.items():
             kept = tuple(page for page in pages if page == "Inicio" or page in allowed_modules)
             if kept:
                 effective_groups[area] = kept
