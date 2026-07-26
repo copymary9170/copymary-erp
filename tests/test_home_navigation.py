@@ -1,9 +1,19 @@
 from datetime import datetime
+import importlib
+import sys
 from types import SimpleNamespace
 
 import pytest
 
 from src import app_shell
+
+
+def test_navigation_modules_import_without_cycle() -> None:
+    sys.modules.pop("src.top_navigation_app", None)
+    module = importlib.import_module("src.top_navigation_app")
+
+    assert module.navigation_groups()["Comercial y CRM"]
+    assert app_shell.navigation_groups()["Inventario y almacén"]
 
 
 @pytest.mark.parametrize(
