@@ -1,5 +1,6 @@
 """Punto de entrada de CopyMary ERP."""
 from src import app_shell
+from src.business_goals_admin_loader import activate_business_goals_admin
 from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
@@ -54,6 +55,9 @@ activate_supply_chain_integration()
 # Primera fase de Inicio: sustituye la bienvenida por un centro ejecutivo de
 # solo lectura con indicadores, alertas, actividad y accesos rápidos.
 activate_home_dashboard_safe()
+# Fase 6B: registra el gestor persistente de metas. La navegación ya reserva
+# "Metas del negocio" y el loader resuelve el usuario autenticado al renderizar.
+activate_business_goals_admin()
 # Primera fase de Compras: añade un resumen operativo de solo lectura con filtros,
 # métricas y valores calculados sin modificar órdenes, recepciones ni existencias.
 activate_purchases_overview_safe()
