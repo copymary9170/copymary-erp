@@ -54,6 +54,14 @@ DESCRIPTIONS = {
     "Respaldo general": "Copia integral del ERP.", "Respaldar activos": "Copia de activos.",
 }
 
+# Alias temporales para que las nuevas entradas del menú sean operativas mientras
+# se separan en pantallas especializadas. Se reutilizan los flujos existentes y
+# se evita duplicar la lógica que actualiza inventario, caja y respaldos.
+FUNCTIONAL_PAGE_ALIASES = {
+    "Recepción de mercancía": "Compras",
+    "Catálogo de artículos": "Inventario",
+}
+
 
 def navigation_groups() -> dict[str, tuple[str, ...]]:
     """Devuelve la taxonomía canónica de áreas y páginas del ERP."""
@@ -65,6 +73,11 @@ def _app_shell():
     from src import app_shell
 
     return app_shell
+
+
+def _functional_page_name(selected_page: str) -> str:
+    """Resuelve alias de navegación hacia un renderer funcional existente."""
+    return FUNCTIONAL_PAGE_ALIASES.get(selected_page, selected_page)
 
 
 def _effective_areas(user):
@@ -102,10 +115,11 @@ def _render_current_page(selected_page: str, allowed) -> None:
         st.error("No tienes permiso para ver esta sección.")
         return
     st.markdown('<div class="cm-content-frame">', unsafe_allow_html=True)
+    functional_page = _functional_page_name(selected_page)
     if selected_page == "Inicio":
         app_shell.render_home()
-    elif selected_page in app_shell.FUNCTIONAL_MODULES:
-        app_shell.FUNCTIONAL_MODULES[selected_page]()
+    elif functional_page in app_shell.FUNCTIONAL_MODULES:
+        app_shell.FUNCTIONAL_MODULES[functional_page]()
     else:
         app_shell.render_descriptive_module(selected_page)
     st.markdown('</div>', unsafe_allow_html=True)
