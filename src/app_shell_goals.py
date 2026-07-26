@@ -1,4 +1,4 @@
-"""Extensión de navegación para metas y controles operativos."""
+"""Extensión de renderers para metas y controles operativos."""
 
 from src import app_shell, session_backup
 from src.business_goals_plus import render_business_goals_plus
@@ -20,6 +20,8 @@ for section, label in (
         session_backup.SECTION_LABELS[section] = label
 session_backup.SESSION_KEYS = ("general_settings", *session_backup.LIST_SECTIONS, *session_backup.DICT_SECTIONS)
 
+# Esta extensión solo reemplaza renderers funcionales. La taxonomía de navegación
+# es canónica en top_navigation_app y no debe mutarse mientras app_shell se importa.
 app_shell.FUNCTIONAL_MODULES["Metas del negocio"] = render_business_goals_plus
 app_shell.FUNCTIONAL_MODULES["Panel financiero y cierres"] = render_financial_control
 app_shell.FUNCTIONAL_MODULES["Compras"] = render_purchases_with_trace
@@ -27,28 +29,6 @@ app_shell.FUNCTIONAL_MODULES["Equipo y comisiones"] = render_team_commission_con
 app_shell.FUNCTIONAL_MODULES["Catálogo y producción"] = render_safe_catalog
 app_shell.FUNCTIONAL_MODULES["Mantenimiento del catálogo"] = render_catalog_maintenance
 app_shell.FUNCTIONAL_MODULES["Reversos de producción"] = render_production_reversal
-app_shell.NAVIGATION_GROUPS["Inicio"] = (
-    "Inicio",
-    "Centro de control",
-    "Auditoría de datos",
-    "Metas del negocio",
-    "Panel comercial",
-)
-app_shell.NAVIGATION_GROUPS["Finanzas"] = (
-    "Panel financiero y cierres",
-    *tuple(page for page in app_shell.NAVIGATION_GROUPS.get("Finanzas", ()) if page != "Panel financiero y cierres"),
-)
-app_shell.NAVIGATION_GROUPS["Productos e inventario"] = (
-    "Catálogo y producción",
-    "Mantenimiento del catálogo",
-    "Reversos de producción",
-    "Inventario",
-    "Movimientos de inventario",
-    "Alertas de inventario",
-    "Costeo",
-    "Ajustar precios",
-    "Exportar precios",
-)
 
 
 def run_app() -> None:
