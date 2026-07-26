@@ -1,0 +1,81 @@
+name: Business goals CI
+
+on:
+  pull_request:
+    paths:
+      - "src/business_goals_*.py"
+      - "src/home_dashboard_phase6.py"
+      - "src/home_persistent_goals.py"
+      - "src/erp_database.py"
+      - "app.py"
+      - "tests/test_business_goals*.py"
+      - ".github/workflows/business-goals-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/business_goals_*.py"
+      - "src/home_dashboard_phase6.py"
+      - "src/home_persistent_goals.py"
+      - "src/erp_database.py"
+      - "app.py"
+      - "tests/test_business_goals*.py"
+      - ".github/workflows/business-goals-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-business-goals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COPYMARY_DB_PATH: ${{ runner.temp }}/copymary-goals-ci.sqlite3
+      PYTHONPATH: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Compile goal modules
+        run: |
+          python -m compileall -q \
+            src/business_goals_repository.py \
+            src/business_goals_service.py \
+            src/business_goals_validated_service.py \
+            src/business_goals_schema_v15.py \
+            src/business_goals_v15_bootstrap.py \
+            src/business_goals_admin.py \
+            src/business_goals_admin_closure.py \
+            src/business_goals_admin_loader.py \
+            src/business_goals_permissions_admin.py \
+            src/home_persistent_goals.py \
+            src/home_dashboard_phase6.py
+
+      - name: Run business-goal tests
+        run: pytest -q tests -k "business_goal or persistent_goal or goal_admin or goal_permission or goal_closure or schema_v15"
+
+      - name: Migration smoke test
+        run: |
+          python - <<'PY'
+          from src.business_goals_v15_bootstrap import initialize_business_goals_v15
+          from src import erp_database
+
+          initialize_business_goals_v15()
+          status = erp_database.get_database_status()
+          assert status.schema_version >= 15, status
+          assert status.ready, status
+          print(status)
+          PY
