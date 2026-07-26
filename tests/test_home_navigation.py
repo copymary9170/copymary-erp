@@ -26,6 +26,29 @@ def test_new_navigation_pages_resolve_to_functional_renderers() -> None:
     assert top_navigation_app._functional_page_name("Catálogo de artículos") in app_shell.FUNCTIONAL_MODULES
 
 
+def test_alias_permissions_accept_visible_or_functional_name() -> None:
+    from src import top_navigation_app
+
+    assert top_navigation_app._page_is_allowed("Recepción de mercancía", {"Compras"})
+    assert top_navigation_app._page_is_allowed("Recepción de mercancía", {"Recepción de mercancía"})
+    assert top_navigation_app._page_is_allowed("Catálogo de artículos", {"Inventario"})
+    assert not top_navigation_app._page_is_allowed("Catálogo de artículos", {"Compras"})
+    assert top_navigation_app._page_is_allowed("Inicio", set())
+    assert top_navigation_app._page_is_allowed("Cualquier módulo", None)
+
+
+def test_effective_areas_show_alias_when_base_module_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src import top_navigation_app
+
+    user = SimpleNamespace(role_id="ROL-1", role_name="Operador")
+    monkeypatch.setattr(top_navigation_app.auth, "allowed_modules_for_role", lambda *_: {"Compras"})
+
+    areas, allowed = top_navigation_app._effective_areas(user)
+
+    assert allowed == {"Compras"}
+    assert areas["Compras y abastecimiento"][3] == ("Compras", "Recepción de mercancía")
+
+
 @pytest.mark.parametrize(
     ("area", "page"),
     [
