@@ -1,11 +1,23 @@
 from datetime import datetime
 import importlib
+import subprocess
 import sys
 from types import SimpleNamespace
 
 import pytest
 
 from src import app_shell
+
+
+def test_app_shell_imports_in_fresh_process_without_cycle() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "from src import app_shell; assert app_shell.navigation_groups()['Inicio']"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_navigation_modules_import_without_cycle() -> None:
