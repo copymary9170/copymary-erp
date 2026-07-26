@@ -1,8 +1,8 @@
-"""Inicio fase 6A: metas y KPI configurables en sesión.
+"""Inicio fase 6B: visualización de metas persistentes y KPI.
 
 El módulo calcula indicadores de solo lectura sobre colecciones existentes y
-mantiene las metas por usuario en ``st.session_state``. No crea migraciones ni
-modifica ventas, compras, inventario, producción o finanzas.
+resuelve las metas aplicables mediante la capa de servicio. No modifica ventas,
+compras, inventario, producción o finanzas.
 """
 from __future__ import annotations
 
@@ -11,8 +11,9 @@ from typing import Any
 
 import streamlit as st
 
-from src.home_goal_preferences import load_goals, reset_goals, save_goals
+from src.auth import current_user
 from src.home_kpi_registry import KPI_DEFINITIONS, KPIDefinition
+from src.home_persistent_goals import DashboardGoalSet, resolve_dashboard_goals
 from src.session_utils import read_list
 
 
@@ -160,36 +161,35 @@ def _difference(definition: KPIDefinition, current: float, target: float) -> flo
     return max(target - current, 0.0)
 
 
-def _render_goal_editor(user_id: str, goals: dict[str, float]) -> None:
-    with st.expander("Configurar metas", expanded=False):
-        edited: dict[str, float] = {}
-        columns = st.columns(2)
-        for index, definition in enumerate(KPI_DEFINITIONS):
-            with columns[index % 2]:
-                edited[definition.key] = st.number_input(
-                    definition.label,
-                    min_value=0.0,
-                    value=float(goals[definition.key]),
-                    step=1.0 if definition.unit != "percent" else 0.5,
-                    help=definition.description,
-                    key=f"home_goal::{user_id}::{definition.key}",
-                )
-        left, right = st.columns(2)
-        if left.button("Guardar metas", type="primary", use_container_width=True, key=f"home_goal_save::{user_id}"):
-            save_goals(user_id, edited)
-            st.success("Metas guardadas para esta sesión de usuario.")
-            st.rerun()
-        if right.button("Restaurar metas", use_container_width=True, key=f"home_goal_reset::{user_id}"):
-            reset_goals(user_id)
-            st.info("Se restauraron las metas predeterminadas.")
-            st.rerun()
+def _scope_label(goal: dict[str, Any] | None) -> str:
+    if not goal:
+        return "Valor predeterminado"
+    scope = str(goal.get("scope_type") or "company")
+    labels = {"user": "Meta personal", "role": "Meta heredada por rol", "company": "Meta de empresa"}
+    return labels.get(scope, "Meta persistente")
+
+
+def _resolve_goal_set(user_id: str) -> DashboardGoalSet:
+    user = current_user()
+    if not user:
+        return resolve_dashboard_goals(user_id=user_id, role_id="", role_name="Sin rol")
+    return resolve_dashboard_goals(
+        user_id=user.user_id,
+        role_id=user.role_id,
+        role_name=user.role_name,
+    )
 
 
 def render_phase6_sections(user_id: str) -> None:
-    """Renderiza seguimiento de metas sin modificar datos operativos."""
-    goals = load_goals(user_id)
+    """Renderiza metas persistentes sin habilitar edición desde Inicio."""
+    goal_set = _resolve_goal_set(user_id)
+    goals = goal_set.targets
+
     st.markdown("### Metas y KPI")
-    _render_goal_editor(user_id, goals)
+    if goal_set.source == "persistent":
+        st.caption("Metas persistentes aplicables al usuario autenticado. La edición se realiza desde el gestor de metas.")
+    elif goal_set.message:
+        st.info(goal_set.message)
 
     results = []
     for definition in KPI_DEFINITIONS:
@@ -206,6 +206,7 @@ def render_phase6_sections(user_id: str) -> None:
 
     columns = st.columns(2)
     for index, (definition, current, target, progress, status) in enumerate(results):
+        goal = goal_set.persistent_goals.get(definition.key)
         with columns[index % 2]:
             with st.container(border=True):
                 st.markdown(f"#### {definition.label}")
@@ -216,7 +217,12 @@ def render_phase6_sections(user_id: str) -> None:
                     f"Brecha: {_format(_difference(definition, current, target), definition.unit)} · "
                     f"Periodo: {definition.period}"
                 )
-                st.caption(f"Origen: {definition.source}. {definition.description}")
+                st.caption(f"{_scope_label(goal)} · Origen KPI: {definition.source}. {definition.description}")
+                if goal:
+                    st.caption(
+                        f"Vigencia: {goal.get('start_date', '—')} → {goal.get('due_date', '—')} · "
+                        f"Versión {goal.get('version', 1)}"
+                    )
 
     critical = [definition.label for definition, _, _, _, status in results if status == "Crítico"]
     risk = [definition.label for definition, _, _, _, status in results if status == "En riesgo"]
@@ -228,4 +234,4 @@ def render_phase6_sections(user_id: str) -> None:
             st.info("Revisar antes del cierre del periodo: " + ", ".join(risk) + ".")
         else:
             st.success("Las metas se encuentran cumplidas o avanzan dentro del rango esperado.")
-        st.caption("Lectura determinista basada en reglas. Las metas son de sesión y no escriben en módulos operativos.")
+        st.caption("Lectura determinista. Inicio consulta metas y datos operativos en modo de solo lectura.")
