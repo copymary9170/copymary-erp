@@ -80,6 +80,13 @@ def _functional_page_name(selected_page: str) -> str:
     return FUNCTIONAL_PAGE_ALIASES.get(selected_page, selected_page)
 
 
+def _page_is_allowed(page: str, allowed: set[str] | None) -> bool:
+    """Autoriza una entrada por su nombre visible o por su módulo funcional."""
+    if allowed is None or page == "Inicio":
+        return True
+    return page in allowed or _functional_page_name(page) in allowed
+
+
 def _effective_areas(user):
     app_shell = _app_shell()
     allowed = auth.allowed_modules_for_role(user.role_id, user.role_name)
@@ -88,7 +95,7 @@ def _effective_areas(user):
     registered.add("Inicio")
     areas = {}
     for area, (icon, eyebrow, description, pages) in SPECIALTY_AREAS.items():
-        visible = tuple(page for page in pages if page in registered and (allowed is None or page == "Inicio" or page in allowed))
+        visible = tuple(page for page in pages if page in registered and _page_is_allowed(page, allowed))
         if visible:
             areas[area] = (icon, eyebrow, description, visible)
     return areas or {"Inicio": SPECIALTY_AREAS["Inicio"]}, allowed
@@ -111,7 +118,7 @@ def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
 
 def _render_current_page(selected_page: str, allowed) -> None:
     app_shell = _app_shell()
-    if allowed is not None and selected_page != "Inicio" and selected_page not in allowed:
+    if not _page_is_allowed(selected_page, allowed):
         st.error("No tienes permiso para ver esta sección.")
         return
     st.markdown('<div class="cm-content-frame">', unsafe_allow_html=True)
