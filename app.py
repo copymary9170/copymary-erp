@@ -1,11 +1,12 @@
 """Punto de entrada de CopyMary ERP."""
 from src import app_shell
 from src.business_goals_admin_loader import activate_business_goals_admin
-from src.catalog_items_reactive import render_catalog_items as render_catalog_items_reactive
 from src.core_data_startup import load_core_data_on_startup
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
 from src.home_dashboard_safe_loader import activate_home_dashboard_safe
+from src.integrated_inventory_catalog import wrap_inventory_renderer
+from src.integrated_purchases_receiving import wrap_purchases_renderer
 from src.inventory_audit_unified_safe_loader import activate_inventory_unified_audit_safe
 from src.inventory_consistency_rules_safe_loader import activate_inventory_consistency_rules_safe
 from src.inventory_counts_safe_loader import activate_inventory_counts_safe
@@ -46,9 +47,6 @@ def _activate_process_quotes_safely() -> None:
     activate_process_quotes()
 
 
-# Compatibilidad: primero recupera el snapshot histórico y después migra/carga
-# las entidades núcleo. La base persistente nunca se sobrescribe con el snapshot
-# cuando la entidad ya existe.
 restore_session_snapshot_on_startup()
 load_core_data_on_startup()
 activate_module_bootstrap()
@@ -79,7 +77,16 @@ activate_inventory_health_trend_safe()
 activate_inventory_health_history_readiness_safe()
 activate_inventory_health_history_safe()
 activate_inventory_unified_audit_safe()
-app_shell.FUNCTIONAL_MODULES["Catálogo de artículos"] = render_catalog_items_reactive
+
+# Catálogo de artículos y Recepción de mercancía quedan integrados en sus módulos
+# principales para evitar accesos duplicados en el menú.
+if "Inventario" in app_shell.FUNCTIONAL_MODULES:
+    app_shell.FUNCTIONAL_MODULES["Inventario"] = wrap_inventory_renderer(app_shell.FUNCTIONAL_MODULES["Inventario"])
+if "Compras" in app_shell.FUNCTIONAL_MODULES:
+    app_shell.FUNCTIONAL_MODULES["Compras"] = wrap_purchases_renderer(app_shell.FUNCTIONAL_MODULES["Compras"])
+app_shell.FUNCTIONAL_MODULES.pop("Catálogo de artículos", None)
+app_shell.FUNCTIONAL_MODULES.pop("Recepción de mercancía", None)
+
 _activate_process_quotes_safely()
 persist_general_settings_if_changed()
 run_app()
