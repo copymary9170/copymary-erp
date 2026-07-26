@@ -41,18 +41,6 @@ app_shell.FUNCTIONAL_MODULES['Catálogo y producción'] = render_catalog_product
 app_shell.FUNCTIONAL_MODULES['Mantenimiento del catálogo'] = render_catalog_maintenance_bulk
 app_shell.FUNCTIONAL_MODULES['Reversos de producción'] = render_production_reversals
 app_shell.FUNCTIONAL_MODULES['Inventario'] = render_inventory_plus
-app_shell.NAVIGATION_GROUPS['Productos e inventario'] = (
-    'Catálogo y producción', 'Mantenimiento del catálogo', 'Reversos de producción',
-    'Inventario', 'Movimientos de inventario', 'Alertas de inventario', 'Costeo',
-    'Ajustar precios', 'Exportar precios',
-)
-app_shell.NAVIGATION_GROUPS['Finanzas'] = (
-    'Panel financiero y cierres', 'Caja', 'Conciliación financiera',
-    'Reabrir cierre de caja', 'Gastos y presupuesto', 'Equipo y comisiones',
-    'Historial de comisiones', 'Reversos de pagos', 'Anulaciones y ajustes', 'Activos',
-)
-app_shell.NAVIGATION_GROUPS['Respaldos'] = ('Respaldo general', 'Respaldar activos')
-app_shell.NAVIGATION_GROUPS['Configuración'] = ('Configuración General',)
 
 
 def run_app():
