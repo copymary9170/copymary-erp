@@ -6,7 +6,7 @@ autenticada. Mantiene la interfaz desacoplada de navegación y login.
 from __future__ import annotations
 
 from src import app_shell, auth
-from src.business_goals_admin import render_business_goals_admin
+from src.business_goals_admin_closure import render_business_goals_admin_with_closure
 from src.business_goals_service import GoalActor
 
 PAGE_NAME = "Metas del negocio"
@@ -22,7 +22,7 @@ def actor_from_current_user() -> GoalActor:
 
 
 def render_business_goals_for_current_user() -> None:
-    render_business_goals_admin(actor=actor_from_current_user())
+    render_business_goals_admin_with_closure(actor=actor_from_current_user())
 
 
 def activate_business_goals_admin() -> None:
