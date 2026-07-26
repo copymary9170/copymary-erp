@@ -16,6 +16,16 @@ def test_navigation_modules_import_without_cycle() -> None:
     assert app_shell.navigation_groups()["Inventario y almacén"]
 
 
+def test_new_navigation_pages_resolve_to_functional_renderers() -> None:
+    from src import top_navigation_app
+
+    assert top_navigation_app._functional_page_name("Recepción de mercancía") == "Compras"
+    assert top_navigation_app._functional_page_name("Catálogo de artículos") == "Inventario"
+    assert top_navigation_app._functional_page_name("Clientes") == "Clientes"
+    assert top_navigation_app._functional_page_name("Recepción de mercancía") in app_shell.FUNCTIONAL_MODULES
+    assert top_navigation_app._functional_page_name("Catálogo de artículos") in app_shell.FUNCTIONAL_MODULES
+
+
 @pytest.mark.parametrize(
     ("area", "page"),
     [
