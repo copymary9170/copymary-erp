@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from src import app_shell, app_shell_payments, auth
+from src import app_shell_payments, auth
 from src.components import apply_base_styles
 from src.config import APP_NAME, APP_VERSION, PROJECT_STATUS
 from src.enterprise_ui_theme import apply_enterprise_theme
@@ -60,7 +60,15 @@ def navigation_groups() -> dict[str, tuple[str, ...]]:
     return {area: tuple(config[3]) for area, config in SPECIALTY_AREAS.items()}
 
 
+def _app_shell():
+    """Importa el shell de páginas solo después de definir la taxonomía."""
+    from src import app_shell
+
+    return app_shell
+
+
 def _effective_areas(user):
+    app_shell = _app_shell()
     allowed = auth.allowed_modules_for_role(user.role_id, user.role_name)
     registered = set(app_shell.FUNCTIONAL_MODULES)
     registered.update(page for pages in navigation_groups().values() for page in pages)
@@ -89,6 +97,7 @@ def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
 
 
 def _render_current_page(selected_page: str, allowed) -> None:
+    app_shell = _app_shell()
     if allowed is not None and selected_page != "Inicio" and selected_page not in allowed:
         st.error("No tienes permiso para ver esta sección.")
         return
@@ -103,6 +112,7 @@ def _render_current_page(selected_page: str, allowed) -> None:
 
 
 def run_app() -> None:
+    app_shell = _app_shell()
     st.set_page_config(page_title=APP_NAME, page_icon="CM", layout="wide", initial_sidebar_state="collapsed")
     apply_base_styles()
     apply_modern_styles()
