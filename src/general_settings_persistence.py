@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import asdict, is_dataclass
 
 import streamlit as st
 
 from src.core_repository import save_entity
 from src.session_backup import save_snapshot_to_database
+from src.session_store import save_section
 
+LOGGER = logging.getLogger(__name__)
 _SETTINGS_FINGERPRINT_KEY = "_general_settings_persisted_fingerprint"
 
 
@@ -34,7 +37,7 @@ def settings_fingerprint(settings: object | None) -> str:
 
 
 def persist_general_settings_if_changed() -> bool:
-    """Guarda configuración en BD y conserva el snapshot como respaldo histórico."""
+    """Guarda configuración viva y conserva mecanismos históricos compatibles."""
     settings = st.session_state.get("general_settings")
     payload = _settings_payload(settings)
     fingerprint = settings_fingerprint(settings)
@@ -43,12 +46,20 @@ def persist_general_settings_if_changed() -> bool:
     if st.session_state.get(_SETTINGS_FINGERPRINT_KEY) == fingerprint:
         return False
 
-    save_entity("general_settings", payload)
+    # session_store es la fuente viva. Si la BD está caída, save_section registra
+    # el modo degradado y la aplicación sigue operando con st.session_state.
+    persisted = save_section("general_settings", payload)
+
+    # Mantener core_entities y snapshots durante la transición/migración.
+    try:
+        save_entity("general_settings", payload)
+    except Exception:
+        LOGGER.exception("No se pudo actualizar core_entities para general_settings.")
     try:
         save_snapshot_to_database()
     except Exception:
-        # La entidad núcleo ya quedó persistida. El snapshot es respaldo adicional.
-        pass
+        LOGGER.exception("No se pudo crear el snapshot histórico de general_settings.")
 
-    st.session_state[_SETTINGS_FINGERPRINT_KEY] = fingerprint
-    return True
+    if persisted:
+        st.session_state[_SETTINGS_FINGERPRINT_KEY] = fingerprint
+    return persisted
