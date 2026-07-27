@@ -85,8 +85,10 @@ def test_database_failure_degrades_to_session_only(monkeypatch):
 
 
 def test_snapshot_style_migration_is_idempotent():
-    legacy = [{"id": "ATT-1", "hours": 8}]
-    st.session_state["hr_attendance"] = legacy
+    # Se usa una sección conocida (registrada en SESSION_KEYS); solo esas pueden
+    # provenir de un snapshot restaurado y por tanto migrarse al arrancar.
+    legacy = [{"client_id": "C-1", "name": "Ana"}]
+    st.session_state["customers_registry"] = legacy
 
     first = hydrate_session_store_on_startup()
     st.session_state.pop(STARTUP_MARKER, None)
@@ -95,7 +97,7 @@ def test_snapshot_style_migration_is_idempotent():
     with connect() as connection:
         count = connection.execute(
             "SELECT COUNT(*) AS count FROM session_store WHERE section = ?",
-            ("hr_attendance",),
+            ("customers_registry",),
         ).fetchone()["count"]
 
     assert first["migrated"] >= 1
