@@ -30,6 +30,7 @@ from src.navigation_cleanup_loader import activate_navigation_cleanup
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
 from src.purchases_overview_safe_loader import activate_purchases_overview_safe
+from src.session_store import hydrate_session_store_on_startup
 from src.startup_restore import restore_session_snapshot_on_startup
 from src.supply_chain_integration import activate_supply_chain_integration
 from src.top_navigation_app import run_app
@@ -46,11 +47,14 @@ def _activate_process_quotes_safely() -> None:
     activate_process_quotes()
 
 
-# Compatibilidad: primero recupera el snapshot histórico y después migra/carga
-# las entidades núcleo. La base persistente nunca se sobrescribe con el snapshot
-# cuando la entidad ya existe.
+# Compatibilidad de arranque:
+# 1. restaura el snapshot histórico si hace falta;
+# 2. carga/migra las entidades núcleo existentes;
+# 3. hidrata todas las secciones restantes desde session_store sin pisar datos
+#    activos y migra una sola vez lo que solo exista en snapshot/core_entities.
 restore_session_snapshot_on_startup()
 load_core_data_on_startup()
+hydrate_session_store_on_startup()
 activate_module_bootstrap()
 activate_printer_asset_specs()
 activate_print_cost_module()
