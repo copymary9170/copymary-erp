@@ -54,30 +54,6 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
     "src.production_reversals_visible",
 )
 
-PRODUCTS_NAVIGATION: tuple[str, ...] = (
-    # Producción del día a día
-    "Catálogo y producción", "Órdenes de producción",
-    # Costeo y precios
-    "Costeo", "Costeo por procesos", "BOM multinivel", "Tasas de cambio",
-    "Ajustar precios", "Exportar precios",
-    # Inventario
-    "Inventario", "Ajustes de inventario", "Movimientos de inventario", "Alertas de inventario",
-    # Mantenimiento del catálogo y de máquinas
-    "Mantenimiento del catálogo", "Mantenimiento preventivo", "Reversos de producción",
-)
-
-ADMIN_NAVIGATION: tuple[str, ...] = (
-    # Caja y bancos (día a día)
-    "Caja", "Conciliación financiera", "Reabrir cierre de caja",
-    # Gastos y personal
-    "Gastos y presupuesto", "RRHH y nómina",
-    "Equipo y comisiones", "Historial de comisiones",
-    # Ajustes y anulaciones
-    "Reversos de pagos", "Anulaciones y ajustes",
-    # Configuración y respaldos
-    "Activos", "Respaldar activos", "Configuración General", "Respaldo general", "Usuarios y roles",
-)
-
 
 # Se llena en activate_module_bootstrap() con (nombre_visible, module_path,
 # mensaje_de_error) por cada módulo que falló al cargar. Antes, un módulo
@@ -109,20 +85,13 @@ def _load_renderer(module_path: str, attr_name: str, display_name: str) -> Calla
     return renderer
 
 
-def _merge_navigation(area: str, pages: tuple[str, ...]) -> None:
-    """Agrega páginas a un grupo de navegación sin descartar las que ya
-    haya puesto ahí otro módulo (p. ej. app_shell_goals.py). Antes esta
-    función reemplazaba la tupla completa y así desaparecían del menú
-    páginas que sí estaban registradas y funcionando en FUNCTIONAL_MODULES."""
-    existing = app_shell.NAVIGATION_GROUPS.get(area, ())
-    merged = list(existing)
-    for page in pages:
-        if page not in merged:
-            merged.append(page)
-    app_shell.NAVIGATION_GROUPS[area] = tuple(merged)
-
-
 def activate_module_bootstrap() -> None:
+    """Carga renderers sin mutar la taxonomía canónica de navegación.
+
+    Las áreas y la relación página→área viven exclusivamente en
+    ``top_navigation_app.SPECIALTY_AREAS``. El bootstrap registra implementaciones
+    funcionales, pero no vuelve a clasificar páginas en grupos heredados.
+    """
     FAILED_MODULES.clear()
     for module_path in SIDE_EFFECT_MODULES:
         _try_import(module_path)
@@ -130,21 +99,6 @@ def activate_module_bootstrap() -> None:
         renderer = _load_renderer(module_path, renderer_name, module_name)
         if renderer is not None:
             app_shell.FUNCTIONAL_MODULES[module_name] = renderer
-    _merge_navigation(
-        "Inicio",
-        (
-            # Lo que se usa todos los días, primero
-            "Inicio", "Novedades", "Venta rápida de mostrador",
-            # Centro de mando
-            "Centro de control", "Panel comercial", "Panel financiero y cierres",
-            # Reportes gerenciales
-            "Estado de Resultados", "Flujo de caja proyectado",
-            # Herramientas técnicas
-            "Auditoría de datos", "Fundación técnica",
-        ),
-    )
-    _merge_navigation("Productos e inventario", PRODUCTS_NAVIGATION)
-    _merge_navigation("Administración", ADMIN_NAVIGATION)
 
     status_module = _try_import("src.status_consistency", "Normalización de estados")
     if status_module is not None:

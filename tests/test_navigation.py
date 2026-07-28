@@ -10,43 +10,43 @@ from src import app_shell, module_bootstrap
 
 @pytest.fixture(autouse=True)
 def _bootstrap():
-    """`go_to` recorre `NAVIGATION_GROUPS`, que se llenan con
-    `activate_module_bootstrap()`. Sin esto los grupos base vienen vacíos y
-    no se puede resolver la página."""
+    """Carga renderers sin alterar la taxonomía canónica."""
     module_bootstrap.activate_module_bootstrap()
     yield
 
 
-def test_go_to_finds_page_in_inicio_group():
-    """go_to() debe poder llegar a una página del grupo Inicio (usado por el
-    botón 'Abrir' de la página de Novedades)."""
+def _call_go_to(page: str) -> None:
     try:
-        app_shell.go_to("Venta rápida de mostrador")
+        app_shell.go_to(page)
     except st.errors.StreamlitAPIException:
         # st.rerun() lanza esta excepción fuera de un runtime real, es esperado.
         pass
-    except Exception as exc:
-        pytest.fail(f"go_to() falló para una página válida del grupo Inicio: {exc}")
 
-    assert st.session_state.get("pending_navigation_area") == "Inicio"
+
+def test_go_to_resolves_quick_sale_to_commercial_area():
+    _call_go_to("Venta rápida de mostrador")
+
+    assert st.session_state.get("pending_navigation_area") == "Comercial y CRM"
     assert st.session_state.get("pending_navigation_page") == "Venta rápida de mostrador"
 
 
-def test_go_to_finds_page_in_administracion_group():
-    """Igual, pero para una página de otro grupo — verifica que la búsqueda
-    no depende de un grupo específico."""
-    try:
-        app_shell.go_to("RRHH y nómina")
-    except (st.errors.StreamlitAPIException, Exception):
-        pass
+def test_go_to_resolves_payroll_to_talent_area():
+    _call_go_to("RRHH y nómina")
 
-    assert st.session_state.get("pending_navigation_area") == "Administración"
+    assert st.session_state.get("pending_navigation_area") == "Talento humano"
     assert st.session_state.get("pending_navigation_page") == "RRHH y nómina"
 
 
+def test_bootstrap_does_not_create_legacy_navigation_groups():
+    groups = app_shell.navigation_groups()
+
+    assert "Productos e inventario" not in groups
+    assert "Administración" not in groups
+    assert "Venta rápida de mostrador" not in groups["Inicio"]
+    assert "Venta rápida de mostrador" in groups["Comercial y CRM"]
+
+
 def test_go_to_reports_error_for_unknown_page():
-    """Si la página no existe, no debe lanzar excepción cruda ni cambiar el
-    estado de navegación (solo mostrar un error de Streamlit)."""
     st.session_state.pop("pending_navigation_area", None)
     st.session_state.pop("pending_navigation_page", None)
 
