@@ -63,6 +63,26 @@ def navigation_groups() -> dict[str, tuple[str, ...]]:
     return {area: tuple(config[3]) for area, config in SPECIALTY_AREAS.items()}
 
 
+def _build_page_area_index(groups: dict[str, tuple[str, ...]]) -> dict[str, str]:
+    """Construye un índice único página→área y rechaza duplicados ambiguos."""
+    index: dict[str, str] = {}
+    duplicates: dict[str, list[str]] = {}
+    for area, pages in groups.items():
+        for page in pages:
+            previous = index.get(page)
+            if previous is None:
+                index[page] = area
+            elif previous != area:
+                duplicates.setdefault(page, [previous]).append(area)
+    if duplicates:
+        details = "; ".join(f"{page}: {', '.join(areas)}" for page, areas in sorted(duplicates.items()))
+        raise ValueError(f"La taxonomía de navegación contiene páginas duplicadas: {details}")
+    return index
+
+
+PAGE_TO_AREA = _build_page_area_index(navigation_groups())
+
+
 def _app_shell():
     from src import app_shell
     return app_shell
@@ -79,11 +99,7 @@ def _page_is_allowed(page: str, allowed: set[str] | None) -> bool:
 
 
 def _canonical_area_for_page(page: str) -> str | None:
-    canonical_page = _functional_page_name(page)
-    for area, pages in navigation_groups().items():
-        if canonical_page in pages:
-            return area
-    return None
+    return PAGE_TO_AREA.get(_functional_page_name(page))
 
 
 def _allowed_home_shortcuts(app_shell, allowed: set[str] | None):
