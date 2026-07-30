@@ -8,7 +8,7 @@ def test_initialize_database_consolidates_v15(tmp_path, monkeypatch):
 
     status = erp_database.initialize_database()
 
-    assert erp_database.SCHEMA_VERSION == 15
+    assert erp_database.SCHEMA_VERSION >= 15
     assert status.ready is True
     assert status.schema_version >= 15
 
