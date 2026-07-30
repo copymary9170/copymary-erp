@@ -168,7 +168,8 @@ def next_control_number(last_number: str | None, prefix: str = "00-") -> str:
     """Genera el siguiente número de control preservando ancho numérico."""
     if not last_number:
         return f"{prefix}00000001"
-    digits = "".join(ch for ch in last_number if ch.isdigit())
+    sequence = last_number[len(prefix):] if last_number.startswith(prefix) else last_number
+    digits = "".join(ch for ch in sequence if ch.isdigit())
     if not digits:
         raise ValueError("El último número de control no contiene una secuencia numérica.")
     return f"{prefix}{int(digits) + 1:0{len(digits)}d}"
