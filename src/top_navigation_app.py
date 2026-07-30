@@ -37,7 +37,7 @@ DESCRIPTIONS = {
     "Cuentas por pagar": "Obligaciones pendientes.",
     "Catálogo y producción": "Productos, recetas y procesos.", "Órdenes de producción": "Seguimiento de trabajos.",
     "Mantenimiento del catálogo": "Actualización del catálogo.", "Reversos de producción": "Correcciones productivas.",
-    "Inventario": "Catálogo de artículos, existencias, lotes, movimientos y control de stock.", "Movimientos de inventario": "Entradas y salidas.",
+    "Inventario": "Catálogo de artículos, existencias, reservas, lotes y control de stock.", "Movimientos de inventario": "Entradas y salidas.",
     "Ajustes de inventario": "Correcciones autorizadas.", "Alertas de inventario": "Mínimos y reposición.",
     "Costeo": "Costos y márgenes.", "Costeo por procesos": "Costos por etapa.", "BOM multinivel": "Materiales anidados.",
     "Tasas de cambio": "Tasas monetarias.", "Ajustar precios": "Actualización de precios.", "Exportar precios": "Listados de precios.",
@@ -52,12 +52,35 @@ DESCRIPTIONS = {
     "Respaldo general": "Copia integral del ERP.", "Respaldar activos": "Copia de activos.",
 }
 
-FUNCTIONAL_PAGE_ALIASES = {}
+FUNCTIONAL_PAGE_ALIASES = {
+    "Recepción de mercancía": "Compras",
+    "Catálogo de artículos": "Inventario",
+}
 
 
 def navigation_groups() -> dict[str, tuple[str, ...]]:
     """Devuelve la taxonomía canónica de áreas y páginas del ERP."""
     return {area: tuple(config[3]) for area, config in SPECIALTY_AREAS.items()}
+
+
+def _build_page_area_index(groups: dict[str, tuple[str, ...]]) -> dict[str, str]:
+    """Construye un índice único página→área y rechaza duplicados ambiguos."""
+    index: dict[str, str] = {}
+    duplicates: dict[str, list[str]] = {}
+    for area, pages in groups.items():
+        for page in pages:
+            previous = index.get(page)
+            if previous is None:
+                index[page] = area
+            elif previous != area:
+                duplicates.setdefault(page, [previous]).append(area)
+    if duplicates:
+        details = "; ".join(f"{page}: {', '.join(areas)}" for page, areas in sorted(duplicates.items()))
+        raise ValueError(f"La taxonomía de navegación contiene páginas duplicadas: {details}")
+    return index
+
+
+PAGE_TO_AREA = _build_page_area_index(navigation_groups())
 
 
 def _app_shell():
@@ -76,23 +99,17 @@ def _page_is_allowed(page: str, allowed: set[str] | None) -> bool:
 
 
 def _canonical_area_for_page(page: str) -> str | None:
-    for area, pages in navigation_groups().items():
-        if page in pages:
-            return area
-    return None
+    return PAGE_TO_AREA.get(_functional_page_name(page))
 
 
 def _allowed_home_shortcuts(app_shell, allowed: set[str] | None):
-    """Filtra accesos y corrige sus áreas al momento de renderizar."""
+    """Filtra accesos y redirige alias antiguos hacia sus módulos principales."""
     shortcuts = []
     for title, description, _legacy_area, page in app_shell._home_shortcuts():
-        destination = {
-            "Catálogo de artículos": "Inventario",
-            "Recepción de mercancía": "Compras",
-        }.get(page, page)
-        area = _canonical_area_for_page(destination)
-        if area and _page_is_allowed(destination, allowed):
-            shortcuts.append((title, description, area, destination))
+        canonical_page = _functional_page_name(page)
+        area = _canonical_area_for_page(canonical_page)
+        if area and _page_is_allowed(canonical_page, allowed):
+            shortcuts.append((title, description, area, canonical_page))
     return tuple(shortcuts)
 
 
@@ -173,6 +190,7 @@ def _effective_areas(user):
 
 def _render_module_selector(area: str, pages: tuple[str, ...]) -> str:
     current = st.session_state.get("navigation_page")
+    current = _functional_page_name(current) if current else current
     if current not in pages:
         current = pages[0]
         st.session_state["navigation_page"] = current
