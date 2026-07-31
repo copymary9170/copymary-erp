@@ -26,6 +26,22 @@ CORE_LIST_KEYS = frozenset(
 )
 CORE_ENTITY_KEYS = frozenset({"general_settings", *CORE_LIST_KEYS})
 
+_DATABASE_INITIALIZED = False
+
+
+def _ensure_database_initialized() -> None:
+    """Inicializa el esquema una sola vez por proceso de Streamlit.
+
+    Las lecturas núcleo ocurren varias veces durante el arranque. Ejecutar todas
+    las migraciones antes de cada consulta hacía que la pantalla permaneciera
+    cargando innecesariamente y podía agravar bloqueos de PostgreSQL.
+    """
+    global _DATABASE_INITIALIZED
+    if _DATABASE_INITIALIZED:
+        return
+    initialize_database()
+    _DATABASE_INITIALIZED = True
+
 
 def serialize_entity(value: object) -> object:
     """Convierte dataclasses y colecciones a una estructura JSON compatible."""
@@ -44,7 +60,7 @@ def save_entity(key: str, value: object) -> None:
     """Guarda una entidad completa mediante upsert, sin borrar otras entidades."""
     if key not in CORE_ENTITY_KEYS:
         raise ValueError(f"La entidad '{key}' no está habilitada para persistencia núcleo.")
-    initialize_database()
+    _ensure_database_initialized()
     payload = json.dumps(serialize_entity(value), ensure_ascii=False, sort_keys=True, default=str)
     updated_at = now_iso()
     with connect() as connection:
@@ -64,7 +80,7 @@ def load_entity(key: str) -> object | None:
     """Lee una entidad persistida o devuelve None cuando todavía no existe."""
     if key not in CORE_ENTITY_KEYS:
         raise ValueError(f"La entidad '{key}' no está habilitada para persistencia núcleo.")
-    initialize_database()
+    _ensure_database_initialized()
     with connect() as connection:
         row = connection.execute(
             "SELECT payload_json FROM core_entities WHERE entity_key = ?",
@@ -82,7 +98,7 @@ def entity_exists(key: str) -> bool:
     """Indica si la entidad ya tiene un valor persistido."""
     if key not in CORE_ENTITY_KEYS:
         raise ValueError(f"La entidad '{key}' no está habilitada para persistencia núcleo.")
-    initialize_database()
+    _ensure_database_initialized()
     with connect() as connection:
         row = connection.execute(
             "SELECT 1 AS found FROM core_entities WHERE entity_key = ? LIMIT 1",
