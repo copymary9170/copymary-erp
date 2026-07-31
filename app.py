@@ -1,4 +1,10 @@
 """Punto de entrada de CopyMary ERP."""
+from src.database_startup_guard import install_database_startup_guard
+
+# Debe instalarse antes de importar módulos que capturan referencias a
+# initialize_database o abren conexiones durante el arranque.
+install_database_startup_guard()
+
 from src import app_shell
 from src.business_goals_admin_loader import activate_business_goals_admin
 from src.core_data_startup import load_core_data_on_startup
