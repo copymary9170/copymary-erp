@@ -26,6 +26,7 @@ from src.catalog_items import (
     get_catalog_items,
     migrate_inventory_to_catalog,
 )
+from src.printable_materials import is_printable, set_printable
 
 
 def _render_list() -> None:
@@ -40,6 +41,7 @@ def _render_list() -> None:
             "Tipo": item.article_type,
             "Categoría": item.category,
             "Unidad": item.inventory_unit,
+            "Imprimible": "Sí" if is_printable(item) else "No",
             "Medidas / contenido": item.dimensions_label,
             "Gramaje": item.grammage_label,
             "Calidad de corte": item.cut_status,
@@ -63,6 +65,12 @@ def _render_create() -> None:
         category = c4.selectbox("Categoría", CATEGORIES, key="catalog_category")
         unit = c5.selectbox("Unidad de inventario", INVENTORY_UNITS, key="catalog_inventory_unit")
         brand = st.text_input("Marca", key="catalog_brand")
+        printable = st.checkbox(
+            "Se puede usar como material de impresión",
+            value=True,
+            key="catalog_printable",
+            help="Al desmarcarlo no aparecerá en los selectores del apartado de impresión, pero seguirá disponible en los demás módulos.",
+        )
 
         measurement_type = st.selectbox(
             "¿Cómo se mide físicamente cada unidad?",
@@ -156,7 +164,7 @@ def _render_create() -> None:
         return
 
     try:
-        add_item(CatalogItem(
+        item = CatalogItem(
             item_id=uuid4().hex[:8].upper(), sku=sku.strip(), name=name.strip(),
             article_type=article_type, category=category, inventory_unit=unit,
             brand=brand.strip(), measurement_type=measurement_type,
@@ -167,7 +175,9 @@ def _render_create() -> None:
             minimum_stock=float(minimum), maximum_stock=float(maximum),
             technical_notes=notes.strip(), created_at_utc=_now(), updated_at_utc=_now(),
             **technical,
-        ))
+        )
+        add_item(item)
+        set_printable(item, printable)
         st.success("Artículo creado con su ficha técnica completa.")
         st.rerun()
     except ValueError as exc:
