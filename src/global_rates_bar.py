@@ -1,8 +1,10 @@
-"""Restaura la franja compacta de tasas en todas las pantallas operativas.
+"""Mantiene visible la franja compacta de tasas en las pantallas operativas.
 
-La navegación activa termina delegando en ``app_shell.run_app``. Por eso la
-franja debe envolver los renderers que ese shell ejecuta, después de que todos
-los loaders hayan registrado o sustituido sus módulos.
+Streamlit vuelve a ejecutar ``app.py`` en cada interacción, mientras los módulos
+importados permanecen en memoria. Los loaders pueden sustituir renderers en cada
+rerun; por eso esta integración debe revisar y envolver los renderers actuales
+cada vez que se activa, en lugar de depender de una bandera global de una sola
+instalación.
 """
 from __future__ import annotations
 
@@ -14,8 +16,6 @@ import streamlit as st
 from src import app_shell
 from src.payment_fees import rates_badge_html
 
-_INSTALLED = False
-
 
 def _render_rates_bar() -> None:
     html = rates_badge_html()
@@ -24,6 +24,7 @@ def _render_rates_bar() -> None:
 
 
 def _wrap_renderer(renderer: Callable[[], None]) -> Callable[[], None]:
+    """Envuelve un renderer una sola vez, incluso tras varios reruns."""
     if getattr(renderer, "_copymary_rates_bar", False):
         return renderer
 
@@ -37,15 +38,15 @@ def _wrap_renderer(renderer: Callable[[], None]) -> Callable[[], None]:
 
 
 def activate_global_rates_bar() -> None:
-    """Muestra las tasas en Inicio y módulos, excepto Configuración General."""
-    global _INSTALLED
-    if _INSTALLED:
-        return
+    """Reaplica la barra a los renderers vigentes en cada rerun de Streamlit.
 
+    Los loaders ejecutados antes de esta función pueden reemplazar funciones del
+    diccionario ``FUNCTIONAL_MODULES``. Se recorren siempre los valores actuales;
+    ``_wrap_renderer`` evita envolver dos veces los que ya conservan la barra.
+    Configuración General queda excluida porque muestra el detalle completo.
+    """
     app_shell.render_home = _wrap_renderer(app_shell.render_home)
     for page_name, renderer in tuple(app_shell.FUNCTIONAL_MODULES.items()):
         if page_name == "Configuración General":
             continue
         app_shell.FUNCTIONAL_MODULES[page_name] = _wrap_renderer(renderer)
-
-    _INSTALLED = True
