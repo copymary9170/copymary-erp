@@ -10,6 +10,7 @@ from src.business_goals_admin_loader import activate_business_goals_admin
 from src.core_data_startup import load_core_data_on_startup
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
+from src.global_rates_bar import activate_global_rates_bar
 from src.home_dashboard_safe_loader import activate_home_dashboard_safe
 from src.integrated_inventory_catalog import wrap_inventory_renderer
 from src.integrated_purchases_receiving import wrap_purchases_renderer
@@ -103,5 +104,7 @@ app_shell.FUNCTIONAL_MODULES.pop("Recepción de mercancía", None)
 
 _activate_process_quotes_safely()
 activate_navigation_cleanup()
+# Debe activarse al final, cuando todos los loaders ya sustituyeron sus renderers.
+activate_global_rates_bar()
 persist_general_settings_if_changed()
 run_app()
