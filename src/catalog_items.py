@@ -6,7 +6,7 @@ controla CUÁNTO existe.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -15,6 +15,7 @@ import streamlit as st
 from src.session_utils import read_list, save_list
 
 CATALOG_KEY = "catalog_items"
+CATALOG_AUDIT_KEY = "catalog_items_audit"
 ARTICLE_TYPES = ("Material consumible", "Producto para venta", "Servicio", "Activo", "Insumo de empaque", "Repuesto", "Otro")
 INVENTORY_UNITS = ("Unidad", "Hoja", "Pliego", "Resma", "Rollo", "Bobina", "Paquete", "Caja", "Sobre", "Kit", "Bolsa", "Frasco", "Botella", "Bidón", "Tubo", "Pallet")
 FORBIDDEN_INVENTORY_UNITS = {"cm", "m", "cm²", "cm2", "m²", "m2", "g", "gr", "kg", "ml", "l", "lt", "litro", "litros", "mm"}
@@ -74,6 +75,9 @@ class CatalogItem:
     manage_by_serial: bool = False
     active: bool = True
     technical_notes: str = ""
+    use_in_production: bool = False
+    internal_consumable: bool = False
+    for_sale: bool = False
     source: str = "manual"
     migrated_from_inventory_id: str = ""
     created_at_utc: str = ""
@@ -116,6 +120,17 @@ class CatalogItem:
             return f"{self.unit_weight_g:g} g"
         return "—"
 
+    @property
+    def uses_label(self) -> str:
+        uses = []
+        if self.use_in_production:
+            uses.append("Producción")
+        if self.internal_consumable:
+            uses.append("Consumo interno")
+        if self.for_sale:
+            uses.append("Venta")
+        return " · ".join(uses) if uses else "—"
+
 
 def _from_dict(raw: dict) -> CatalogItem:
     fields = CatalogItem.__dataclass_fields__
@@ -123,6 +138,16 @@ def _from_dict(raw: dict) -> CatalogItem:
     data["item_id"] = str(raw.get("item_id") or uuid4().hex[:8].upper())
     data["name"] = str(raw.get("name") or raw.get("material") or "Artículo").strip()
     data["sku"] = str(raw.get("sku") or raw.get("code") or "").strip()
+
+    # Compatibilidad hacia atrás: no se requiere migración de los artículos existentes.
+    article_type = str(data.get("article_type") or "Otro")
+    if "internal_consumable" not in raw:
+        data["internal_consumable"] = article_type in {"Material consumible", "Insumo de empaque", "Repuesto"}
+    if "use_in_production" not in raw:
+        data["use_in_production"] = article_type in {"Material consumible", "Insumo de empaque"}
+    if "for_sale" not in raw:
+        data["for_sale"] = article_type in {"Producto para venta", "Servicio"}
+
     numeric_fields = (
         "grammage_gsm", "width_cm", "height_cm", "width_top_cm", "width_bottom_cm",
         "height_left_cm", "height_right_cm", "estimated_area_cm2", "usable_area_cm2_value",
@@ -159,6 +184,55 @@ def add_item(item: CatalogItem) -> CatalogItem:
     items.append(item)
     save_catalog_items(items)
     return item
+
+
+def update_item(item_id: str, changes: dict, reason: str = "Corrección manual") -> CatalogItem:
+    """Actualiza la definición del catálogo sin modificar existencias."""
+    items = get_catalog_items()
+    index = next((i for i, row in enumerate(items) if row.item_id == item_id), None)
+    if index is None:
+        raise ValueError("No se encontró el artículo.")
+
+    current = items[index]
+    protected = {"item_id", "sku", "source", "migrated_from_inventory_id", "created_at_utc"}
+    safe_changes = {
+        key: value
+        for key, value in changes.items()
+        if key not in protected and key in CatalogItem.__dataclass_fields__
+    }
+    if not safe_changes:
+        return current
+
+    candidate = replace(current, **safe_changes, updated_at_utc=_now())
+    if candidate.inventory_unit.casefold() in FORBIDDEN_INVENTORY_UNITS:
+        raise ValueError("Las medidas físicas no pueden usarse como unidad de inventario.")
+    if candidate.maximum_stock > 0 and candidate.minimum_stock > candidate.maximum_stock:
+        raise ValueError("El stock mínimo no puede ser mayor que el máximo.")
+
+    changed_fields = {
+        key: {"before": getattr(current, key), "after": getattr(candidate, key)}
+        for key in safe_changes
+        if getattr(current, key) != getattr(candidate, key)
+    }
+    if not changed_fields:
+        return current
+
+    items[index] = candidate
+    save_catalog_items(items)
+
+    audit = read_list(CATALOG_AUDIT_KEY)
+    audit.append({
+        "audit_id": uuid4().hex[:12].upper(),
+        "item_id": current.item_id,
+        "sku": current.sku,
+        "item_name": current.name,
+        "action": "edit",
+        "reason": reason.strip() or "Corrección manual",
+        "changed_fields": changed_fields,
+        "created_at_utc": _now(),
+    })
+    save_list(CATALOG_AUDIT_KEY, audit)
+    return candidate
 
 
 def _technical_values(top: float, bottom: float, left: float, right: float) -> dict:
@@ -232,8 +306,14 @@ def migrate_inventory_to_catalog(dry_run: bool = True) -> dict:
             unit_volume_ml=_num(row.get("ml") or row.get("unit_volume_ml") or (row.get("content_value") if row.get("content_type") == "volume" else 0)),
             minimum_stock=_num(row.get("minimum_stock") or row.get("min_stock")),
             maximum_stock=_num(row.get("maximum_stock") or row.get("max_stock")),
-            technical_notes=str(row.get("notes") or ""), source="migrado",
-            migrated_from_inventory_id=source_id, created_at_utc=_now(), updated_at_utc=_now(),
+            technical_notes=str(row.get("notes") or ""),
+            use_in_production=True,
+            internal_consumable=True,
+            for_sale=False,
+            source="migrado",
+            migrated_from_inventory_id=source_id,
+            created_at_utc=_now(),
+            updated_at_utc=_now(),
         )
         created.append(item)
         if sku:
@@ -243,10 +323,23 @@ def migrate_inventory_to_catalog(dry_run: bool = True) -> dict:
     return {"created": len(created), "skipped": skipped, "created_items": created}
 
 
+def _render_use_checkboxes(prefix: str, defaults: tuple[bool, bool, bool]) -> tuple[bool, bool, bool]:
+    st.markdown("##### Uso del artículo")
+    st.caption("Puedes marcar más de uno. Esto no cambia ni mueve existencias de inventario.")
+    c1, c2, c3 = st.columns(3)
+    production = c1.checkbox("Se utiliza en producción", value=defaults[0], key=f"{prefix}_production")
+    internal = c2.checkbox("Consumible interno", value=defaults[1], key=f"{prefix}_internal")
+    sale = c3.checkbox("Producto/servicio para venta", value=defaults[2], key=f"{prefix}_sale")
+    return production, internal, sale
+
+
 def render_catalog_items() -> None:
     st.title("Catálogo de artículos")
     st.caption("Aquí se conservan las propiedades permanentes del material: medidas reales de los cuatro lados, área útil, m², gramaje, peso, volumen y calidad del corte.")
-    tab_list, tab_create, tab_migrate = st.tabs(["Artículos", "Crear artículo", "Migrar desde Inventario"])
+    tab_list, tab_create, tab_edit, tab_history, tab_migrate = st.tabs([
+        "Artículos", "Crear artículo", "Editar artículo", "Historial", "Migrar desde Inventario"
+    ])
+
     with tab_list:
         items = get_catalog_items()
         if not items:
@@ -257,6 +350,7 @@ def render_catalog_items() -> None:
                     "SKU": item.sku,
                     "Artículo": item.name,
                     "Tipo": item.article_type,
+                    "Usos": item.uses_label,
                     "Categoría": item.category,
                     "Unidad": item.inventory_unit,
                     "Medidas / contenido": item.dimensions_label,
@@ -267,6 +361,7 @@ def render_catalog_items() -> None:
                 }
                 for item in items
             ], use_container_width=True, hide_index=True)
+
     with tab_create:
         with st.form("catalog_item_form"):
             c1, c2 = st.columns(2)
@@ -277,6 +372,15 @@ def render_catalog_items() -> None:
             category = c4.selectbox("Categoría", CATEGORIES)
             unit = c5.selectbox("Unidad de inventario", INVENTORY_UNITS)
             brand = st.text_input("Marca")
+            description = st.text_area("Descripción")
+            production_use, internal_use, sale_use = _render_use_checkboxes(
+                "create",
+                (
+                    article_type in {"Material consumible", "Insumo de empaque"},
+                    article_type == "Material consumible",
+                    article_type in {"Producto para venta", "Servicio"},
+                ),
+            )
             measurement_type = st.selectbox("¿Cómo se mide físicamente cada unidad?", MEASUREMENT_TYPES)
 
             top = bottom = left = right = 0.0
@@ -335,19 +439,101 @@ def render_catalog_items() -> None:
                     add_item(CatalogItem(
                         item_id=uuid4().hex[:8].upper(), sku=sku.strip(), name=name.strip(),
                         article_type=article_type, category=category, inventory_unit=unit,
-                        brand=brand.strip(), measurement_type=measurement_type,
+                        brand=brand.strip(), description=description.strip(), measurement_type=measurement_type,
                         grammage_status=grammage_status, grammage_gsm=grammage,
                         width_top_cm=top, width_bottom_cm=bottom,
                         height_left_cm=left, height_right_cm=right,
                         unit_weight_g=weight, unit_volume_ml=volume,
                         minimum_stock=minimum, maximum_stock=maximum,
-                        technical_notes=notes.strip(), created_at_utc=_now(), updated_at_utc=_now(),
+                        technical_notes=notes.strip(),
+                        use_in_production=production_use,
+                        internal_consumable=internal_use,
+                        for_sale=sale_use,
+                        created_at_utc=_now(), updated_at_utc=_now(),
                         **technical,
                     ))
                     st.success("Artículo creado con su ficha técnica completa.")
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
+
+    with tab_edit:
+        items = get_catalog_items()
+        if not items:
+            st.info("No hay artículos para editar.")
+        else:
+            labels = {f"{item.sku or 'SIN-SKU'} — {item.name}": item for item in items}
+            selected_label = st.selectbox("Artículo a modificar", list(labels), key="catalog_edit_item")
+            selected = labels[selected_label]
+            st.caption("El SKU, el identificador y el origen quedan protegidos. Esta pantalla no modifica existencias; los cambios de cantidad se hacen únicamente desde Inventario/Ajustes.")
+
+            with st.form(f"catalog_edit_form_{selected.item_id}"):
+                c1, c2 = st.columns(2)
+                edit_name = c1.text_input("Nombre", value=selected.name)
+                c2.text_input("SKU (protegido)", value=selected.sku, disabled=True)
+                c3, c4, c5 = st.columns(3)
+                edit_type = c3.selectbox("Tipo", ARTICLE_TYPES, index=ARTICLE_TYPES.index(selected.article_type) if selected.article_type in ARTICLE_TYPES else len(ARTICLE_TYPES) - 1)
+                edit_category = c4.selectbox("Categoría", CATEGORIES, index=CATEGORIES.index(selected.category) if selected.category in CATEGORIES else len(CATEGORIES) - 1)
+                edit_unit = c5.selectbox("Unidad de inventario", INVENTORY_UNITS, index=INVENTORY_UNITS.index(selected.inventory_unit) if selected.inventory_unit in INVENTORY_UNITS else 0)
+                edit_brand = st.text_input("Marca", value=selected.brand)
+                edit_description = st.text_area("Descripción", value=selected.description)
+                edit_production, edit_internal, edit_sale = _render_use_checkboxes(
+                    f"edit_{selected.item_id}",
+                    (selected.use_in_production, selected.internal_consumable, selected.for_sale),
+                )
+                a, b = st.columns(2)
+                edit_minimum = a.number_input("Stock mínimo", min_value=0.0, value=float(selected.minimum_stock), key=f"edit_min_{selected.item_id}")
+                edit_maximum = b.number_input("Stock máximo", min_value=0.0, value=float(selected.maximum_stock), key=f"edit_max_{selected.item_id}")
+                edit_notes = st.text_area("Observaciones técnicas", value=selected.technical_notes)
+                edit_active = st.checkbox("Artículo activo", value=selected.active)
+                reason = st.text_input("Motivo de la modificación", value="Corrección de datos")
+                edit_submitted = st.form_submit_button("Guardar modificaciones", type="primary")
+
+            if edit_submitted:
+                if not edit_name.strip():
+                    st.error("El nombre es obligatorio.")
+                elif edit_maximum > 0 and edit_minimum > edit_maximum:
+                    st.error("El stock mínimo no puede ser mayor que el máximo.")
+                else:
+                    try:
+                        update_item(selected.item_id, {
+                            "name": edit_name.strip(),
+                            "article_type": edit_type,
+                            "category": edit_category,
+                            "inventory_unit": edit_unit,
+                            "brand": edit_brand.strip(),
+                            "description": edit_description.strip(),
+                            "minimum_stock": edit_minimum,
+                            "maximum_stock": edit_maximum,
+                            "technical_notes": edit_notes.strip(),
+                            "use_in_production": edit_production,
+                            "internal_consumable": edit_internal,
+                            "for_sale": edit_sale,
+                            "active": edit_active,
+                        }, reason=reason)
+                        st.success("Artículo actualizado. El inventario y sus movimientos no fueron modificados.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+
+    with tab_history:
+        audit = list(reversed(read_list(CATALOG_AUDIT_KEY)))
+        if not audit:
+            st.info("Todavía no hay modificaciones registradas.")
+        else:
+            st.dataframe([
+                {
+                    "Fecha UTC": row.get("created_at_utc", ""),
+                    "SKU": row.get("sku", ""),
+                    "Artículo": row.get("item_name", ""),
+                    "Motivo": row.get("reason", ""),
+                    "Campos modificados": ", ".join(row.get("changed_fields", {}).keys()),
+                }
+                for row in audit
+            ], use_container_width=True, hide_index=True)
+            with st.expander("Ver detalle del último cambio"):
+                st.json(audit[0])
+
     with tab_migrate:
         preview = migrate_inventory_to_catalog(dry_run=True)
         st.write(f"Se crearían **{preview['created']}** artículos y se omitirían **{preview['skipped']}**.")
