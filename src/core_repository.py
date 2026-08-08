@@ -11,7 +11,7 @@ from dataclasses import asdict, is_dataclass
 import json
 from typing import Any
 
-from src.erp_database import connect, initialize_database
+from src.erp_database import connect, database_url, initialize_database
 from src.session_utils import now_iso
 
 CORE_LIST_KEYS = frozenset(
@@ -26,21 +26,23 @@ CORE_LIST_KEYS = frozenset(
 )
 CORE_ENTITY_KEYS = frozenset({"general_settings", *CORE_LIST_KEYS})
 
-_DATABASE_INITIALIZED = False
+_INITIALIZED_DATABASES: set[str] = set()
 
 
 def _ensure_database_initialized() -> None:
-    """Inicializa el esquema una sola vez por proceso de Streamlit.
+    """Inicializa el esquema una sola vez por destino de base de datos.
 
     Las lecturas núcleo ocurren varias veces durante el arranque. Ejecutar todas
     las migraciones antes de cada consulta hacía que la pantalla permaneciera
-    cargando innecesariamente y podía agravar bloqueos de PostgreSQL.
+    cargando innecesariamente y podía agravar bloqueos de PostgreSQL. El destino
+    puede cambiar durante el mismo proceso (por ejemplo, al cargar Secrets o en
+    pruebas), así que la caché se mantiene por URL/ruta resuelta y no por proceso.
     """
-    global _DATABASE_INITIALIZED
-    if _DATABASE_INITIALIZED:
+    target = database_url()
+    if target in _INITIALIZED_DATABASES:
         return
     initialize_database()
-    _DATABASE_INITIALIZED = True
+    _INITIALIZED_DATABASES.add(target)
 
 
 def serialize_entity(value: object) -> object:
