@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from src.catalog_items import get_catalog_items
-from src.catalog_items_reactive import render_catalog_items
+from src.catalog_items import get_catalog_items, render_catalog_items
 from src.printable_materials import activate_printing_filters, is_printable, set_printable
 
 
@@ -50,6 +49,8 @@ def wrap_inventory_renderer(base_renderer):
         with inventory_tab:
             base_renderer()
         with catalog_tab:
+            # Única fuente de verdad: la misma interfaz completa del catálogo maestro
+            # se usa tanto aquí como en cualquier acceso directo al catálogo.
             render_catalog_items()
             _render_printable_settings()
 
