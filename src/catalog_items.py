@@ -13,6 +13,7 @@ from uuid import uuid4
 import streamlit as st
 
 from src.session_utils import read_list, save_list
+from src.printable_materials import is_printable, set_printable
 
 CATALOG_KEY = "catalog_items"
 CATALOG_AUDIT_KEY = "catalog_items_audit"
@@ -336,8 +337,8 @@ def _render_use_checkboxes(prefix: str, defaults: tuple[bool, bool, bool]) -> tu
 def render_catalog_items() -> None:
     st.title("Catálogo de artículos")
     st.caption("Aquí se conservan las propiedades permanentes del material: medidas reales de los cuatro lados, área útil, m², gramaje, peso, volumen y calidad del corte.")
-    tab_list, tab_create, tab_edit, tab_history, tab_migrate = st.tabs([
-        "Artículos", "Crear artículo", "Editar artículo", "Historial", "Migrar desde Inventario"
+    tab_list, tab_create, tab_edit, tab_history, tab_migrate, tab_printing = st.tabs([
+        "Artículos", "Crear artículo", "Editar artículo", "Historial", "Migrar desde Inventario", "Impresión"
     ])
 
     with tab_list:
@@ -542,3 +543,29 @@ def render_catalog_items() -> None:
             result = migrate_inventory_to_catalog(dry_run=False)
             st.success(f"Migración completada: {result['created']} artículos creados. El inventario original no fue modificado.")
             st.rerun()
+
+    with tab_printing:
+        items = get_catalog_items(include_inactive=False)
+        if not items:
+            st.info("No hay artículos activos para configurar.")
+        else:
+            st.caption(
+                "Marca únicamente los artículos sobre los que realmente se puede imprimir. "
+                "Los que desmarques seguirán disponibles en Inventario, Cameo, manualidades y otros procesos."
+            )
+            changed = False
+            for item in items:
+                key = f"catalog_printable_{item.item_id}"
+                current = is_printable(item)
+                selected = st.checkbox(
+                    f"{item.name} · {item.sku or 'Sin SKU'}",
+                    value=current,
+                    key=key,
+                    help="Al desmarcarlo dejará de aparecer en los selectores del apartado de impresión.",
+                )
+                if selected != current:
+                    set_printable(item, selected)
+                    changed = True
+            if changed:
+                st.success("La lista de materiales de impresión fue actualizada.")
+                st.rerun()
