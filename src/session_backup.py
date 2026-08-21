@@ -1,5 +1,6 @@
-"""Respaldo general temporal y compatible de CopyMary ERP."""
+"""Centro de respaldo general de CopyMary ERP."""
 
+import hashlib
 import json
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
@@ -10,8 +11,8 @@ import streamlit as st
 from src.components import render_info_card, render_page_header
 from src.erp_database import connect, get_database_status, initialize_database
 
-MAX_CLOUD_SNAPSHOTS = 10
-BACKUP_VERSION = 2
+MAX_CLOUD_SNAPSHOTS = 30
+BACKUP_VERSION = 3
 LIST_SECTIONS = (
     "customers_registry", "quotes_registry", "sales_registry", "order_plans",
     "payment_records", "receivables_registry", "cash_movements", "cash_closings",
@@ -49,17 +50,34 @@ def _serialize(value):
     return value
 
 
+def _payload_data() -> dict:
+    return {key: _serialize(st.session_state.get(key)) for key in SESSION_KEYS}
+
+
+def _checksum(data: dict) -> str:
+    canonical = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _backup_payload() -> dict:
+    data = _payload_data()
     return {
         "backup_version": BACKUP_VERSION,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "application": "CopyMary ERP",
-        "data": {key: _serialize(st.session_state.get(key)) for key in SESSION_KEYS},
+        "checksum_sha256": _checksum(data),
+        "data": data,
     }
 
 
 def _build_backup() -> bytes:
     return json.dumps(_backup_payload(), ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _friendly_filename(created_at_utc: str | None = None) -> str:
+    raw = created_at_utc or datetime.now(timezone.utc).isoformat()
+    safe = raw[:19].replace(":", "-").replace("T", "_")
+    return f"CopyMary_Backup_{safe}_UTC.json"
 
 
 def save_snapshot_to_database() -> dict:
@@ -89,34 +107,65 @@ def save_snapshot_to_database() -> dict:
         "sections_included": sections_included,
         "size_bytes": len(data_json.encode("utf-8")),
         "created_at_utc": created_at,
+        "checksum_sha256": payload["checksum_sha256"],
     }
 
 
-def latest_snapshot_info() -> dict | None:
+def list_snapshots(limit: int = MAX_CLOUD_SNAPSHOTS) -> list[dict]:
     initialize_database()
     with connect() as conn:
         rows = conn.execute(
-            "SELECT snapshot_id, sections_included, size_bytes, created_at_utc FROM session_snapshots ORDER BY created_at_utc DESC LIMIT 1"
+            "SELECT snapshot_id, sections_included, size_bytes, created_at_utc FROM session_snapshots ORDER BY created_at_utc DESC LIMIT ?",
+            (limit,),
         ).fetchall()
-    return dict(rows[0]) if rows else None
+    return [dict(row) for row in rows]
+
+
+def latest_snapshot_info() -> dict | None:
+    rows = list_snapshots(1)
+    return rows[0] if rows else None
+
+
+def _snapshot_row(snapshot_id: str) -> dict | None:
+    initialize_database()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM session_snapshots WHERE snapshot_id = ? LIMIT 1",
+            (snapshot_id,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def _latest_snapshot_row() -> dict | None:
     initialize_database()
     with connect() as conn:
-        rows = conn.execute(
+        row = conn.execute(
             "SELECT * FROM session_snapshots ORDER BY created_at_utc DESC LIMIT 1"
-        ).fetchall()
-    return dict(rows[0]) if rows else None
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def snapshot_bytes(snapshot_id: str) -> bytes | None:
+    row = _snapshot_row(snapshot_id)
+    return row["data_json"].encode("utf-8") if row else None
+
+
+def restore_snapshot_from_database(snapshot_id: str, create_rollback: bool = True) -> dict | None:
+    row = _snapshot_row(snapshot_id)
+    if row is None:
+        return None
+    if create_rollback and session_has_data():
+        save_snapshot_to_database()
+    restored = _parse_backup(row["data_json"].encode("utf-8"))
+    _restore(restored, [key for key in SESSION_KEYS if key in restored["present_sections"]])
+    return row
 
 
 def restore_latest_snapshot_from_database() -> dict | None:
     row = _latest_snapshot_row()
     if row is None:
         return None
-    restored = _parse_backup(row["data_json"].encode("utf-8"))
-    _restore(restored, [key for key in SESSION_KEYS if key in restored["present_sections"]])
-    return row
+    return restore_snapshot_from_database(row["snapshot_id"])
 
 
 def session_has_data() -> bool:
@@ -124,13 +173,7 @@ def session_has_data() -> bool:
 
 
 def restore_latest_snapshot_on_startup() -> None:
-    """Restaura sin sobrescribir trabajo ya cargado.
-
-    En una sesión totalmente vacía restaura el respaldo completo. Si otras
-    secciones ya fueron inicializadas pero falta Configuración General, recupera
-    únicamente ``general_settings``. Así las tasas sobreviven al reload sin
-    reemplazar inventario, ventas, clientes ni otros datos activos.
-    """
+    """Restaura sin sobrescribir trabajo ya cargado."""
     settings_missing = not st.session_state.get("general_settings")
     if session_has_data() and not settings_missing:
         return
@@ -198,11 +241,15 @@ def _parse_backup(file_bytes: bytes) -> dict:
     if not isinstance(payload, dict) or payload.get("application") != "CopyMary ERP":
         raise ValueError("El archivo no fue generado por CopyMary ERP.")
     version = int(payload.get("backup_version", 0))
-    if version not in {1, 2}:
+    if version not in {1, 2, 3}:
         raise ValueError("La versión del respaldo no es compatible.")
     data = payload.get("data")
     if not isinstance(data, dict):
         raise ValueError("El respaldo no contiene datos válidos.")
+    if version >= 3:
+        expected = str(payload.get("checksum_sha256", ""))
+        if not expected or expected != _checksum(data):
+            raise ValueError("La verificación de integridad falló. El respaldo puede estar dañado o alterado.")
 
     restored = {
         "created_at_utc": str(payload.get("created_at_utc", "No disponible")),
@@ -264,60 +311,108 @@ def _metrics(values: dict[str, str]) -> None:
             column.metric(label, value)
 
 
+def _status_message(latest: dict | None, is_durable: bool) -> None:
+    if latest is None:
+        st.error("🔴 Sin respaldo reciente. Crea una copia antes de continuar cargando datos importantes.")
+        return
+    try:
+        created = datetime.fromisoformat(str(latest["created_at_utc"]).replace("Z", "+00:00"))
+        age_hours = (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
+    except Exception:
+        age_hours = 9999
+    if not is_durable:
+        st.warning("🟡 Hay snapshots, pero SQLite puede ser efímero en hosting. Usa PostgreSQL para protección real.")
+    elif age_hours <= 24:
+        st.success("🟢 Tu información tiene un respaldo reciente.")
+    elif age_hours <= 168:
+        st.warning("🟡 El último respaldo tiene más de 24 horas.")
+    else:
+        st.error("🔴 El último respaldo tiene más de 7 días.")
+
+
 def render_session_backup() -> None:
     with st.container(border=True):
         render_page_header(
             "Respaldo general",
-            "Guarda o recupera toda la información temporal principal del ERP.",
+            "Protege, descarga y recupera la información principal de CopyMary ERP.",
         )
-        st.caption("Incluye metas, equipo, pagos internos, ajustes, ventas, compras, caja, producción e inventario.")
+        st.caption("Incluye configuración, clientes, ventas, compras, caja, gastos, activos, inventario, producción, precios y metas.")
 
     db_status = get_database_status()
     is_durable = db_status.engine == "postgresql"
-    st.markdown("### Respaldo automático en la nube")
-    if is_durable:
-        st.caption("Guarda toda la sesión en PostgreSQL y recupera Configuración General sin sobrescribir otras secciones activas.")
-    else:
-        st.warning(
-            "Todavía usas SQLite, que también se borra al reiniciar en la mayoría de hostings. "
-            "Configura `COPYMARY_DATABASE_URL` con PostgreSQL para que el respaldo sobreviva a un reinicio."
-        )
-
     latest = latest_snapshot_info()
-    if latest:
-        st.caption(
-            f"Último respaldo en la nube: {latest['created_at_utc'][:16].replace('T', ' ')} UTC · "
-            f"{latest['sections_included']} sección(es) con datos · {latest['size_bytes'] / 1024:,.1f} KB"
+    _status_message(latest, is_durable)
+
+    st.markdown("### Estado de protección")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Motor", "PostgreSQL" if is_durable else "SQLite")
+    c2.metric("Respaldos guardados", str(len(list_snapshots())))
+    c3.metric("Último respaldo", latest["created_at_utc"][:16].replace("T", " ") + " UTC" if latest else "Nunca")
+    c4.metric("Tamaño", f"{latest['size_bytes'] / 1024:,.1f} KB" if latest else "—")
+
+    if not is_durable:
+        st.warning(
+            "SQLite sirve para desarrollo y pruebas, pero puede borrarse al reiniciar en algunos hostings. "
+            "Configura `COPYMARY_DATABASE_URL` con PostgreSQL para que los snapshots sean persistentes."
         )
-    else:
-        st.caption("Todavía no se ha guardado ningún respaldo en la nube.")
 
-    cloud_cols = st.columns(2)
-    if cloud_cols[0].button("Guardar respaldo en la nube ahora", type="primary", use_container_width=True):
+    action_cols = st.columns(2)
+    if action_cols[0].button("Crear respaldo ahora", type="primary", use_container_width=True):
         saved = save_snapshot_to_database()
-        st.success(f"Respaldo guardado ({saved['sections_included']} sección(es) con datos).")
+        st.success(
+            f"Respaldo {saved['snapshot_id']} creado y verificado: "
+            f"{saved['sections_included']} sección(es), {saved['size_bytes'] / 1024:,.1f} KB."
+        )
         st.rerun()
-    if cloud_cols[1].button(
-        "Restaurar el más reciente de la nube", use_container_width=True,
-        disabled=latest is None,
-        help="Reemplaza los datos de esta sesión con el último respaldo guardado en la nube.",
-    ):
-        restored = restore_latest_snapshot_from_database()
-        if restored:
-            st.success("Sesión restaurada desde el respaldo en la nube.")
-            st.rerun()
-
-    st.divider()
-    st.markdown("### Respaldo manual (archivo)")
-    st.warning("Descarga este respaldo antes de cerrar la sesión para evitar perder datos.")
-    _metrics({SECTION_LABELS[key]: _count(st.session_state.get(key)) for key in SESSION_KEYS})
-    st.download_button(
-        "Descargar respaldo general", data=_build_backup(),
-        file_name="copymary_respaldo_sesion_v2.json", mime="application/json",
-        type="primary", use_container_width=True,
+    current_backup = _build_backup()
+    action_cols[1].download_button(
+        "Descargar copia de seguridad",
+        data=current_backup,
+        file_name=_friendly_filename(),
+        mime="application/json",
+        use_container_width=True,
     )
 
     st.divider()
+    st.markdown("### Historial de respaldos")
+    snapshots = list_snapshots()
+    if not snapshots:
+        st.caption("Todavía no hay respaldos guardados en la base de datos.")
+    else:
+        for snap in snapshots:
+            with st.container(border=True):
+                left, middle, right = st.columns((3, 2, 2))
+                left.markdown(f"**{snap['created_at_utc'][:19].replace('T', ' ')} UTC**")
+                left.caption(f"{snap['snapshot_id']} · {snap['sections_included']} sección(es)")
+                middle.metric("Tamaño", f"{snap['size_bytes'] / 1024:,.1f} KB")
+                payload = snapshot_bytes(snap["snapshot_id"])
+                if payload:
+                    middle.download_button(
+                        "Descargar",
+                        data=payload,
+                        file_name=_friendly_filename(snap["created_at_utc"]),
+                        mime="application/json",
+                        key=f"download_{snap['snapshot_id']}",
+                        use_container_width=True,
+                    )
+                selected = right.checkbox("Seleccionar", key=f"select_{snap['snapshot_id']}")
+                confirmation = right.text_input(
+                    "Escribe RESTAURAR",
+                    key=f"confirm_{snap['snapshot_id']}",
+                    disabled=not selected,
+                )
+                if right.button(
+                    "Restaurar",
+                    key=f"restore_{snap['snapshot_id']}",
+                    disabled=not selected or confirmation.strip().upper() != "RESTAURAR",
+                    use_container_width=True,
+                ):
+                    restore_snapshot_from_database(snap["snapshot_id"], create_rollback=True)
+                    st.success("Respaldo restaurado. Se creó primero una copia de seguridad del estado anterior.")
+                    st.rerun()
+
+    st.divider()
+    st.markdown("### Restaurar desde archivo")
     uploaded = st.file_uploader("Selecciona un respaldo JSON de CopyMary ERP", type=("json",))
     if uploaded is not None:
         try:
@@ -326,7 +421,7 @@ def render_session_backup() -> None:
             st.error(str(exc))
         else:
             present = restored["present_sections"]
-            st.success("El archivo es válido y compatible.")
+            st.success("✅ Archivo válido, compatible e íntegro.")
             st.caption(f"Fecha UTC: {restored['created_at_utc']}")
             available = [key for key in SESSION_KEYS if key in present]
             _metrics({SECTION_LABELS[key]: _count(restored[key]) for key in available})
@@ -334,17 +429,24 @@ def render_session_backup() -> None:
                 "Secciones que deseas restaurar", options=available, default=available,
                 format_func=lambda key: SECTION_LABELS[key],
             )
-            confirmation = st.checkbox("Entiendo que las secciones seleccionadas reemplazarán sus datos actuales.")
+            confirmation = st.text_input("Escribe RESTAURAR para confirmar", key="restore_file_confirmation")
             if st.button(
                 "Restaurar secciones seleccionadas", type="primary", use_container_width=True,
-                disabled=not selected or not confirmation,
+                disabled=not selected or confirmation.strip().upper() != "RESTAURAR",
             ):
+                if session_has_data():
+                    save_snapshot_to_database()
                 _restore(restored, selected)
-                st.success(f"Se restauraron {len(selected)} sección(es).")
+                st.success(f"Se restauraron {len(selected)} sección(es) y se guardó una copia previa del estado actual.")
                 st.rerun()
 
+    st.divider()
+    st.markdown("### Contenido del respaldo actual")
+    _metrics({SECTION_LABELS[key]: _count(st.session_state.get(key)) for key in SESSION_KEYS})
+
     render_info_card(
-        "Compatibilidad",
-        "Los respaldos antiguos pueden restaurarse sin borrar las secciones nuevas que no existían en el archivo.",
-        "RESPALDO V2",
+        "Compatibilidad e integridad",
+        "Los respaldos V3 incluyen SHA-256 para detectar archivos dañados o alterados. "
+        "Los respaldos V1 y V2 siguen siendo restaurables por compatibilidad.",
+        "RESPALDO V3",
     )
