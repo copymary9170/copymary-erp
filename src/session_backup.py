@@ -1,4 +1,11 @@
-"""Centro de respaldo general de CopyMary ERP."""
+"""Centro de respaldo general de CopyMary ERP.
+
+Combina snapshots versionados de la sesión con gobierno operativo: permisos,
+auditoría, integridad y un estado de salud visible. Los snapshots no sustituyen
+un dump completo de PostgreSQL del servidor.
+"""
+
+from __future__ import annotations
 
 import hashlib
 import json
@@ -8,11 +15,18 @@ from uuid import uuid4
 
 import streamlit as st
 
+from src.auth import ADMIN_ROLE_NAME, current_user, permissions_for_role
 from src.components import render_info_card, render_page_header
-from src.erp_database import connect, get_database_status, initialize_database
+from src.erp_database import (
+    connect,
+    get_database_status,
+    initialize_database,
+    record_audit_event,
+)
 
 MAX_CLOUD_SNAPSHOTS = 30
 BACKUP_VERSION = 3
+BACKUP_MODULE = "backup"
 LIST_SECTIONS = (
     "customers_registry", "quotes_registry", "sales_registry", "order_plans",
     "payment_records", "receivables_registry", "cash_movements", "cash_closings",
@@ -38,6 +52,44 @@ SECTION_LABELS = {
     "inventory_registry": "Inventario", "inventory_movements": "Movimientos de inventario",
     "saved_prices": "Lista de precios", "business_goals": "Metas del negocio",
 }
+
+
+def _actor_id() -> str:
+    user = current_user()
+    return user.user_id if user else ""
+
+
+def has_backup_permission(action: str) -> bool:
+    """Valida permisos sensibles con deny-by-default.
+
+    Administrador conserva acceso total. Para otros roles se requiere una fila
+    explícita en ``app_permissions`` para módulo ``backup`` y la acción pedida.
+    ``backup.view`` solo permite abrir/consultar el centro; no habilita crear,
+    descargar o restaurar.
+    """
+    user = current_user()
+    if user is None:
+        return False
+    if user.role_name == ADMIN_ROLE_NAME:
+        return True
+    rows = permissions_for_role(user.role_id)
+    return any(
+        row.get("module_name") == BACKUP_MODULE
+        and row.get("action_name") == action
+        and bool(row.get("allowed"))
+        for row in rows
+    )
+
+
+def _audit(action: str, snapshot_id: str = "", **details) -> None:
+    record_audit_event(
+        BACKUP_MODULE,
+        "session_snapshots",
+        snapshot_id or "current",
+        action,
+        after=details,
+        actor_user_id=_actor_id(),
+    )
 
 
 def _serialize(value):
@@ -80,9 +132,10 @@ def _friendly_filename(created_at_utc: str | None = None) -> str:
     return f"CopyMary_Backup_{safe}_UTC.json"
 
 
-def save_snapshot_to_database() -> dict:
+def save_snapshot_to_database(audit: bool = True) -> dict:
     payload = _backup_payload()
     data_json = json.dumps(payload, ensure_ascii=False)
+    size_bytes = len(data_json.encode("utf-8"))
     sections_included = sum(1 for value in payload["data"].values() if value)
     snapshot_id = f"SNAP-{uuid4().hex[:10].upper()}"
     created_at = payload["created_at_utc"]
@@ -91,7 +144,7 @@ def save_snapshot_to_database() -> dict:
     with connect() as conn:
         conn.execute(
             "INSERT INTO session_snapshots(snapshot_id, data_json, sections_included, size_bytes, created_at_utc) VALUES (?, ?, ?, ?, ?)",
-            (snapshot_id, data_json, sections_included, len(data_json.encode("utf-8")), created_at),
+            (snapshot_id, data_json, sections_included, size_bytes, created_at),
         )
         old_ids = [
             row["snapshot_id"]
@@ -102,13 +155,16 @@ def save_snapshot_to_database() -> dict:
         for old_id in old_ids:
             conn.execute("DELETE FROM session_snapshots WHERE snapshot_id = ?", (old_id,))
 
-    return {
+    result = {
         "snapshot_id": snapshot_id,
         "sections_included": sections_included,
-        "size_bytes": len(data_json.encode("utf-8")),
+        "size_bytes": size_bytes,
         "created_at_utc": created_at,
         "checksum_sha256": payload["checksum_sha256"],
     }
+    if audit:
+        _audit("create", snapshot_id, sections_included=sections_included, size_bytes=size_bytes)
+    return result
 
 
 def list_snapshots(limit: int = MAX_CLOUD_SNAPSHOTS) -> list[dict]:
@@ -150,14 +206,22 @@ def snapshot_bytes(snapshot_id: str) -> bytes | None:
     return row["data_json"].encode("utf-8") if row else None
 
 
+def _audit_download(snapshot_id: str, size_bytes: int = 0) -> None:
+    _audit("download", snapshot_id, size_bytes=size_bytes)
+
+
 def restore_snapshot_from_database(snapshot_id: str, create_rollback: bool = True) -> dict | None:
     row = _snapshot_row(snapshot_id)
     if row is None:
         return None
+    rollback_id = ""
     if create_rollback and session_has_data():
-        save_snapshot_to_database()
+        rollback = save_snapshot_to_database(audit=False)
+        rollback_id = rollback["snapshot_id"]
     restored = _parse_backup(row["data_json"].encode("utf-8"))
-    _restore(restored, [key for key in SESSION_KEYS if key in restored["present_sections"]])
+    selected = [key for key in SESSION_KEYS if key in restored["present_sections"]]
+    _restore(restored, selected)
+    _audit("restore", snapshot_id, rollback_snapshot_id=rollback_id, sections_restored=len(selected))
     return row
 
 
@@ -177,7 +241,6 @@ def restore_latest_snapshot_on_startup() -> None:
     settings_missing = not st.session_state.get("general_settings")
     if session_has_data() and not settings_missing:
         return
-
     try:
         row = _latest_snapshot_row()
         if row is None:
@@ -292,6 +355,28 @@ def _restore(data: dict, selected: list[str]) -> None:
         st.session_state.pop(key, None)
 
 
+def backup_health(latest: dict | None = None, is_durable: bool | None = None) -> dict:
+    """Devuelve un semáforo reutilizable para paneles y pruebas."""
+    if latest is None:
+        latest = latest_snapshot_info()
+    if is_durable is None:
+        is_durable = get_database_status().engine == "postgresql"
+    if latest is None:
+        return {"level": "red", "label": "Riesgo", "reason": "No existe ningún respaldo guardado.", "age_hours": None}
+    try:
+        created = datetime.fromisoformat(str(latest["created_at_utc"]).replace("Z", "+00:00"))
+        age_hours = max(0.0, (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600)
+    except Exception:
+        return {"level": "red", "label": "Riesgo", "reason": "La fecha del último respaldo es inválida.", "age_hours": None}
+    if not is_durable:
+        return {"level": "yellow", "label": "Atención", "reason": "Los snapshots están en SQLite y pueden ser efímeros en hosting.", "age_hours": age_hours}
+    if age_hours <= 24:
+        return {"level": "green", "label": "Protegido", "reason": "Existe un respaldo persistente de menos de 24 horas.", "age_hours": age_hours}
+    if age_hours <= 168:
+        return {"level": "yellow", "label": "Atención", "reason": "El último respaldo tiene más de 24 horas.", "age_hours": age_hours}
+    return {"level": "red", "label": "Riesgo", "reason": "El último respaldo tiene más de 7 días.", "age_hours": age_hours}
+
+
 def _count(value) -> str:
     if value is None:
         return "Vacío"
@@ -312,22 +397,14 @@ def _metrics(values: dict[str, str]) -> None:
 
 
 def _status_message(latest: dict | None, is_durable: bool) -> None:
-    if latest is None:
-        st.error("🔴 Sin respaldo reciente. Crea una copia antes de continuar cargando datos importantes.")
-        return
-    try:
-        created = datetime.fromisoformat(str(latest["created_at_utc"]).replace("Z", "+00:00"))
-        age_hours = (datetime.now(timezone.utc) - created.astimezone(timezone.utc)).total_seconds() / 3600
-    except Exception:
-        age_hours = 9999
-    if not is_durable:
-        st.warning("🟡 Hay snapshots, pero SQLite puede ser efímero en hosting. Usa PostgreSQL para protección real.")
-    elif age_hours <= 24:
-        st.success("🟢 Tu información tiene un respaldo reciente.")
-    elif age_hours <= 168:
-        st.warning("🟡 El último respaldo tiene más de 24 horas.")
+    health = backup_health(latest, is_durable)
+    message = f"{health['label']}: {health['reason']}"
+    if health["level"] == "green":
+        st.success(f"🟢 {message}")
+    elif health["level"] == "yellow":
+        st.warning(f"🟡 {message}")
     else:
-        st.error("🔴 El último respaldo tiene más de 7 días.")
+        st.error(f"🔴 {message}")
 
 
 def render_session_backup() -> None:
@@ -337,6 +414,14 @@ def render_session_backup() -> None:
             "Protege, descarga y recupera la información principal de CopyMary ERP.",
         )
         st.caption("Incluye configuración, clientes, ventas, compras, caja, gastos, activos, inventario, producción, precios y metas.")
+
+    if not has_backup_permission("view") and not has_backup_permission("create") and not has_backup_permission("restore") and not has_backup_permission("download"):
+        st.error("No tienes permisos para consultar el centro de respaldos.")
+        return
+
+    can_create = has_backup_permission("create")
+    can_download = has_backup_permission("download")
+    can_restore = has_backup_permission("restore")
 
     db_status = get_database_status()
     is_durable = db_status.engine == "postgresql"
@@ -357,7 +442,7 @@ def render_session_backup() -> None:
         )
 
     action_cols = st.columns(2)
-    if action_cols[0].button("Crear respaldo ahora", type="primary", use_container_width=True):
+    if action_cols[0].button("Crear respaldo ahora", type="primary", use_container_width=True, disabled=not can_create):
         saved = save_snapshot_to_database()
         st.success(
             f"Respaldo {saved['snapshot_id']} creado y verificado: "
@@ -371,6 +456,9 @@ def render_session_backup() -> None:
         file_name=_friendly_filename(),
         mime="application/json",
         use_container_width=True,
+        disabled=not can_download,
+        on_click=_audit_download if can_download else None,
+        args=("current", len(current_backup)) if can_download else None,
     )
 
     st.divider()
@@ -394,17 +482,20 @@ def render_session_backup() -> None:
                         mime="application/json",
                         key=f"download_{snap['snapshot_id']}",
                         use_container_width=True,
+                        disabled=not can_download,
+                        on_click=_audit_download if can_download else None,
+                        args=(snap["snapshot_id"], snap["size_bytes"]) if can_download else None,
                     )
-                selected = right.checkbox("Seleccionar", key=f"select_{snap['snapshot_id']}")
+                selected = right.checkbox("Seleccionar", key=f"select_{snap['snapshot_id']}", disabled=not can_restore)
                 confirmation = right.text_input(
                     "Escribe RESTAURAR",
                     key=f"confirm_{snap['snapshot_id']}",
-                    disabled=not selected,
+                    disabled=not selected or not can_restore,
                 )
                 if right.button(
                     "Restaurar",
                     key=f"restore_{snap['snapshot_id']}",
-                    disabled=not selected or confirmation.strip().upper() != "RESTAURAR",
+                    disabled=not can_restore or not selected or confirmation.strip().upper() != "RESTAURAR",
                     use_container_width=True,
                 ):
                     restore_snapshot_from_database(snap["snapshot_id"], create_rollback=True)
@@ -413,8 +504,8 @@ def render_session_backup() -> None:
 
     st.divider()
     st.markdown("### Restaurar desde archivo")
-    uploaded = st.file_uploader("Selecciona un respaldo JSON de CopyMary ERP", type=("json",))
-    if uploaded is not None:
+    uploaded = st.file_uploader("Selecciona un respaldo JSON de CopyMary ERP", type=("json",), disabled=not can_restore)
+    if uploaded is not None and can_restore:
         try:
             restored = _parse_backup(uploaded.getvalue())
         except (TypeError, ValueError) as exc:
@@ -434,9 +525,11 @@ def render_session_backup() -> None:
                 "Restaurar secciones seleccionadas", type="primary", use_container_width=True,
                 disabled=not selected or confirmation.strip().upper() != "RESTAURAR",
             ):
+                rollback_id = ""
                 if session_has_data():
-                    save_snapshot_to_database()
+                    rollback_id = save_snapshot_to_database(audit=False)["snapshot_id"]
                 _restore(restored, selected)
+                _audit("restore_file", "uploaded", rollback_snapshot_id=rollback_id, sections_restored=len(selected))
                 st.success(f"Se restauraron {len(selected)} sección(es) y se guardó una copia previa del estado actual.")
                 st.rerun()
 
@@ -447,6 +540,6 @@ def render_session_backup() -> None:
     render_info_card(
         "Compatibilidad e integridad",
         "Los respaldos V3 incluyen SHA-256 para detectar archivos dañados o alterados. "
-        "Los respaldos V1 y V2 siguen siendo restaurables por compatibilidad.",
+        "Crear, descargar y restaurar también queda sujeto a permisos y auditoría.",
         "RESPALDO V3",
     )
