@@ -17,6 +17,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Auditoría de datos", "src.data_audit_insights", "render_data_audit_insights"),
     ("Fundación técnica", "src.foundation_status", "render_foundation_status"),
     ("Panel comercial", "src.commercial_dashboard_intelligence", "render_commercial_dashboard_intelligence"),
+    ("Marketing", "src.marketing", "render_marketing"),
     ("Panel financiero y cierres", "src.financial_dashboard_plus", "render_financial_dashboard_plus"),
     ("Clientes", "src.clients_followup", "render_clients_followup"),
     ("Comprobantes", "src.receipts_control", "render_receipts_control"),
@@ -55,11 +56,6 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
 )
 
 
-# Se llena en activate_module_bootstrap() con (nombre_visible, module_path,
-# mensaje_de_error) por cada módulo que falló al cargar. Antes, un módulo
-# roto simplemente desaparecía del menú sin que nadie se enterara — ver
-# render_foundation_status() en foundation_status.py, que muestra esta lista
-# a cualquier administrador que abra "Fundación técnica".
 FAILED_MODULES: list[tuple[str, str, str]] = []
 
 
@@ -86,12 +82,7 @@ def _load_renderer(module_path: str, attr_name: str, display_name: str) -> Calla
 
 
 def activate_module_bootstrap() -> None:
-    """Carga renderers sin mutar la taxonomía canónica de navegación.
-
-    Las áreas y la relación página→área viven exclusivamente en
-    ``top_navigation_app.SPECIALTY_AREAS``. El bootstrap registra implementaciones
-    funcionales, pero no vuelve a clasificar páginas en grupos heredados.
-    """
+    """Carga renderers sin mutar la taxonomía canónica de navegación."""
     FAILED_MODULES.clear()
     for module_path in SIDE_EFFECT_MODULES:
         _try_import(module_path)
