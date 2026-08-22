@@ -12,6 +12,7 @@ from src.modern_styles import apply_modern_styles
 SPECIALTY_AREAS = {
     "Inicio": ("⌂", "Vista ejecutiva", "Resumen general, alertas y accesos de uso diario.", ("Inicio", "Novedades", "Centro de control", "Tablero ejecutivo", "Metas del negocio", "Panel comercial", "Auditoría de datos", "Fundación técnica")),
     "Comercial y CRM": ("◎", "Relación con clientes", "Clientes, cotizaciones, ventas, pedidos y cobros.", ("Clientes", "Cotizaciones", "Ventas y pedidos", "Venta rápida de mostrador", "Agenda de producción y entregas", "Cuentas por cobrar", "Comprobantes", "Reportes comerciales")),
+    "Marketing": ("◆", "Crecimiento y comunicación", "Campañas, contenido, canales y medición de resultados.", ("Marketing",)),
     "Compras y abastecimiento": ("◇", "Cadena de suministro", "Proveedores, órdenes de compra, recepción y cuentas por pagar.", ("Proveedores", "Compras", "Cuentas por pagar")),
     "Producción": ("◫", "Operación productiva", "Catálogo productivo, órdenes, capacidad y reversos.", ("Catálogo y producción", "Órdenes de producción", "Mantenimiento del catálogo", "Reversos de producción")),
     "Inventario y almacén": ("▦", "Control de artículos y existencias", "Catálogo maestro, existencias, movimientos, ajustes y alertas de stock.", ("Inventario", "Movimientos de inventario", "Ajustes de inventario", "Alertas de inventario")),
@@ -27,7 +28,7 @@ SPECIALTY_AREAS = {
 DESCRIPTIONS = {
     "Inicio": "Panel general del negocio y accesos prioritarios.", "Novedades": "Cambios recientes del ERP.",
     "Centro de control": "Alertas y pendientes del día.", "Tablero ejecutivo": "Rentabilidad, operación y trazabilidad gerencial.",
-    "Metas del negocio": "Objetivos y avances.", "Panel comercial": "Indicadores de ventas y clientes.", "Auditoría de datos": "Integridad y trazabilidad.",
+    "Metas del negocio": "Objetivos y avances.", "Panel comercial": "Indicadores de ventas y clientes.", "Marketing": "Campañas, contenido, calendario y resultados de marketing.", "Auditoría de datos": "Integridad y trazabilidad.",
     "Fundación técnica": "Estado técnico del sistema.", "Clientes": "Registro y seguimiento de clientes.",
     "Cotizaciones": "Presupuestos comerciales.", "Ventas y pedidos": "Pedidos hasta la entrega.",
     "Venta rápida de mostrador": "Venta directa y cobro inmediato.", "Agenda de producción y entregas": "Fechas y capacidad.",
@@ -134,7 +135,7 @@ def _render_permission_aware_home(app_shell, allowed: set[str] | None) -> None:
         with st.container(border=True):
             cols = st.columns([5, 1])
             cols[0].markdown("**🆕 Hay módulos nuevos**")
-            cols[0].caption("Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
+            cols[0].caption("Marketing, Venta rápida de mostrador, Estado de Resultados, Flujo de caja proyectado, RRHH y nómina, y Mantenimiento preventivo.")
             if cols[1].button("Ver todos", key="home_whats_new_button", use_container_width=True):
                 app_shell._navigate("Inicio", "Novedades")
     metrics = st.columns(4)
