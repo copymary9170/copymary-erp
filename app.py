@@ -8,6 +8,7 @@ install_database_startup_guard()
 from src import app_shell
 from src.business_goals_admin_loader import activate_business_goals_admin
 from src.core_data_startup import load_core_data_on_startup
+from src.enterprise_coordination_loader import activate_enterprise_coordination_hub
 from src.finishing_loader import activate_finishing_modules
 from src.general_settings_persistence import persist_general_settings_if_changed
 from src.global_rates_bar import activate_global_rates_bar
@@ -50,11 +51,6 @@ def _activate_process_quotes_safely() -> None:
     activate_process_quotes()
 
 
-# Compatibilidad de arranque:
-# 1. restaura el snapshot histórico si hace falta;
-# 2. carga/migra las entidades núcleo existentes;
-# 3. hidrata todas las secciones restantes desde session_store sin pisar datos
-#    activos y migra una sola vez lo que solo exista en snapshot/core_entities.
 restore_session_snapshot_on_startup()
 load_core_data_on_startup()
 hydrate_session_store_on_startup()
@@ -80,8 +76,6 @@ activate_inventory_flow_consistency_safe()
 activate_inventory_insights_hub()
 activate_inventory_unified_audit_safe()
 
-# Catálogo de artículos y Recepción de mercancía quedan integrados en sus módulos
-# principales para evitar accesos duplicados en el menú.
 if "Inventario" in app_shell.FUNCTIONAL_MODULES:
     app_shell.FUNCTIONAL_MODULES["Inventario"] = wrap_inventory_renderer(app_shell.FUNCTIONAL_MODULES["Inventario"])
 if "Compras" in app_shell.FUNCTIONAL_MODULES:
@@ -91,6 +85,7 @@ app_shell.FUNCTIONAL_MODULES.pop("Recepción de mercancía", None)
 
 _activate_process_quotes_safely()
 activate_reports_hub()
+activate_enterprise_coordination_hub()
 activate_navigation_cleanup()
 # Debe activarse al final, cuando todos los loaders ya sustituyeron sus renderers.
 activate_global_rates_bar()
