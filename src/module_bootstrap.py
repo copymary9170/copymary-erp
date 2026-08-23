@@ -17,7 +17,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Auditoría de datos", "src.data_audit_insights", "render_data_audit_insights"),
     ("Fundación técnica", "src.foundation_status", "render_foundation_status"),
     ("Panel comercial", "src.commercial_dashboard_intelligence", "render_commercial_dashboard_intelligence"),
-    ("Marketing", "src.marketing_strategy_suite", "render_marketing"),
+    ("Marketing", "src.marketing_suite_v3", "render_marketing"),
     ("Panel financiero y cierres", "src.financial_dashboard_plus", "render_financial_dashboard_plus"),
     ("Clientes", "src.clients_followup", "render_clients_followup"),
     ("Comprobantes", "src.receipts_control", "render_receipts_control"),
@@ -55,14 +55,13 @@ SIDE_EFFECT_MODULES: tuple[str, ...] = (
     "src.production_reversals_visible",
 )
 
-
 FAILED_MODULES: list[tuple[str, str, str]] = []
 
 
 def _try_import(module_path: str, display_name: str = ""):
     try:
         return import_module(module_path)
-    except Exception as exc:  # noqa: BLE001 - se registra, no se oculta
+    except Exception as exc:  # noqa: BLE001
         logger.error("No se pudo cargar el módulo %s (%s): %s", module_path, display_name or "sin nombre visible", exc)
         FAILED_MODULES.append((display_name or module_path, module_path, str(exc)))
         return None
