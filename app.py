@@ -6,6 +6,7 @@ from src.database_startup_guard import install_database_startup_guard
 install_database_startup_guard()
 
 from src import app_shell
+from src.assets_workspace_loader import activate_assets_workspace
 from src.business_goals_admin_loader import activate_business_goals_admin
 from src.core_data_startup import load_core_data_on_startup
 from src.enterprise_coordination_loader import activate_enterprise_coordination_hub
@@ -89,6 +90,8 @@ _activate_process_quotes_safely()
 activate_rates_master()
 activate_reports_hub()
 activate_enterprise_coordination_hub()
+# Reorganiza Activos sin eliminar el registro, historial o mantenimiento existentes.
+activate_assets_workspace()
 activate_navigation_cleanup()
 # Debe activarse al final, cuando todos los loaders ya sustituyeron sus renderers.
 activate_global_rates_bar()
