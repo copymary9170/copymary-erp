@@ -17,7 +17,7 @@ MODULE_RENDERERS: tuple[tuple[str, str, str], ...] = (
     ("Auditoría de datos", "src.data_audit_insights", "render_data_audit_insights"),
     ("Fundación técnica", "src.foundation_status", "render_foundation_status"),
     ("Panel comercial", "src.commercial_dashboard_intelligence", "render_commercial_dashboard_intelligence"),
-    ("Marketing", "src.marketing_ai_workbench", "render_marketing"),
+    ("Marketing", "src.marketing_academy_tools", "render_marketing"),
     ("Panel financiero y cierres", "src.financial_dashboard_plus", "render_financial_dashboard_plus"),
     ("Clientes", "src.clients_followup", "render_clients_followup"),
     ("Comprobantes", "src.receipts_control", "render_receipts_control"),
