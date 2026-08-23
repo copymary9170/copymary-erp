@@ -26,5 +26,20 @@ def test_profiles_have_wear_and_usage_guidance():
     assert PROFILES
     for profile in PROFILES:
         assert profile.equipment
+        assert profile.typical_jobs
+        assert isinstance(profile.typical_jobs, tuple)
         assert profile.wear_parts
+        assert isinstance(profile.wear_parts, tuple)
         assert profile.usage_metric
+        assert isinstance(profile.maintenance_focus, tuple)
+        assert profile.electrical_level
+        assert profile.voltage_note
+
+
+def test_foil_profile_fields_are_not_shifted():
+    profile = profile_by_key("foil_machine")
+    assert profile is not None
+    assert "Tarjetas" in profile.typical_jobs
+    assert "Rodillo/silicona" in profile.wear_parts
+    assert profile.usage_metric == "Estampados de foil"
+    assert profile.electrical_level == "Media/Alta"
