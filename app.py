@@ -33,6 +33,7 @@ from src.navigation_cleanup_loader import activate_navigation_cleanup
 from src.print_cost_loader import activate_print_cost_module
 from src.printer_asset_specs import activate_printer_asset_specs
 from src.purchases_overview_safe_loader import activate_purchases_overview_safe
+from src.rates_master_loader import activate_rates_master
 from src.reports_hub_loader import activate_reports_hub
 from src.session_store import hydrate_session_store_on_startup
 from src.startup_restore import restore_session_snapshot_on_startup
@@ -84,6 +85,8 @@ app_shell.FUNCTIONAL_MODULES.pop("Catálogo de artículos", None)
 app_shell.FUNCTIONAL_MODULES.pop("Recepción de mercancía", None)
 
 _activate_process_quotes_safely()
+# Configuración General queda como única fuente editable de tasas; Costeo solo consume su histórico.
+activate_rates_master()
 activate_reports_hub()
 activate_enterprise_coordination_hub()
 activate_navigation_cleanup()

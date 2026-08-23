@@ -1,13 +1,10 @@
-"""Tasas de cambio con fecha, para costear en moneda base y convertir a moneda de cotización.
+"""Consulta de tasas usada por Costeo.
 
-Alimenta la tabla `exchange_rates` (ya existía en el esquema fundacional pero
-nada la escribía todavía). `bom_costing.py` lee de aquí, vía
-`erp_database.latest_exchange_rate`, la tasa vigente más reciente para
-congelarla en cada trabajo costeado.
+La edición vive únicamente en Administración y seguridad → Configuración General.
+Esta pantalla conserva el histórico de ``exchange_rates`` porque los trabajos
+costeados necesitan trazabilidad y una tasa congelada por fecha.
 """
-
-from datetime import date
-from uuid import uuid4
+from __future__ import annotations
 
 import streamlit as st
 
@@ -16,7 +13,6 @@ from src.components import render_info_card, render_page_header
 from src.erp_database import connect, initialize_database
 
 TABLE_NAME = "exchange_rates"
-CURRENCIES = ("USD", "VES", "EUR")
 
 
 def _rows() -> list[dict]:
@@ -28,19 +24,7 @@ def _rows() -> list[dict]:
     return [dict(row) for row in rows]
 
 
-def _insert(values: dict) -> None:
-    initialize_database()
-    columns = list(values.keys())
-    sql = (
-        "INSERT INTO " + TABLE_NAME + " (" + ", ".join(columns) + ") VALUES ("
-        + ", ".join("?" for _ in columns) + ")"
-    )
-    with connect() as conn:
-        conn.execute(sql, tuple(values[col] for col in columns))
-
-
 def _latest_by_pair(rows: list[dict]) -> dict[tuple[str, str], dict]:
-    """Se queda con la fila más reciente por cada par de moneda (ya vienen ordenadas)."""
     latest: dict[tuple[str, str], dict] = {}
     for row in rows:
         key = (row["source_currency"], row["target_currency"])
@@ -49,102 +33,96 @@ def _latest_by_pair(rows: list[dict]) -> dict[tuple[str, str], dict]:
     return latest
 
 
+def _go_to_master_rates() -> None:
+    st.session_state["pending_navigation_area"] = "Administración y seguridad"
+    st.session_state["pending_navigation_page"] = "Configuración General"
+    st.rerun()
+
+
+def _render_master_summary() -> None:
+    settings = st.session_state.get("general_settings")
+    if settings is None:
+        st.info("Aún no hay Configuración General cargada en esta sesión.")
+        return
+    st.markdown("#### Fuente maestra actual")
+    cols = st.columns(5)
+    cols[0].metric("BCV USD", f"{float(getattr(settings, 'bcv_rate', 0.0) or 0):,.4f} Bs")
+    cols[1].metric("BCV EUR", f"{float(getattr(settings, 'bcv_eur_rate', 0.0) or 0):,.4f} Bs")
+    cols[2].metric("Binance / paralelo", f"{float(getattr(settings, 'binance_rate', 0.0) or 0):,.4f} Bs")
+    cols[3].metric("Kontigo entrada", f"{float(getattr(settings, 'kontigo_in_rate', 0.0) or 0):,.4f} Bs")
+    cols[4].metric("Kontigo salida", f"{float(getattr(settings, 'kontigo_out_rate', 0.0) or 0):,.4f} Bs")
+    updated = str(getattr(settings, "rates_updated_at", "") or "")
+    if updated:
+        st.caption(f"Última actualización en Configuración General: {updated[:16].replace('T', ' ')} UTC")
+    st.caption(
+        "BCV USD y BCV EUR se sincronizan al histórico técnico que usa Costeo. "
+        "Binance y Kontigo siguen disponibles para cobros, pagos y análisis, pero no reemplazan la tasa oficial del costeo."
+    )
+
+
 def render_exchange_rates() -> None:
     render_page_header(
-        "Tasas de cambio",
-        "Registra la tasa vigente por fecha. Cada trabajo costeado congela la tasa del día, aunque cambie después.",
+        "Tasas usadas en Costeo",
+        "Consulta la tasa vigente y el histórico congelado. Las tasas se editan una sola vez desde Configuración General.",
     )
     initialize_database()
-
     rows = _rows()
     latest = _latest_by_pair(rows)
 
-    cols = st.columns(3)
-    cols[0].metric("Tasas registradas", str(len(rows)))
-    cols[1].metric("Pares de moneda con tasa", str(len(latest)))
-    cols[2].metric(
-        "Última actualización",
-        rows[0]["rate_date"] if rows else "—",
+    st.info(
+        "Fuente única de verdad: Administración y seguridad → Configuración General. "
+        "Esta pantalla es de consulta para evitar dos formularios que puedan quedar con valores diferentes."
     )
+    if st.button("Administrar tasas en Configuración General", type="primary", use_container_width=True):
+        _go_to_master_rates()
 
-    st.subheader("Tasas vigentes (más reciente por par)")
-    if not latest:
-        st.info("Todavía no hay ninguna tasa registrada.")
-    else:
-        for (source, target), row in latest.items():
-            st.write(
-                f"**1 {source} = {row['rate']:,.4f} {target}** · vigente desde {row['rate_date']} "
-                f"· fuente: {row.get('source_name') or 'Manual'}"
-            )
+    _render_master_summary()
 
     st.divider()
-    st.subheader("Registrar nueva tasa")
-    with st.form("exchange_rate_form", clear_on_submit=True):
-        pair_cols = st.columns(2)
-        with pair_cols[0]:
-            source_currency = st.selectbox("Moneda origen", CURRENCIES, index=0)
-        with pair_cols[1]:
-            target_currency = st.selectbox("Moneda destino", CURRENCIES, index=1)
-
-        value_cols = st.columns(2)
-        with value_cols[0]:
-            rate_value = st.number_input(
-                "Valor (unidades de destino por 1 de origen)",
-                min_value=0.0,
-                value=0.0,
-                step=0.01,
-                format="%.4f",
+    st.subheader("Tasas oficiales disponibles para Costeo")
+    official_latest = {
+        pair: row
+        for pair, row in latest.items()
+        if str(row.get("source_name") or "").startswith("Configuración General · BCV")
+    }
+    if not official_latest:
+        st.warning("Todavía no hay una tasa oficial sincronizada desde Configuración General.")
+    else:
+        for (source, target), row in official_latest.items():
+            st.write(
+                f"**1 {source} = {float(row['rate']):,.4f} {target}** · vigente desde {row['rate_date']}"
             )
-        with value_cols[1]:
-            rate_date = st.date_input("Fecha de vigencia", value=date.today())
-
-        source_name = st.selectbox(
-            "Fuente",
-            ("Manual", "API BCV", "API otra"),
-            help="Manual por defecto. Las fuentes de API quedan como opción para cuando se conecte una fuente automática.",
-        )
-        notes = st.text_input("Notas", placeholder="Opcional")
-
-        submitted = st.form_submit_button("Guardar tasa", type="primary", use_container_width=True)
-
-    if submitted:
-        if source_currency == target_currency:
-            st.error("La moneda de origen y destino no pueden ser la misma.")
-        elif rate_value <= 0:
-            st.error("El valor de la tasa debe ser mayor a cero.")
-        else:
-            _insert(
-                {
-                    "rate_id": f"RATE-{uuid4().hex[:8].upper()}",
-                    "rate_date": rate_date.isoformat(),
-                    "source_currency": source_currency,
-                    "target_currency": target_currency,
-                    "rate": float(rate_value),
-                    "source_name": source_name,
-                    "notes": notes.strip(),
-                    "created_at_utc": date.today().isoformat(),
-                }
-            )
-            st.success("Tasa guardada.")
-            st.rerun()
 
     st.divider()
     st.subheader("Historial completo")
+    st.caption(
+        "No se borra el historial anterior. Los registros manuales existentes permanecen visibles para auditoría, "
+        "pero las nuevas tasas deben administrarse desde Configuración General."
+    )
     if not rows:
         st.info("Sin historial todavía.")
     else:
-        for row in rows[:200]:
-            st.write(
-                f"{row['rate_date']} · 1 {row['source_currency']} = {row['rate']:,.4f} {row['target_currency']} "
-                f"· {row.get('source_name') or 'Manual'}"
-                + (f" · {row['notes']}" if row.get("notes") else "")
-            )
+        st.dataframe(
+            [
+                {
+                    "Fecha": row.get("rate_date"),
+                    "Origen": row.get("source_currency"),
+                    "Destino": row.get("target_currency"),
+                    "Tasa": float(row.get("rate") or 0),
+                    "Fuente": row.get("source_name") or "Manual legado",
+                    "Notas": row.get("notes") or "",
+                }
+                for row in rows[:300]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
     render_info_card(
-        "Por qué importa",
-        "Cada trabajo costeado en 'Costeo por procesos' guarda la tasa exacta usada ese día, "
-        "para que el histórico de precios no cambie retroactivamente si la tasa cambia después.",
-        "TASA CONGELADA",
+        "Tasa congelada",
+        "Costeo por procesos sigue guardando la tasa exacta usada en cada trabajo. "
+        "Cambiar la tasa maestra mañana no altera los costos históricos de trabajos anteriores.",
+        "TRAZABILIDAD CONSERVADA",
     )
 
 
