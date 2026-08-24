@@ -4,7 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from src.marketing_class_center import render_marketing_class_center
-from src.marketing_meta_ads_planner import render_meta_ads_planner
+from src.marketing_meta_ads_suite import render_meta_ads_suite
 from src.marketing_growth_lab import render_growth_lab
 from src.marketing_intelligence_hub import render_marketing_intelligence_hub
 
@@ -20,7 +20,7 @@ def render_marketing() -> None:
     )
     st.divider()
     if workspace == "Meta Ads":
-        render_meta_ads_planner()
+        render_meta_ads_suite()
     elif workspace == "Crecimiento y comunidad":
         render_growth_lab()
     elif workspace == "Inteligencia":
