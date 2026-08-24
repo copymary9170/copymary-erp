@@ -6,13 +6,14 @@ import streamlit as st
 from src.marketing_class_center import render_marketing_class_center
 from src.marketing_meta_ads_planner import render_meta_ads_planner
 from src.marketing_growth_lab import render_growth_lab
+from src.marketing_intelligence_hub import render_marketing_intelligence_hub
 
 
 def render_marketing() -> None:
-    """Renderiza estrategia, crecimiento orgánico y planificación publicitaria."""
+    """Renderiza estrategia, inteligencia, crecimiento y planificación publicitaria."""
     workspace = st.radio(
         "Vista de Marketing",
-        ("Centro estratégico", "Crecimiento y comunidad", "Meta Ads"),
+        ("Centro estratégico", "Inteligencia", "Crecimiento y comunidad", "Meta Ads"),
         horizontal=True,
         label_visibility="collapsed",
         key="marketing_suite_view",
@@ -22,5 +23,7 @@ def render_marketing() -> None:
         render_meta_ads_planner()
     elif workspace == "Crecimiento y comunidad":
         render_growth_lab()
+    elif workspace == "Inteligencia":
+        render_marketing_intelligence_hub()
     else:
         render_marketing_class_center()
