@@ -29,6 +29,7 @@ from src.inventory_replenishment_safe_loader import activate_inventory_replenish
 from src.inventory_reservations_safe_loader import activate_inventory_reservations_safe
 from src.inventory_stock_view_loader import activate_inventory_stock_view
 from src.inventory_workspace_safe_loader import activate_inventory_workspace_safe
+from src.laser_printer_profile_loader import activate_laser_printer_profile
 from src.module_bootstrap import activate_module_bootstrap
 from src.navigation_cleanup_loader import activate_navigation_cleanup
 from src.print_cost_loader import activate_print_cost_module
@@ -90,6 +91,8 @@ _activate_process_quotes_safely()
 activate_rates_master()
 activate_reports_hub()
 activate_enterprise_coordination_hub()
+# Extiende la base técnica antes de mostrar el Workspace de Activos.
+activate_laser_printer_profile()
 # Reorganiza Activos sin eliminar el registro, historial o mantenimiento existentes.
 activate_assets_workspace()
 activate_navigation_cleanup()
