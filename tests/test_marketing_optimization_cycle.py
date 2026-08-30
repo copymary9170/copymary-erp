@@ -74,7 +74,7 @@ def test_piece_metrics_and_comparator_reward_real_outcomes():
     }
     metrics = piece_metrics(b)
     assert metrics["engagement"] == 11.25
-    assert metrics["sales_rate"] == 100 / 3
+    assert round(metrics["sales_rate"], 2) == 33.33
     assert metrics["roas"] == 4.0
     assert compare_content(a, b)["winner"] == "B"
 
